@@ -1,4 +1,4 @@
-# app.py (CÓDIGO COMPLETO FINALIZADO Y ESTABILIZADO)
+# app.py (CÓDIGO COMPLETO CON CORRECCIÓN DE MODALES Y LÓGICA DE SET DE SOLUCIONES)
 
 """
 BioPareto Analyzer - Aplicación Dash para análisis de frentes de Pareto en selección de genes
@@ -53,7 +53,7 @@ from ui.layouts.upload_tab import create_upload_tab
 from ui.layouts.pareto_tab import create_pareto_tab
 from ui.layouts.genes_tab import create_genes_tab
 from ui.layouts.gene_groups_tab import create_gene_groups_tab
-from ui.layouts.enrichment_tab import create_enrichment_tab_modified # ✅ USO FINAL
+from ui.layouts.enrichment_tab import create_enrichment_tab_modified 
 from ui.layouts.export_tab import create_export_tab 
 # Lógica - Callbacks modulares
 from logic.callbacks.data_management import register_data_management_callbacks
@@ -62,7 +62,7 @@ from logic.callbacks.pareto_selection import register_pareto_selection_callbacks
 from logic.callbacks.consolidation import register_consolidation_callbacks
 from logic.callbacks.genes_analysis import register_genes_analysis_callbacks
 from logic.callbacks.gene_groups_analysis import register_gene_groups_callbacks
-from logic.callbacks.enrichment_analysis import register_enrichment_callbacks # ✅ USO FINAL
+from logic.callbacks.enrichment_analysis import register_enrichment_callbacks
 from logic.callbacks.export_callbacks import register_export_callbacks 
 # -------------------------------------------------------------
 
@@ -208,9 +208,9 @@ app.layout = dbc.Container([
     dcc.Store(id='selected-gene-group-indices-store', data=[]), 
     dcc.Store(id='enrichment-selected-indices-store', data=[]),
     dcc.Store(id='pareto-layout-store', data={}), 
-    dcc.Store(id='enrichment-selected-item-ids-store', data=[]),
+    dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
     
-    # 🔑 NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
+    # NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
     dcc.Store(id='enrichment-render-trigger-store', data=None), 
 
 
@@ -449,6 +449,7 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
 
     # Close modal on confirm or cancel (LIMPIEZA TOTAL)
     if trigger_id in ['pareto-front-tab-confirm-btn', 'pareto-front-tab-cancel-btn']:
+        # 🔑 CORRECCIÓN: Cierra modal (False) y limpia stores temporales (None)
         return False, "", "", None, None, None
 
     # 1. Apertura por botón "Add All" (Conjunto)
@@ -478,9 +479,8 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
                     if sol['unique_id'] == clicked_index:
                         full_sol_data = sol['full_data'] 
                         
-                        obj_list = full_sol_data.get('objectives', [])
-                        obj1_name = obj_list[0] if len(obj_list) > 0 else 'Objective 1'
-                        obj2_name = obj_list[1] if len(obj_list) > 1 else 'Objective 2'
+                        obj1_name = full_sol_data.get('objectives', [None])[0]
+                        obj2_name = full_sol_data.get('objectives', [None, None])[1]
                         
                         obj1 = full_sol_data.get(obj1_name, 'N/A')
                         obj2 = full_sol_data.get(obj2_name, 'N/A')
@@ -536,10 +536,11 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
     elif selected_solutions and single_solution_data is None: 
         solutions_to_add = [sol['full_data'] for sol in selected_solutions]
     else:
-        raise PreventUpdate
+        # 🔑 CORRECCIÓN: Si no hay data para guardar, limpia y aborta.
+        return dash.no_update, None
 
     if not solutions_to_add:
-        raise PreventUpdate
+        return dash.no_update, None
         
     final_solutions = []
     for sol in solutions_to_add:
@@ -566,6 +567,7 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
             'data': sol,
             'timestamp': timestamp
         }
+        # 🔑 CORRECCIÓN: Limpia el Store Temporal (None) y devuelve el Store principal.
         return current_items + [new_item], None
     else:
         new_item = {
@@ -576,6 +578,7 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
             'data': {'solutions': final_solutions},
             'timestamp': timestamp
         }
+        # 🔑 CORRECCIÓN: Limpia el Store Temporal (None) y devuelve el Store principal.
         return current_items + [new_item], None
 
 @app.callback(
@@ -730,6 +733,65 @@ def handle_genes_tab_individual_gene_button(n_clicks_list, is_open):
 
     return True, modal_info, default_comment, temp_data, None, None
 
+# app.py (MODIFICACIÓN DE CALLBACK DE GESTIÓN DE MODALES DE GRUPOS DE GENES)
+
+# ... (El resto del código de app.py se mantiene) ...
+
+# app.py (FRAGMENTO DE CÓDIGO CORREGIDO PARA MODALES)
+
+# ... (El resto del código de app.py se mantiene) ...
+
+@app.callback(
+    [Output('interest-panel-store', 'data', allow_duplicate=True),
+     Output('gene-groups-analysis-tab-temp-store', 'data', allow_duplicate=True),
+     Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True)], # <- Output para cerrar modal
+    [Input('gene-groups-analysis-tab-confirm-btn', 'n_clicks'),
+     Input('gene-groups-analysis-tab-cancel-btn', 'n_clicks')], # <- Input para Cancelar
+    [State('gene-groups-analysis-tab-temp-store', 'data'),
+     State('gene-groups-analysis-tab-name-input', 'value'),
+     State('gene-groups-analysis-tab-comment-input', 'value'),
+     State('interest-panel-store', 'data')],
+    prevent_initial_call=True
+)
+def confirm_gene_group_addition(confirm_clicks, cancel_clicks, temp_data, group_name, group_comment, current_items):
+    """Guarda el grupo combinado/intersección en el panel de interés y cierra el modal."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # 1. Manejo del Cancelar (Cierre del modal sin guardar)
+    if trigger_id == 'gene-groups-analysis-tab-cancel-btn':
+        # ✅ CORRECCIÓN: Cierra modal (False) y limpia stores temporales (None)
+        return dash.no_update, None, False 
+
+    # 2. Manejo del Confirmar (Guardar y Cierre)
+    if trigger_id == 'gene-groups-analysis-tab-confirm-btn' and confirm_clicks:
+        if not temp_data or not temp_data.get('genes'):
+            # Cierra si no hay data válida
+            return dash.no_update, None, False 
+
+        new_item = {
+            'type': 'combined_gene_group',
+            'id': f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            'name': group_name or "Unnamed Combined Group",
+            'comment': group_comment or "",
+            'data': {
+                'genes': temp_data['genes'],
+                'gene_count': len(temp_data['genes']),
+                'source_items': temp_data['sources']
+            },
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        if current_items is None:
+            current_items = []
+
+        # ✅ CORRECCIÓN: Retorna el store actualizado, resetea temp_store (None), y cierra el modal (False)
+        return current_items + [new_item], None, False
+        
+    raise PreventUpdate
 @app.callback(
     [Output('interest-panel-store', 'data', allow_duplicate=True),
      Output('genes-tab-gene-group-temp-store', 'data', allow_duplicate=True),
@@ -757,6 +819,7 @@ def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_grou
         current_items = []
 
     if trigger_id == 'genes-tab-cancel-btn':
+        # 🔑 CORRECCIÓN MODAL: Cierra modal y limpia stores temporales.
         return dash.no_update, None, None, False, "", ""
 
     if trigger_id == 'genes-tab-confirm-btn':
@@ -772,6 +835,7 @@ def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_grou
                 'data': gene_group_data,
                 'timestamp': timestamp
             }
+            # Cierra modal, limpia stores temporales, y guarda item
             return current_items + [new_item], None, None, False, "", ""
 
         elif individual_gene_data:
@@ -783,6 +847,7 @@ def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_grou
                 'data': individual_gene_data,
                 'timestamp': timestamp
             }
+            # Cierra modal, limpia stores temporales, y guarda item
             return current_items + [new_item], None, None, False, "", ""
 
     raise PreventUpdate
@@ -918,6 +983,63 @@ def update_gene_groups_selector(items):
             })
 
     return options
+
+
+# ------------------------------------------------------------
+# Lógica de Modales de Selección de Soluciones (Pareto Front)
+# ------------------------------------------------------------
+@app.callback(
+    [Output('interest-panel-store', 'data', allow_duplicate=True),
+     Output('pareto-selection-temp-store', 'data', allow_duplicate=True), # Limpia el Store Temporal
+     Output('pareto-selection-modal', 'is_open', allow_duplicate=True)], # Cierra el Modal
+    [Input('pareto-selection-confirm-btn', 'n_clicks'),
+     Input('pareto-selection-cancel-btn', 'n_clicks')], 
+    [State('pareto-selection-temp-store', 'data'),
+     State('pareto-selection-name-input', 'value'),
+     State('pareto-selection-comment-input', 'value'),
+     State('interest-panel-store', 'data')], # Store Principal
+    prevent_initial_call=True
+)
+def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, group_name, group_comment, current_items):
+    """Guarda la solución/conjunto de soluciones en el panel de interés y cierra el modal."""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # 1. Manejo del Cancelar (Cierre del modal sin guardar)
+    if trigger_id == 'pareto-selection-cancel-btn':
+        # 🔑 CORRECCIÓN: Cierra modal (False) y limpia stores temporales (None)
+        return dash.no_update, None, False 
+
+    # 2. Manejo del Confirmar (Guardar y Cierre)
+    if trigger_id == 'pareto-selection-confirm-btn' and confirm_clicks:
+        if not temp_data or not temp_data.get('genes'): # Validar que haya datos
+            # Cierra si no hay data válida
+            return dash.no_update, None, False 
+        
+        # Determinar el tipo de ítem a guardar
+        item_type = temp_data.get('type', 'solution') # Puede ser 'solution' o 'solution_set'
+        name_default = "Unnamed Set" if item_type == 'solution_set' else f"Solution {temp_data.get('id', 'N/A')}"
+            
+        new_item = {
+            'type': item_type,
+            # ID único para el Panel de Interés (distinto al id de la solución/front)
+            'id': f"item_{datetime.now().strftime('%Y%m%d%H%M%S')}_{item_type}", 
+            'name': group_name or name_default,
+            'comment': group_comment or "",
+            'data': temp_data, # Guardamos el objeto temp_data completo
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        if current_items is None:
+            current_items = []
+
+        # 🔑 CORRECCIÓN: Retorna el store actualizado, resetea temp_store (None), y cierra el modal (False)
+        return current_items + [new_item], None, False
+        
+    raise PreventUpdate
 
 
 if __name__ == '__main__':

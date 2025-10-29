@@ -1,4 +1,4 @@
-# logic/callbacks/gene_groups_analysis.py (VERSIÓN DEFINITIVA Y FUNCIONAL)
+# logic/callbacks/gene_groups_analysis.py
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL
@@ -181,6 +181,7 @@ def register_gene_groups_callbacks(app):
         for idx in selected_indices:
             if idx < len(items):
                 item = items[idx]
+                item_name_base = item.get('name', f'Item {idx}')
                 item_type = item.get('type', '')
                 
                 if item_type == 'solution':
@@ -257,25 +258,6 @@ def register_gene_groups_callbacks(app):
                 ])
             ])
         ], className="mb-4")
-        
-        # 🔑 Renderizado de Botones de Limpieza y Guardado (Faltaban en el layout dinámico)
-        buttons_row = dbc.Row([
-            dbc.Col([
-                dbc.Button(
-                    "Save selected items as Combined Group",
-                    id="save-combined-group-btn-top",
-                    color="success",
-                    className="me-2"
-                ),
-                dbc.Button(
-                    "Clear Selection",
-                    id="clear-gene-groups-selection-btn",
-                    color="secondary",
-                    outline=True
-                )
-            ], className="mb-3")
-        ])
-
 
         # B. Venn Diagram and Intersections
         venn_section = None
@@ -388,20 +370,21 @@ def register_gene_groups_callbacks(app):
 
 
                 
-                # Render intersection cards
+                # Render intersection cards 
                 intersection_cards = []
                 for idx, int_data in enumerate(intersection_data_list):
                     genes_display = ', '.join(int_data['genes'])
                     
                     source_sets = int_data['source_sets']
-                    if len(source_sets) == 1:
-                        card_color_hex = VENN_COLORS[source_sets[0]]
-                    elif len(source_sets) == len(sets_list):
+                    
+                    # Heurística para asignar color al badge
+                    card_color_hex = '#6c757d'
+                    if len(source_sets) == len(sets_list):
                         card_color_hex = '#28a745'
-                    elif len(source_sets) > 1 and len(source_sets) < len(sets_list):
-                        card_color_hex = '#ffc107'
-                    else: 
-                        card_color_hex = '#6c757d'
+                    elif len(source_sets) == 1:
+                        card_color_hex = VENN_COLORS[source_sets[0]]
+                    elif len(source_sets) > 1:
+                         card_color_hex = '#ffc107'
 
                     card = dbc.Card([
                         dbc.CardBody([
@@ -416,6 +399,8 @@ def register_gene_groups_callbacks(app):
                             ], className="mb-2"),
                             html.Div(genes_display, className="small text-muted mb-2",
                                   style={'fontSize': '0.85rem', 'maxHeight': '150px', 'overflowY': 'auto'}),
+                            
+                            # 🔑 CORRECCIÓN: Botones de Adición Individual
                             dbc.Button(
                                 "Add to Panel",
                                 id={'type': 'add-intersection-btn', 'index': idx}, 
@@ -427,6 +412,7 @@ def register_gene_groups_callbacks(app):
                     ], className="mb-2")
                     intersection_cards.append(card)
 
+
                 venn_section = dbc.Row([
                     dbc.Col([
                         html.H5("Venn Diagram", className="mb-3"),
@@ -437,6 +423,7 @@ def register_gene_groups_callbacks(app):
                     dbc.Col([
                         html.Div([
                             html.H5("Gene Intersections", className="mb-0 d-inline-block"),
+                            # 🔑 Botón Add All Intersections
                             dbc.Button(
                                 "Add All Intersections 📌",
                                 id="add-all-intersections-btn",
@@ -447,7 +434,7 @@ def register_gene_groups_callbacks(app):
                                 disabled=not intersection_data_list
                             )
                         ], className="d-flex align-items-center mb-3"),
-                        html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'}) 
+                        html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'}) # <-- Muestra las tarjetas
                     ], width=6)
                 ], className="mb-4")
 
@@ -518,7 +505,6 @@ def register_gene_groups_callbacks(app):
         # Store data for genes and sources
         store_data = {'genes': list(unique_genes), 'sources': list(item_gene_sets.keys())}
         
-        # 🔑 CORRECCIÓN: Devolvemos el layout completo que incluye todos los componentes
         return html.Div([
             buttons_row,
             summary_stats,
@@ -595,12 +581,13 @@ def register_gene_groups_callbacks(app):
     def open_intersection_modal_or_add_all(single_n_clicks, all_n_clicks, intersection_data, single_btn_ids):
         """Open modal to save an individual intersection or setup for 'Add All'."""
         ctx = dash.callback_context
-        if not ctx.triggered or not intersection_data:
+        if not intersection_data:
             raise PreventUpdate
 
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        triggered_input = ctx.triggered[0]['prop_id']
+        trigger_id = triggered_input.split('.')[0]
         
-        # 1. Manejo de la lógica 'Add All'
+        # 1. Manejo de la lógica 'Add All' (Botón Fijo)
         if trigger_id == 'add-all-intersections-btn' and all_n_clicks and all_n_clicks > 0:
             
             all_genes = set()
@@ -625,30 +612,63 @@ def register_gene_groups_callbacks(app):
 
             return True, modal_info, tentative_name, tentative_comment, group_data
 
-        # 2. Manejo de la lógica de intersección individual
-        if 'add-intersection-btn' in trigger_id and single_n_clicks and any(c and c > 0 for c in single_n_clicks):
+        # 2. Manejo de la lógica de intersección individual (Botones Dinámicos)
+        if 'add-intersection-btn' in trigger_id and any(c is not None and c > 0 for c in single_n_clicks):
             
-            triggered_id_dict = ctx.triggered_id
-            index = triggered_id_dict['index']
+            triggered_dict = ctx.triggered_id 
             
-            if 0 <= index < len(intersection_data):
-                intersection = intersection_data[index]
-                
-                modal_info = html.Div([
-                    html.P([html.Strong("Adding Intersection Group: "), html.Code(intersection['name'], className="text-primary")]),
-                    html.P([html.Strong("Gene Count: "), html.Span(f"{intersection['count']}")])
-                ])
-                
-                group_data = {
-                    'genes': intersection['genes'],
-                    'sources': [intersection['name']],
-                    'meta_type': 'single_intersection',
-                    'name': intersection['name']
-                }
-                
-                tentative_name = intersection['name']
-                tentative_comment = f"Genes found in the intersection '{intersection['name']}'."
-                
-                return True, modal_info, tentative_name, tentative_comment, group_data
+            if triggered_dict and triggered_dict.get('type') == 'add-intersection-btn':
+                 index = triggered_dict['index']
+                 
+                 if 0 <= index < len(intersection_data):
+                    intersection = intersection_data[index]
+                    
+                    modal_info = html.Div([
+                        html.P([html.Strong("Adding Intersection Group: "), html.Code(intersection['name'], className="text-primary")]),
+                        html.P([html.Strong("Gene Count: "), html.Span(f"{intersection['count']}")])
+                    ])
+                    
+                    group_data = {
+                        'genes': intersection['genes'],
+                        'sources': [intersection['name']],
+                        'meta_type': 'single_intersection',
+                        'name': intersection['name']
+                    }
+                    
+                    tentative_name = intersection['name']
+                    tentative_comment = f"Genes found in the intersection '{intersection['name']}'."
+                    
+                    return True, modal_info, tentative_name, tentative_comment, group_data
 
+        raise PreventUpdate
+
+    # 6. Callback para resetear n_clicks de los botones de apertura cuando el modal se cierra
+    # Esto garantiza que el botón se puede presionar repetidamente (Fix para Issue 1)
+    @app.callback(
+        [Output('save-combined-group-btn-top', 'n_clicks', allow_duplicate=True),
+         Output('add-all-intersections-btn', 'n_clicks', allow_duplicate=True),
+         Output({'type': 'add-intersection-btn', 'index': ALL}, 'n_clicks', allow_duplicate=True)],
+        Input('gene-groups-analysis-tab-modal', 'is_open'),
+        [State('save-combined-group-btn-top', 'n_clicks'),
+         State('add-all-intersections-btn', 'n_clicks'),
+         State({'type': 'add-intersection-btn', 'index': ALL}, 'id')],
+        prevent_initial_call=True
+    )
+    def reset_group_modal_buttons(is_open, current_save_clicks, current_all_clicks, dynamic_ids):
+        """Resetea los n_clicks de los botones de apertura cuando el modal se cierra (is_open es False)."""
+        
+        # Condición CRÍTICA: Solo resetea si el modal SE ACABA DE CERRAR (is_open es False).
+        if not is_open:
+            # Resetear botones fijos (a 0 si están definidos)
+            reset_save_clicks = 0 if current_save_clicks is not None else dash.no_update
+            reset_all_clicks = 0 if current_all_clicks is not None else dash.no_update
+            
+            # Resetear todos los botones dinámicos de intersección a 0
+            if dynamic_ids:
+                 reset_dynamic_clicks = [0] * len(dynamic_ids)
+            else:
+                 reset_dynamic_clicks = dash.no_update
+            
+            return reset_save_clicks, reset_all_clicks, reset_dynamic_clicks
+        
         raise PreventUpdate
