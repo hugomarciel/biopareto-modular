@@ -349,21 +349,6 @@ def transfer_add_all_click(n_clicks):
         raise PreventUpdate
     return n_clicks
 
-# 🔑 NUEVO CALLBACK DE ACTIVACIÓN (PARA ELIMINAR EL ERROR ESTRUCTURAL)
-@app.callback(
-    Output('enrichment-render-trigger-store', 'data', allow_duplicate=True),
-    Input('main-tabs', 'active_tab'),
-    prevent_initial_call=True
-)
-def trigger_enrichment_tab_render(active_tab):
-    """Actualiza el trigger store SOLO cuando la pestaña de enriquecimiento está activa."""
-    if active_tab == 'enrichment-tab':
-        # Devolver un valor único (timestamp) para disparar el callback de renderizado
-        return datetime.now().timestamp()
-    # Si no es la pestaña correcta, no actualiza
-    return dash.no_update 
-
-
 # Callback para ocultar/mostrar panel de interés
 @app.callback(
     Output("interest-panel-wrapper", "style"),
@@ -735,15 +720,7 @@ def handle_genes_tab_individual_gene_button(n_clicks_list, is_open):
 
 # app.py (MODIFICACIÓN DE CALLBACK DE GESTIÓN DE MODALES DE GRUPOS DE GENES)
 
-# ... (El resto del código de app.py se mantiene) ...
 
-# app.py (FRAGMENTO DE CÓDIGO CORREGIDO PARA MODALES)
-
-# ... (El resto del código de app.py se mantiene) ...
-
-# app.py (FRAGMENTO MODIFICADO)
-
-# ... (cerca del final del archivo, debajo de los callbacks de modales) ...
 
 @app.callback(
     [Output('interest-panel-store', 'data', allow_duplicate=True),

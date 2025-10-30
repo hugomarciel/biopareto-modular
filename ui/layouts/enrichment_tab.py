@@ -14,7 +14,8 @@ def create_enrichment_tab_modified(): # <- FUNCIÓN FINAL
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H4("🔬 Biological Enrichment AnalysisNuevooo", className="text-primary mb-0")
+                        # CORRECCIÓN: Eliminamos "Nuevooo"
+                        html.H4("🔬 Biological Enrichment Analysis", className="text-primary mb-0") 
                     ]),
                     dbc.CardBody([
                         html.P("Select one or more solutions or gene groups from the Interest Panel to analyze the functional enrichment of their genes.",
