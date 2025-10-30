@@ -490,6 +490,7 @@ def register_enrichment_callbacks(app):
    # logic/callbacks/enrichment_analysis.py (BLOQUE DE CAMBIOS PARA Reactome)
 
     # 5. Callback para ejecutar el análisis de Reactome (MODIFICADO: SÓLO ALMACENA EN STORE)
+    # 5. Callback para ejecutar el análisis de Reactome (MODIFICADO: SÓLO ALMACENA EN STORE)
     @app.callback(
         # CAMBIO: Ahora guarda en un Store específico para Reactome
         Output('reactome-results-store', 'data', allow_duplicate=True), 
@@ -527,6 +528,7 @@ def register_enrichment_callbacks(app):
             return []
 
         # 2. Ejecutar servicio de Reactome
+        # La variable organism_name contiene el valor del Input (e.g., "Homo sapiens"), lo cual es correcto para el servicio.
         results = ReactomeService.get_enrichment(gene_list, organism_name)
 
         if results is None:
@@ -536,7 +538,6 @@ def register_enrichment_callbacks(app):
              return []
 
         return results
-
 
     # 5.5. Callback para mostrar los resultados de Reactome (NUEVO: LECTURA DEL STORE)
     @app.callback(

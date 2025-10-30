@@ -14,40 +14,47 @@ logger = logging.getLogger(__name__)
 class ReactomeService:
     """Service to connect with the Reactome Content Service API for pathway enrichment."""
 
-    # URL para el análisis de la lista de genes (POST)
-    ANALYSIS_SERVICE_URL = "https://reactome.org/AnalysisService/identifiers/?page=1&pageSize=20&sortBy=ENTITIES_PVALUE&order=ASC"
-    # URL base para obtener los resultados detallados
-    BASE_REPORT_URL = "https://reactome.org/AnalysisService/report/"
+    # URL correcta para iniciar el análisis (POST), incluyendo 'projection'
+    ANALYSIS_SERVICE_URL = "https://reactome.org/AnalysisService/identifiers/projection" 
     
     # Organismo por defecto (Human)
     DEFAULT_ORGANISM = "Homo sapiens"
+
+    # Diccionario para mapear nombres de organismos largos a códigos Reactome
+    ORGANISM_CODE_MAP = {
+        "Homo sapiens": "HSA",
+        "Mus musculus": "MMU",
+        "Rattus norvegicus": "RNO",
+        # Añadir más organismos si la app los soporta
+    }
+
+    @staticmethod
+    def _get_reactome_species_code(organism_name):
+        """Convierte el nombre del organismo a su código corto, si está disponible."""
+        return ReactomeService.ORGANISM_CODE_MAP.get(organism_name, organism_name)
+
 
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
         Executes Reactome pathway enrichment analysis.
-        
-        Note: Reactome's enrichment process is asynchronous. 
-        We need to send the list (POST) and then fetch the results (GET).
         """
         if not gene_list:
             return []
         
+        species_code = ReactomeService._get_reactome_species_code(organism_name)
+        
         try:
             # 1. Enviar lista de genes para iniciar el análisis
-            post_payload = {
-                "identifiers": gene_list,
-                "species": organism_name # Ej: "Homo sapiens"
-            }
-            
-            # Reactome usa 'species' como nombre (ej: "Homo sapiens"), no ID corto (ej: "hsapiens")
+            post_data = "\n".join(gene_list)
             
             logger.info(f"Submitting {len(gene_list)} genes to Reactome for {organism_name}.")
 
             response = requests.post(
                 ReactomeService.ANALYSIS_SERVICE_URL, 
-                json=post_payload, 
-                headers={'Content-Type': 'application/json'},
+                data=post_data, 
+                params={'species': species_code}, 
+                headers={'Content-Type': 'text/plain'}, 
                 timeout=45
             )
 
@@ -55,17 +62,25 @@ class ReactomeService:
                 logger.error(f"Reactome POST error: {response.status_code} - {response.text}")
                 return None
             
-            # 2. Obtener el token de análisis del encabezado de la respuesta
+            # 2. Obtener el token de análisis del encabezado o del cuerpo JSON
             analysis_token = response.headers.get('X-Analysisservice-Token')
+            
             if not analysis_token:
-                 logger.error("Reactome did not return an analysis token.")
+                try:
+                    response_json = response.json()
+                    analysis_token = response_json.get('summary', {}).get('token')
+                except json.JSONDecodeError:
+                    logger.error("Reactome did not return a token and response body is not valid JSON.")
+                    return None
+                
+            if not analysis_token:
+                 logger.error(f"Reactome did not return an analysis token. Response body: {response.text[:200]}...")
                  return None
             
             logger.info(f"Reactome analysis started. Token: {analysis_token}")
 
             # 3. Obtener el reporte de enriquecimiento con el token
-            report_url = f"{ReactomeService.BASE_REPORT_URL}{analysis_token}/pathways/low?page=1&pageSize=100"
-            
+            report_url = f"https://reactome.org/AnalysisService/download/{analysis_token}/result.json"
             report_response = requests.get(report_url, timeout=30)
             
             if report_response.status_code != 200:
@@ -77,24 +92,32 @@ class ReactomeService:
             # Reactome devuelve una lista de objetos de 'pathways' en el campo 'pathways'
             pathways = report_data.get('pathways', [])
             
-            # Filtrar por términos significativos (pValue < 0.05)
-            significant_pathways = [
-                p for p in pathways if p.get('entities', {}).get('pValue', 1.0) < 0.05
-            ]
+            logger.info(f"Received {len(pathways)} total pathways from Reactome before filtering.")
             
+            # --- CORRECCIÓN CLAVE: Desactivar filtro para mostrar todos los resultados ---
+            # Si el filtro estaba activo (e.g., FDR < 0.05), estaba eliminando todos los caminos.
+            # significant_pathways = [p for p in pathways if p.get('entities', {}).get('fdr', 1.0) < 0.05]
+            significant_pathways = pathways # Muestra todos los resultados
+            
+            logger.info(f"Displaying {len(significant_pathways)} pathways (FDR filter temporarily disabled).")
+
             # Mapeo a un formato de resultados simplificado y usable
             mapped_results = []
             for p in significant_pathways:
+                # Nos aseguramos de acceder a los datos de entidades de forma segura
+                entities = p.get('entities', {})
+                
                 mapped_results.append({
                     'source': 'Reactome',
                     'term_name': p.get('name', 'N/A'),
-                    'description': p.get('stId', 'N/A'), # Usamos el Stable ID como descripción corta
-                    'p_value': p.get('entities', {}).get('pValue', 1.0),
-                    'entities_found': p.get('entities', {}).get('found', 0), # Genes intersectados
-                    'entities_total': p.get('entities', {}).get('total', 0), # Tamaño del término
-                    'fdr_value': p.get('entities', {}).get('fdr', 1.0) # Valor de corrección FDR
+                    'description': p.get('stId', 'N/A'), 
+                    'p_value': entities.get('pValue', 1.0),
+                    'entities_found': entities.get('found', 0), 
+                    'entities_total': entities.get('total', 0), 
+                    'fdr_value': entities.get('fdr', 1.0)
                 })
                 
+            logger.info(f"Final mapped results count: {len(mapped_results)}")
             return mapped_results
 
         except Exception as e:
