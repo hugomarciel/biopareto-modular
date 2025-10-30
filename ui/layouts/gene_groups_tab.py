@@ -1,4 +1,6 @@
-# ui/layouts/gene_groups_tab.py
+"""
+Gene Groups Tab Layout
+"""
 
 import dash_bootstrap_components as dbc
 from dash import html
@@ -15,7 +17,6 @@ def create_gene_groups_tab():
 
         html.Div([
             html.H5("Select Items to Analyze:", className="mb-3"),
-            # Contenedor para los cards de selección visual (Input dinámico)
             html.Div(id='gene-groups-visual-selector', children=[
                 html.P("Loading items...", className="text-muted text-center py-4")
             ])
@@ -23,6 +24,6 @@ def create_gene_groups_tab():
 
         html.Hr(),
 
-        # Contenedor para resultados (Venn, frecuencia y tabla)
+        # Results section
         html.Div(id='combined-genes-analysis-results')
     ], fluid=True, className="py-4")

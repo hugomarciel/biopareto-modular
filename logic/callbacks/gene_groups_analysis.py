@@ -186,14 +186,15 @@ def register_gene_groups_callbacks(app):
                 
                 if item_type == 'solution':
                     sol_data = item.get('data', {})
-                    sol_id = sol_data.get('id', 'Unknown')
+                    sol_id = sol_data.get('solution_id', 'Unknown')
+                    front_name = sol_data.get('front_name', 'Unknown Front')
                     genes = sol_data.get('selected_genes', set())
                     if not genes and sol_id in all_solutions_dict:
                         genes = all_solutions_dict[sol_id].get('selected_genes', set())
                     
                     if genes:
-                        # Usar ID de ítem del panel para evitar colisión de nombres
-                        unique_key = f"Sol_{item.get('id', idx)}" 
+                        # 🔑 CORRECCIÓN DE KEY: Usar nombre amigable para una solución individual
+                        unique_key = f"{sol_id} (from {front_name})" 
                         item_gene_sets[unique_key] = set(genes)
                         for gene in genes:
                             gene_sources.setdefault(gene, []).append(unique_key)
@@ -201,12 +202,10 @@ def register_gene_groups_callbacks(app):
                 elif item_type == 'solution_set':
                     solutions = item.get('data', {}).get('solutions', [])
                     
-                    # 🔑 CORRECCIÓN DE LÓGICA: Desempaquetar el set de soluciones
-                    for i, sol in enumerate(solutions):
-                        sol_id = sol.get('solution_id', 'Unknown')
-                        
-                        # Crear nombre único que combine el ID del Set con el ID de la Solución
-                        unique_key = f"Set_{item.get('id', idx)}_{sol_id}" 
+                    # Desempaquetar el set de soluciones
+                    for sol in solutions:
+                        sol_id = sol.get('solution_id', sol.get('id', 'Unknown'))
+                        front_name = sol.get('front_name', 'Unknown Front')
                         
                         # Fallback robusto para asegurar los genes
                         genes = sol.get('selected_genes', set())
@@ -214,30 +213,60 @@ def register_gene_groups_callbacks(app):
                             genes = all_solutions_dict[sol_id].get('selected_genes', set())
                         
                         if genes:
-                            # Añadir cada solución del Set como un ítem de comparación separado
+                            # 🔑 CORRECCIÓN DE KEY: Usar nombre amigable para cada solución del set
+                            display_key = f"{sol_id} (from {front_name})"
+                            unique_key = display_key # Usar display_key como base
+                            
+                            # Manejo de duplicados: Añadir contador si el nombre ya existe
+                            key_counter = 1
+                            while unique_key in item_gene_sets:
+                                unique_key = f"{display_key} ({key_counter})"
+                                key_counter += 1
+                                
                             item_gene_sets[unique_key] = set(genes)
                             for gene in genes:
                                 gene_sources.setdefault(gene, []).append(unique_key)
                     
-                elif item_type in ['gene_set', 'individual_gene', 'combined_gene_group']:
+                elif item_type in ['gene_set', 'combined_gene_group']:
                     genes_list = item.get('data', {}).get('genes', [])
-                    if item_type == 'individual_gene':
-                        gene = item.get('data', {}).get('gene', '')
-                        if gene:
-                            genes_list = [gene]
-                            
+                    
                     if genes_list:
-                        # Usar ID de ítem del panel para evitar colisión de nombres
-                        unique_key = f"Group_{item.get('id', idx)}"
+                        # 🔑 CORRECCIÓN DE KEY: Usar el nombre del ítem del panel directamente
+                        display_key = item_name_base 
+                        unique_key = display_key # Usar display_key como base
+                        
+                        # Manejo de duplicados: Añadir contador si el nombre ya existe
+                        key_counter = 1
+                        while unique_key in item_gene_sets:
+                            unique_key = f"{display_key} ({key_counter})"
+                            key_counter += 1
+                            
                         item_gene_sets[unique_key] = set(genes_list)
                         for gene in genes_list:
                             gene_sources.setdefault(gene, []).append(unique_key)
+
+                elif item_type == 'individual_gene':
+                    gene = item.get('data', {}).get('gene', '')
+                    if gene:
+                        # 🔑 CORRECCIÓN DE KEY: Usar el nombre del gen
+                        display_key = f"Gene: {gene}"
+                        unique_key = display_key # Usar display_key como base
+                        
+                        # Manejo de duplicados: Añadir contador si el nombre ya existe
+                        key_counter = 1
+                        while unique_key in item_gene_sets:
+                            unique_key = f"{display_key} ({key_counter})"
+                            key_counter += 1
+                            
+                        item_gene_sets[unique_key] = {gene}
+                        gene_sources.setdefault(gene, []).append(unique_key)
+
 
         unique_genes = set(gene_sources.keys())
         
         # --- Generar Componentes de Resultados ---
         
-        # A. Summary Stats
+        # A. Summary Stats (No modificado, utiliza unique_genes y item_gene_sets)
         summary_stats = dbc.Card([
             dbc.CardHeader(html.H5("Summary Statistics", className="mb-0")),
             dbc.CardBody([
@@ -247,7 +276,6 @@ def register_gene_groups_callbacks(app):
                         html.P("Unique Genes", className="text-muted small")
                     ], width=4),
                     dbc.Col([
-                        # CORREGIDO: Cuenta los ítems individuales de comparación (incluyendo soluciones desagregadas)
                         html.H3(len(item_gene_sets), className="text-info mb-0"),
                         html.P("Items Compared", className="text-muted small")
                     ], width=4),
@@ -267,6 +295,7 @@ def register_gene_groups_callbacks(app):
         if 2 <= len(item_gene_sets) <= 3:
             try:
                 sets_list = list(item_gene_sets.values())
+                # 🔑 Claves de etiqueta ahora usan las claves amigables (unique_key)
                 labels_list = list(item_gene_sets.keys()) 
                 
                 fig, ax = plt.subplots(figsize=(6, 6))
@@ -294,6 +323,7 @@ def register_gene_groups_callbacks(app):
                 # --- RENDER VENN LEGEND (Usando las claves internas para identificar) ---
                 legend_items = []
                 for i, label in enumerate(labels_list):
+                    # Acortar la etiqueta solo para la visualización de la leyenda
                     display_label = label if len(label) < 30 else label[:27] + '...' 
                     color_style = {'backgroundColor': VENN_COLORS[i], 
                                    'width': '15px', 'height': '15px', 
@@ -400,7 +430,6 @@ def register_gene_groups_callbacks(app):
                             html.Div(genes_display, className="small text-muted mb-2",
                                   style={'fontSize': '0.85rem', 'maxHeight': '150px', 'overflowY': 'auto'}),
                             
-                            # 🔑 CORRECCIÓN: Botones de Adición Individual
                             dbc.Button(
                                 "Add to Panel",
                                 id={'type': 'add-intersection-btn', 'index': idx}, 
@@ -423,7 +452,7 @@ def register_gene_groups_callbacks(app):
                     dbc.Col([
                         html.Div([
                             html.H5("Gene Intersections", className="mb-0 d-inline-block"),
-                            # 🔑 Botón Add All Intersections
+                            # Botón Add All Intersections
                             dbc.Button(
                                 "Add All Intersections 📌",
                                 id="add-all-intersections-btn",
@@ -434,7 +463,7 @@ def register_gene_groups_callbacks(app):
                                 disabled=not intersection_data_list
                             )
                         ], className="d-flex align-items-center mb-3"),
-                        html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'}) # <-- Muestra las tarjetas
+                        html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'})
                     ], width=6)
                 ], className="mb-4")
 
@@ -451,7 +480,7 @@ def register_gene_groups_callbacks(app):
                       className="text-muted fst-italic")
             ])
         
-        # C. Gene Frequency Table/Chart (se omite por brevedad)
+        # C. Gene Frequency Table/Chart (No modificado)
         gene_frequency = []
         for gene, sources in gene_sources.items():
             gene_frequency.append({
@@ -502,7 +531,7 @@ def register_gene_groups_callbacks(app):
         ])
 
 
-        # Store data for genes and sources
+        # Store data for genes and sources (Asegurando que las claves sean las nuevas)
         store_data = {'genes': list(unique_genes), 'sources': list(item_gene_sets.keys())}
         
         return html.Div([
@@ -643,7 +672,6 @@ def register_gene_groups_callbacks(app):
         raise PreventUpdate
 
     # 6. Callback para resetear n_clicks de los botones de apertura cuando el modal se cierra
-    # Esto garantiza que el botón se puede presionar repetidamente (Fix para Issue 1)
     @app.callback(
         [Output('save-combined-group-btn-top', 'n_clicks', allow_duplicate=True),
          Output('add-all-intersections-btn', 'n_clicks', allow_duplicate=True),
@@ -657,13 +685,10 @@ def register_gene_groups_callbacks(app):
     def reset_group_modal_buttons(is_open, current_save_clicks, current_all_clicks, dynamic_ids):
         """Resetea los n_clicks de los botones de apertura cuando el modal se cierra (is_open es False)."""
         
-        # Condición CRÍTICA: Solo resetea si el modal SE ACABA DE CERRAR (is_open es False).
         if not is_open:
-            # Resetear botones fijos (a 0 si están definidos)
             reset_save_clicks = 0 if current_save_clicks is not None else dash.no_update
             reset_all_clicks = 0 if current_all_clicks is not None else dash.no_update
             
-            # Resetear todos los botones dinámicos de intersección a 0
             if dynamic_ids:
                  reset_dynamic_clicks = [0] * len(dynamic_ids)
             else:

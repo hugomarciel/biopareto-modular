@@ -1,4 +1,4 @@
-# app.py (CÓDIGO COMPLETO CON CORRECCIÓN DE MODALES Y LÓGICA DE SET DE SOLUCIONES)
+# Pas# app.py (CÓDIGO COMPLETO CON CORRECCIÓN DE MODALES Y LÓGICA DE SET DE SOLUCIONES)
 
 """
 BioPareto Analyzer - Aplicación Dash para análisis de frentes de Pareto en selección de genes
@@ -741,12 +741,20 @@ def handle_genes_tab_individual_gene_button(n_clicks_list, is_open):
 
 # ... (El resto del código de app.py se mantiene) ...
 
+# app.py (FRAGMENTO MODIFICADO)
+
+# ... (cerca del final del archivo, debajo de los callbacks de modales) ...
+
 @app.callback(
     [Output('interest-panel-store', 'data', allow_duplicate=True),
      Output('gene-groups-analysis-tab-temp-store', 'data', allow_duplicate=True),
-     Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True)], # <- Output para cerrar modal
+     Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True),
+     
+     # Output('save-combined-group-btn-top', 'n_clicks', allow_duplicate=True)
+     ], 
+     
     [Input('gene-groups-analysis-tab-confirm-btn', 'n_clicks'),
-     Input('gene-groups-analysis-tab-cancel-btn', 'n_clicks')], # <- Input para Cancelar
+     Input('gene-groups-analysis-tab-cancel-btn', 'n_clicks')],
     [State('gene-groups-analysis-tab-temp-store', 'data'),
      State('gene-groups-analysis-tab-name-input', 'value'),
      State('gene-groups-analysis-tab-comment-input', 'value'),
@@ -763,15 +771,15 @@ def confirm_gene_group_addition(confirm_clicks, cancel_clicks, temp_data, group_
 
     # 1. Manejo del Cancelar (Cierre del modal sin guardar)
     if trigger_id == 'gene-groups-analysis-tab-cancel-btn':
-        # ✅ CORRECCIÓN: Cierra modal (False) y limpia stores temporales (None)
-        return dash.no_update, None, False 
+        # Esto permite que cada clic incremente naturalmente (1,2,3...) y Dash detecte el cambio
+        return dash.no_update, dash.no_update, False
 
     # 2. Manejo del Confirmar (Guardar y Cierre)
     if trigger_id == 'gene-groups-analysis-tab-confirm-btn' and confirm_clicks:
         if not temp_data or not temp_data.get('genes'):
-            # Cierra si no hay data válida
-            return dash.no_update, None, False 
+            return dash.no_update, None, False
 
+        
         new_item = {
             'type': 'combined_gene_group',
             'id': f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -788,10 +796,10 @@ def confirm_gene_group_addition(confirm_clicks, cancel_clicks, temp_data, group_
         if current_items is None:
             current_items = []
 
-        # ✅ CORRECCIÓN: Retorna el store actualizado, resetea temp_store (None), y cierra el modal (False)
         return current_items + [new_item], None, False
         
     raise PreventUpdate
+
 @app.callback(
     [Output('interest-panel-store', 'data', allow_duplicate=True),
      Output('genes-tab-gene-group-temp-store', 'data', allow_duplicate=True),
