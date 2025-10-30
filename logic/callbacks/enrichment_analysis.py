@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py
+# logic/callbacks/enrichment_analysis.py (MODIFICADO)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -8,14 +8,15 @@ import pandas as pd
 import json
 from collections import defaultdict
 from datetime import datetime
+# Importamos AMBOS servicios
 from services.gprofiler_service import GProfilerService 
+from services.reactome_service import ReactomeService 
 
 
 def register_enrichment_callbacks(app): 
 
-    # 1. Callback de Actualización de IDs y Trigger
-    # logic/callbacks/enrichment_analysis.py (Fragmento de Código)
-
+    # 1. Callback de Actualización de IDs y Trigger (Se mantiene igual)
+    # ... (código del callback update_selected_items_and_render_trigger) ...
     @app.callback(
         [Output('enrichment-selected-item-ids-store', 'data', allow_duplicate=True),
          Output('enrichment-render-trigger-store', 'data', allow_duplicate=True)],
@@ -65,7 +66,8 @@ def register_enrichment_callbacks(app):
         raise PreventUpdate
 
 
-    # 1.5. Callback de Renderizado Real (Activado por el Trigger Store)
+    # 1.5. Callback de Renderizado Real (Activado por el Trigger Store) (Se mantiene igual)
+    # ... (código del callback render_visual_enrichment_selector) ...
     @app.callback(
         Output('enrichment-visual-selector', 'children'),
         Input('enrichment-render-trigger-store', 'data'),
@@ -199,114 +201,122 @@ def register_enrichment_callbacks(app):
         return dbc.Row(cards, className="g-3")
 
 
-    # 2. Callback para manejar la selección de los checkboxes y actualizar el panel de resumen
-    # ... (Resto de callbacks se mantiene) ...
-   # logic/callbacks/enrichment_analysis.py (FRAGMENTO)
+    # 2. Callback para manejar la selección de los checkboxes y actualizar el panel de resumen (Se mantiene igual)
+    # ... (código del callback update_enrichment_selection) ...
 
-# ... (cerca de la línea 130)
+    # logic/callbacks/enrichment_analysis.py (Añadir este bloque después del callback 1.5)
 
-    # 2. Callback para manejar la selección de los checkboxes y actualizar el panel de resumen
+    # 2. Callback para manejar la selección de los checkboxes, actualizar el Store y el panel de resumen (FALTA ESTE)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data'),
          Output('enrichment-selection-panel', 'children')],
-        Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'), 
-        State('interest-panel-store', 'data')
-    )
-    def update_enrichment_selection(checkbox_values, items):
-        """Processes selection checkboxes and updates the summary panel."""
-        
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            raise PreventUpdate
-
-        selected_indices = []
-        
-        # Iteramos sobre los inputs disparados para obtener el ID real (índice)
-        for input_info in ctx.inputs_list[0]:
-            # El valor del input es una lista [índice] si está marcado, o [] si no.
-            if input_info['value'] and len(input_info['value']) > 0:
-                 # El valor del checkbox es el índice real del ítem en el interest-panel-store
-                 selected_indices.append(input_info['value'][0]) 
-        
-        if not selected_indices:
-            return [], dbc.Alert("No items selected for analysis.", color="warning")
-
-        # Lógica de agregación de genes (se mantiene igual, usando selected_indices)
-        combined_genes = set()
-        selected_names = []
-        
-        for idx in selected_indices:
-            if idx >= len(items):
-                continue
-            
-            item = items[idx]
-            item_type = item.get('type', '')
-            
-            if item_type == 'solution':
-                combined_genes.update(item.get('data', {}).get('selected_genes', []))
-            elif item_type == 'solution_set':
-                solutions = item.get('data', {}).get('solutions', [])
-                for sol in solutions:
-                    combined_genes.update(sol.get('selected_genes', []))
-            elif item_type in ['gene_set', 'combined_gene_group']:
-                combined_genes.update(item.get('data', {}).get('genes', []))
-            elif item_type == 'individual_gene':
-                combined_genes.add(item.get('data', {}).get('gene', ''))
-            
-            selected_names.append(item.get('name'))
-
-
-        # Almacenar la lista de genes combinados para el análisis
-        combined_genes_list = sorted(list(combined_genes))
-
-        # Renderizar el panel de resumen de la selección
-        summary_panel = dbc.Card([
-            dbc.CardHeader("Combined Genes for Enrichment"),
-            dbc.CardBody([
-                html.P(f"Total Unique Genes: {len(combined_genes_list)}", className="mb-1"),
-                html.P(f"Sources: {len(selected_indices)} item(s)"),
-                html.Details([
-                    html.Summary("View Sources"),
-                    dbc.ListGroup([
-                        dbc.ListGroupItem(name, className="small py-1") for name in selected_names
-                    ], flush=True, className="mt-2")
-                ])
-            ])
-        ])
-
-        return selected_indices, summary_panel
-
-# ... (El resto del archivo enrichment_analysis.py se mantiene igual)
-
-
-    # 3. Callback para habilitar el botón de enriquecimiento
-    @app.callback(
-        Output('run-enrichment-btn', 'disabled'), 
-        Input('enrichment-selected-indices-store', 'data')
-    )
-    def toggle_enrichment_button(selected_indices): # <- FUNCIÓN FINAL
-        """Habilitar/deshabilitar botón de enriquecimiento si hay genes seleccionados."""
-        if not selected_indices:
-            return True
-        return False
-
-
-    # 4. Callback para ejecutar el análisis de enriquecimiento biológico
-    @app.callback(
-        [Output('enrichment-data-store', 'data'),
-         Output('enrichment-results', 'children')], 
-        Input('run-enrichment-btn', 'n_clicks'), 
-        [State('enrichment-selected-indices-store', 'data'),
-         State('interest-panel-store', 'data'),
-         State('organism-dropdown', 'value')], 
+        Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'),
+        State('interest-panel-store', 'data'),
         prevent_initial_call=True
     )
-    def run_enrichment_analysis(n_clicks, selected_indices, items, organism):
+    def update_enrichment_selection(list_of_checkbox_values, items):
+        """
+        Escucha los checkboxes de las tarjetas, actualiza el Store de índices seleccionados 
+        y renderiza el panel de resumen de genes combinados.
+        """
+        ctx = dash.callback_context
+        # Si no hay trigger, o si no hay items cargados, no hacer nada.
+        if not ctx.triggered or not items:
+            raise PreventUpdate
+        
+        # 1. Recolectar todos los índices seleccionados
+        selected_indices = set()
+        for values in list_of_checkbox_values:
+            # Los valores de un checklist siempre son listas. Si está marcado, contiene el índice [idx].
+            if values:
+                selected_indices.add(values[0])
+        
+        selected_indices_list = sorted(list(selected_indices))
+        
+        # 2. Crear el panel de resumen ("Combined Genes for Enrichment")
+        if not selected_indices_list:
+            # Retorna la lista vacía al Store y un mensaje al panel
+            return selected_indices_list, html.Div("No items selected. Select items above to view the combined gene list.", className="text-muted p-3")
+
+        # Lógica para contar genes combinados (similar a la de los callbacks de ejecución)
+        combined_genes = set()
+        for idx in selected_indices_list:
+            if idx < len(items):
+                item = items[idx]
+                item_type = item.get('type', '')
+                
+                # Nota: Aquí se asume que el campo 'selected_genes' o 'genes' es correcto
+                if item_type == 'solution':
+                    combined_genes.update(item.get('data', {}).get('selected_genes', []))
+                elif item_type == 'solution_set':
+                    solutions = item.get('data', {}).get('solutions', [])
+                    for sol in solutions:
+                        combined_genes.update(sol.get('selected_genes', []))
+                elif item_type in ['gene_set', 'combined_gene_group']:
+                    combined_genes.update(item.get('data', {}).get('genes', []))
+                elif item_type == 'individual_gene':
+                    combined_genes.add(item.get('data', {}).get('gene', ''))
+
+        gene_count = len(combined_genes)
+        
+        # 3. Renderizar el panel de resumen
+        summary_panel = dbc.Alert(
+            [
+                html.H6("Combined Genes for Enrichment (Input Set)", className="alert-heading"),
+                html.P(f"Total Unique Genes: {gene_count}", className="mb-1"),
+                html.P(f"Source Items: {len(selected_indices_list)}", className="mb-0"),
+                html.Details([
+                    html.Summary("View Gene List", style={'cursor': 'pointer', 'color': 'inherit', 'fontWeight': 'bold'}),
+                    html.P(', '.join(sorted(list(combined_genes))), className="mt-2 small")
+                ]) if gene_count > 0 else None,
+            ],
+            color="primary",
+            className="mt-3"
+        )
+        
+        return selected_indices_list, summary_panel
+    
+    # 2.5. Callback para limpiar la selección de tarjetas (NUEVO)
+    @app.callback(
+        [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
+         Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
+        Input('clear-enrichment-selection-btn', 'n_clicks'), # ID del nuevo botón
+        prevent_initial_call=True
+    )
+    def clear_enrichment_selection(n_clicks):
+        if n_clicks and n_clicks > 0:
+            # Limpia el store de índices seleccionados y el panel de resumen
+            return [], html.Div("No items selected. Select items above to view the combined gene list.", className="text-muted p-3")
+        raise PreventUpdate
+
+    # 3. Callback para habilitar el botón de enriquecimiento (MODIFICADO para ambos botones)
+    @app.callback(
+        [Output('run-gprofiler-btn', 'disabled'),
+         Output('run-reactome-btn', 'disabled')], 
+        Input('enrichment-selected-indices-store', 'data')
+    )
+    def toggle_enrichment_button(selected_indices):
+        """Habilitar/deshabilitar ambos botones de enriquecimiento si hay genes seleccionados."""
+        is_disabled = not (selected_indices and len(selected_indices) > 0)
+        return is_disabled, is_disabled
+
+
+   # 4. Callback para ejecutar el análisis de g:Profiler (MODIFICADO: SÓLO ALMACENA EN STORE)
+    @app.callback(
+        # CAMBIO: Ahora guarda en un Store específico para g:Profiler
+        Output('gprofiler-results-store', 'data', allow_duplicate=True), 
+        Input('run-gprofiler-btn', 'n_clicks'), 
+        [State('enrichment-selected-indices-store', 'data'),
+         State('interest-panel-store', 'data'),
+         State('gprofiler-organism-dropdown', 'value')],
+        prevent_initial_call=True
+    )
+    def run_gprofiler_analysis(n_clicks, selected_indices, items, organism):
         """Executes g:Profiler enrichment analysis and stores results."""
         if not n_clicks or not selected_indices:
             raise PreventUpdate
-
-        # 1. Recolectar lista final de genes
+        
+        # 1. Recolectar lista final de genes (Misma lógica que antes)
         combined_genes = set()
         for idx in selected_indices:
             item = items[idx]
@@ -326,24 +336,25 @@ def register_enrichment_callbacks(app):
         gene_list = [g for g in combined_genes if g and isinstance(g, str)]
 
         if not gene_list:
-            return None, dbc.Alert("No genes found in the selected items to run enrichment.", color="warning")
+            # En lugar de levantar error, devuelve None o [] para el Store
+            return []
 
         # 2. Ejecutar servicio de g:Profiler
         results = GProfilerService.get_enrichment(gene_list, organism)
 
         if results is None:
-            return None, dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger")
+            # Si hay error en API, devuelve None. El display callback lo manejará.
+            return None 
         
         if not results:
-             return results, dbc.Alert(f"g:Profiler found no significant enrichment results for {len(gene_list)} genes in {organism}.", color="info")
+             # Si no hay resultados, devuelve lista vacía.
+             return []
 
-        # 3. Procesar resultados de g:Profiler con los nombres de campo correctos
+        # 3. Procesar resultados de g:Profiler
         enrichment_data_list = []
         for term in results:
-            # Handle intersections properly - g:Profiler returns 'intersections' (plural)
             intersections = term.get('intersections', [])
             if isinstance(intersections, list):
-                # Flatten the list of lists into a single list of strings
                 flat_intersections = [str(item) for sublist in intersections for item in (sublist if isinstance(sublist, list) else [sublist])]
                 intersections_str = ', '.join(flat_intersections)
             else:
@@ -351,7 +362,7 @@ def register_enrichment_callbacks(app):
 
             enrichment_data_list.append({
                 'source': term.get('source', ''),
-                'term_name': term.get('name', ''),  # g:Profiler uses 'name' not 'term_name'
+                'term_name': term.get('name', ''), 
                 'description': term.get('description', ''),
                 'p_value': term.get('p_value', 1.0),
                 'term_size': term.get('term_size', 0),
@@ -359,28 +370,39 @@ def register_enrichment_callbacks(app):
                 'intersection_size': term.get('intersection_size', 0),
                 'precision': term.get('precision', 0.0),
                 'recall': term.get('recall', 0.0),
-                'intersections': intersections_str,  # g:Profiler uses 'intersections' (plural)
+                'intersections': intersections_str,  
                 'significant': term.get('significant', False)
             })
 
-        # Convert to DataFrame
-        df = pd.DataFrame(enrichment_data_list)
+        return enrichment_data_list # Retorna la lista para el Store
+
+
+    # 4.5. Callback para mostrar los resultados de g:Profiler (NUEVO: LECTURA DEL STORE)
+    @app.callback(
+        [Output('gprofiler-results-content', 'children'),
+         Output('clear-gprofiler-results-btn', 'disabled')], 
+        Input('gprofiler-results-store', 'data')
+    )
+    def display_gprofiler_results(enrichment_data_list):
+        if enrichment_data_list is None:
+            return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True
         
-        # Filter for significant terms only
+        if not enrichment_data_list:
+            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True 
+        
+        # Lógica de renderizado (copiada del callback anterior)
+        df = pd.DataFrame(enrichment_data_list)
+
         if 'significant' in df.columns:
             df = df[df['significant'] == True]
         
         if df.empty:
-            return enrichment_data_list, dbc.Alert(f"No significant enrichment results found for {len(gene_list)} genes.", color="info")
-        
-        # Sort by p-value and intersection size
+            return dbc.Alert("g:Profiler found no significant enrichment results.", color="info"), False
+
         df = df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
-        
-        # Select and rename columns for display
         display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'intersections']].copy()
-        # </CHANGE>
         
-        # Configure columns for DataTable
+        # Configuración de columnas (MISMA LÓGICA)
         display_columns = []
         for col in display_df.columns:
             if col == 'p_value':
@@ -412,11 +434,11 @@ def register_enrichment_callbacks(app):
         
         # Create results display
         results_content = [
-            html.H4("Enrichment Analysis Results", className="mb-3"),
-            html.P(f"Found {len(df)} significant terms for {len(gene_list)} unique genes.", className="text-muted"),
+            html.H4("g:Profiler Enrichment Results", className="mb-3"),
+            html.P(f"Found {len(df)} significant terms.", className="text-muted"),
             
             dash_table.DataTable(
-                id='enrichment-results-table',
+                id='enrichment-results-table-gprofiler', 
                 data=display_df.to_dict('records'),
                 columns=display_columns,
                 sort_action="native",
@@ -451,4 +473,173 @@ def register_enrichment_callbacks(app):
             )
         ]
 
-        return enrichment_data_list, html.Div(results_content)
+        return html.Div(results_content), False # Habilita el botón de limpiar
+
+
+    # 4.6. Callback para limpiar los resultados de g:Profiler (NUEVO)
+    @app.callback(
+        Output('gprofiler-results-store', 'data', allow_duplicate=True),
+        Input('clear-gprofiler-results-btn', 'n_clicks'), 
+        prevent_initial_call=True
+    )
+    def clear_gprofiler_results(n_clicks):
+        if n_clicks and n_clicks > 0:
+            return [] # Retorna lista vacía para limpiar el Store
+        raise PreventUpdate
+
+   # logic/callbacks/enrichment_analysis.py (BLOQUE DE CAMBIOS PARA Reactome)
+
+    # 5. Callback para ejecutar el análisis de Reactome (MODIFICADO: SÓLO ALMACENA EN STORE)
+    @app.callback(
+        # CAMBIO: Ahora guarda en un Store específico para Reactome
+        Output('reactome-results-store', 'data', allow_duplicate=True), 
+        Input('run-reactome-btn', 'n_clicks'), 
+        [State('enrichment-selected-indices-store', 'data'),
+         State('interest-panel-store', 'data'),
+         State('reactome-organism-input', 'value')], 
+        prevent_initial_call=True
+    )
+    def run_reactome_analysis(n_clicks, selected_indices, items, organism_name):
+        """Executes Reactome enrichment analysis and stores results."""
+        if not n_clicks or not selected_indices:
+            raise PreventUpdate
+
+        # 1. Recolectar lista final de genes (Misma lógica que antes)
+        combined_genes = set()
+        for idx in selected_indices:
+            item = items[idx]
+            item_type = item.get('type', '')
+            
+            if item_type == 'solution':
+                combined_genes.update(item.get('data', {}).get('selected_genes', []))
+            elif item_type == 'solution_set':
+                solutions = item.get('data', {}).get('solutions', [])
+                for sol in solutions:
+                    combined_genes.update(sol.get('selected_genes', []))
+            elif item_type in ['gene_set', 'combined_gene_group']:
+                combined_genes.update(item.get('data', {}).get('genes', []))
+            elif item_type == 'individual_gene':
+                combined_genes.add(item.get('data', {}).get('gene', ''))
+        
+        gene_list = [g for g in combined_genes if g and isinstance(g, str)]
+
+        if not gene_list:
+            return []
+
+        # 2. Ejecutar servicio de Reactome
+        results = ReactomeService.get_enrichment(gene_list, organism_name)
+
+        if results is None:
+            return None
+        
+        if not results:
+             return []
+
+        return results
+
+
+    # 5.5. Callback para mostrar los resultados de Reactome (NUEVO: LECTURA DEL STORE)
+    @app.callback(
+        [Output('reactome-results-content', 'children'),
+         Output('clear-reactome-results-btn', 'disabled')], 
+        Input('reactome-results-store', 'data')
+    )
+    def display_reactome_results(enrichment_data_list):
+        if enrichment_data_list is None:
+            return dbc.Alert("Error connecting to Reactome API or receiving response.", color="danger"), True
+        
+        if not enrichment_data_list:
+            return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True
+        
+        # Lógica de renderizado
+        df = pd.DataFrame(enrichment_data_list)
+        
+        # Ordenar por FDR (o p-value)
+        df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
+        
+        # Seleccionar y renombrar columnas para display
+        display_df = df[['source', 'term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
+        
+        # Configure columns for DataTable (MISMA LÓGICA)
+        display_columns = []
+        for col in display_df.columns:
+            if col == 'fdr_value':
+                 column_config = {
+                    'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric',
+                    'format': {'specifier': '.2e'}
+                }
+            elif col == 'p_value':
+                column_config = {
+                    'name': 'P-Value', 'id': col, 'type': 'numeric',
+                    'format': {'specifier': '.2e'}
+                }
+            elif col == 'entities_found':
+                column_config = {
+                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric'
+                }
+            elif col == 'entities_total':
+                column_config = {
+                    'name': 'Pathway\nSize', 'id': col, 'type': 'numeric'
+                }
+            elif col == 'term_name':
+                column_config = {
+                    'name': 'Pathway Name', 'id': col, 'type': 'text'
+                }
+            else:
+                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text'}
+            
+            display_columns.append(column_config)
+        
+        # Create results display
+        results_content = [
+            html.H4("Reactome Enrichment Results", className="mb-3"), 
+            html.P(f"Found {len(df)} significant Reactome pathways.", className="text-muted"),
+            
+            dash_table.DataTable(
+                id='enrichment-results-table-reactome', 
+                data=display_df.to_dict('records'),
+                columns=display_columns,
+                sort_action="native",
+                filter_action="native",
+                page_action="native",
+                page_current=0,
+                page_size=15,
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '8px',
+                    'maxWidth': '200px',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis',
+                },
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
+                ],
+                tooltip_data=[
+                    {
+                        'description': {'value': row['description'], 'type': 'text'}
+                    } for row in display_df.to_dict('records')
+                ],
+                tooltip_duration=None,
+            )
+        ]
+
+        return html.Div(results_content), False # Habilita el botón de limpiar
+
+
+    # 5.6. Callback para limpiar los resultados de Reactome (NUEVO)
+    @app.callback(
+        Output('reactome-results-store', 'data', allow_duplicate=True),
+        Input('clear-reactome-results-btn', 'n_clicks'), 
+        prevent_initial_call=True
+    )
+    def clear_reactome_results(n_clicks):
+        if n_clicks and n_clicks > 0:
+            return [] # Retorna lista vacía para limpiar el Store
+        raise PreventUpdate

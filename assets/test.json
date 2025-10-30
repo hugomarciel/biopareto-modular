@@ -1,0 +1,116 @@
+[
+  {
+    "selected_genes": [
+      "BRCA1",
+      "TP53",
+      "EGFR"
+    ],
+    "accuracy": 0.92,
+    "num_genes": 3,
+    "solution_id": "Sol_1"
+  },
+  {
+    "selected_genes": [
+      "BRCA1",
+      "TP53",
+      "EGFR",
+      "MYC"
+    ],
+    "accuracy": 0.94,
+    "num_genes": 4,
+    "solution_id": "Sol_2"
+  },
+  {
+    "selected_genes": [
+      "BRCA1",
+      "EGFR",
+      "MYC",
+      "PTEN",
+      "ALK"
+    ],
+    "accuracy": 0.95,
+    "num_genes": 5,
+    "solution_id": "Sol_3"
+  },
+  {
+    "selected_genes": [
+      "BRCA1",
+      "TP53"
+    ],
+    "accuracy": 0.89,
+    "num_genes": 2,
+    "solution_id": "Sol_4"
+  },
+  {
+    "selected_genes": [
+      "BRCA1",
+      "TP53",
+      "EGFR",
+      "MYC",
+      "PIK3CA",
+      "PTEN"
+    ],
+    "accuracy": 0.96,
+    "num_genes": 6,
+    "solution_id": "Sol_5"
+  },
+  {
+    "selected_genes": [
+      "TP53",
+      "EGFR",
+      "PIK3CA",
+      "KRAS",
+      "ALK",
+      "BRAF",
+      "PTEN"
+    ],
+    "accuracy": 0.965,
+    "num_genes": 7,
+    "solution_id": "Sol_6"
+  },
+  {
+    "selected_genes": [
+      "TP53",
+      "EGFR",
+      "MYC",
+      "BRCA1",
+      "KRAS",
+      "PIK3CA",
+      "PTEN",
+      "BRAF"
+    ],
+    "accuracy": 0.968,
+    "num_genes": 8,
+    "solution_id": "Sol_7"
+  },
+  {
+    "selected_genes": [
+      "EGFR"
+    ],
+    "accuracy": 0.82,
+    "num_genes": 1,
+    "solution_id": "Sol_8"
+  },
+  {
+    "selected_genes": [
+      "TP53",
+      "KRAS",
+      "ALK"
+    ],
+    "accuracy": 0.92,
+    "num_genes": 3,
+    "solution_id": "Sol_9"
+  },
+  {
+    "selected_genes": [
+      "TP53",
+      "MYC",
+      "PIK3CA",
+      "KRAS",
+      "EGFR"
+    ],
+    "accuracy": 0.95,
+    "num_genes": 5,
+    "solution_id": "Sol_10"
+  }
+]

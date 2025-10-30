@@ -193,3 +193,5 @@ def register_pareto_selection_callbacks(app):
         # Dejamos la lógica de limpieza de Consolidation/Restore en el archivo consolidation.py
         
         return current_selection
+    
+    

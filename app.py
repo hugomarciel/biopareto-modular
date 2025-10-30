@@ -209,6 +209,8 @@ app.layout = dbc.Container([
     dcc.Store(id='enrichment-selected-indices-store', data=[]),
     dcc.Store(id='pareto-layout-store', data={}), 
     dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
+    dcc.Store(id='gprofiler-results-store', data=[]), 
+    dcc.Store(id='reactome-results-store', data=[]),
     
     # NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
     dcc.Store(id='enrichment-render-trigger-store', data=None), 
@@ -316,7 +318,7 @@ app.layout = dbc.Container([
             dbc.Tab(label="🧬 Genes", tab_id="genes-tab"),
             dbc.Tab(label="🧬 Gene Groups Analysis", tab_id="gene-groups-tab"),
             dbc.Tab(label="🔬 Biological Analysis", tab_id="enrichment-tab"),
-            dbc.Tab(label="📤 Export", tab_id="export-tab"),
+            #dbc.Tab(label="📤 Export", tab_id="export-tab"),
         ], id="main-tabs", active_tab="upload-tab"),
 
         html.Div(id="tab-content", className="mt-4", style={'marginRight': '360px'})
@@ -402,10 +404,12 @@ def render_tab_content(active_tab):
 # CALLBACKS DE GESTIÓN DE INTERÉS Y MODALES (SE MANTIENEN HASTA SU FASE)
 # -------------------------------------------------------------
 
+# app.py
+
 @app.callback(
     [Output('pareto-front-tab-interest-modal', 'is_open'),
      Output('pareto-front-tab-modal-item-info', 'children'),
-     Output('pareto-front-tab-comment-input', 'value'),
+     Output('pareto-front-tab-comment-input', 'value'), # <--- Aquí se inyecta el valor
      Output('pareto-front-tab-temp-store', 'data'),
      Output('genes-tab-gene-group-temp-store', 'data', allow_duplicate=True),
      Output('genes-tab-individual-gene-temp-store', 'data', allow_duplicate=True)],
@@ -450,7 +454,10 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
                     html.Span(", ".join(set([sol['front_name'] for sol in selected_solutions])))
                 ])
             ])
-            return True, item_info, "", dash.no_update, None, None
+            # --- MODIFICACIÓN: Comentario por defecto para Conjunto ---
+            default_comment = f"Set of {len(selected_solutions)} solutions selected from the Pareto Plot."
+            # -----------------------------------------------------------
+            return True, item_info, default_comment, dash.no_update, None, None
         raise PreventUpdate
 
     # 2. Apertura por botón individual "📌" (Solución Individual)
@@ -481,7 +488,11 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
                             ])
                         ])
                         
-                        return True, item_info, "", full_sol_data, None, None
+                        # --- MODIFICACIÓN: Comentario por defecto para Solución Individual ---
+                        default_comment = f"Individual solution {full_sol_data['solution_id']} (Front: {sol['front_name']}) with {obj1_name.replace('_', ' ').title()} = {obj1}."
+                        # ---------------------------------------------------------------------
+
+                        return True, item_info, default_comment, full_sol_data, None, None
 
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 

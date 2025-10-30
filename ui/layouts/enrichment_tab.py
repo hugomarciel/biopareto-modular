@@ -1,12 +1,63 @@
-# ui/layouts/enrichment_tab.py
+# ui/layouts/enrichment_tab.py (REEMPLAZAR TODO)
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc
+# Asegúrate de que este servicio se haya importado correctamente en app.py para obtener organismos
 from services.gprofiler_service import get_organisms_from_api 
 
+# --- Componente de Layout de g:Profiler ---
+def create_gprofiler_layout(organism_options):
+    return html.Div([
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Select Organism:", className="fw-bold"),
+                dcc.Dropdown(id='gprofiler-organism-dropdown', options=organism_options, value='hsapiens', placeholder="Select organism for g:Profiler analysis", className="mb-3")
+            ], width=6),
+            dbc.Col([
+                dbc.Button("🚀 Run g:Profiler Analysis", id="run-gprofiler-btn", color="success", disabled=True, className="mb-3 w-100"),
+            ], width=3),
+            dbc.Col([
+                # NUEVO: Botón para limpiar resultados específicos
+                dbc.Button("🗑️ Clear Results", id="clear-gprofiler-results-btn", color="light", disabled=True, className="mb-3 w-100"),
+            ], width=3)
+        ], className="mb-3 align-items-end"),
+        
+        html.Hr(),
+        # NUEVO: Área de resultados específica para g:Profiler
+        dcc.Loading(
+            html.Div(id="gprofiler-results-content"), 
+            type="default"
+        )
+    ], className="mt-3")
 
-def create_enrichment_tab_modified(): # <- FUNCIÓN FINAL
-    """Create biological analysis tab with the new visual selector."""
+# --- Componente de Layout de Reactome ---
+def create_reactome_layout():
+    return html.Div([
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Target Organism Name:", className="fw-bold"),
+                dbc.Input(id='reactome-organism-input', type="text", value='Homo sapiens', placeholder="E.g., Homo sapiens, Mus musculus", className="mb-3")
+            ], width=6),
+            dbc.Col([
+                dbc.Button("🚀 Run Reactome Analysis", id="run-reactome-btn", color="warning", disabled=True, className="mb-3 w-100")
+            ], width=3),
+            dbc.Col([
+                # NUEVO: Botón para limpiar resultados específicos
+                dbc.Button("🗑️ Clear Results", id="clear-reactome-results-btn", color="light", disabled=True, className="mb-3 w-100"),
+            ], width=3)
+        ], className="mb-3 align-items-end"),
+        
+        html.Hr(),
+        # NUEVO: Área de resultados específica para Reactome
+        dcc.Loading(
+            html.Div(id="reactome-results-content"), 
+            type="default"
+        )
+    ], className="mt-3")
+
+
+def create_enrichment_tab_modified(): 
+    """Create biological analysis tab with internal tabs for Multi-API support."""
     organism_options = get_organisms_from_api() 
     
     return dbc.Container([
@@ -14,7 +65,6 @@ def create_enrichment_tab_modified(): # <- FUNCIÓN FINAL
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        # CORRECCIÓN: Eliminamos "Nuevooo"
                         html.H4("🔬 Biological Enrichment Analysis", className="text-primary mb-0") 
                     ]),
                     dbc.CardBody([
@@ -23,49 +73,43 @@ def create_enrichment_tab_modified(): # <- FUNCIÓN FINAL
 
                         html.Hr(),
 
-                        # START: Estructura Alineada con Grupos de Genes
+                        # Selector de Items (Ahora con botón de limpiar)
                         html.Div([
                             html.H5("Select Items for Gene Aggregation:", className="mb-3"),
-                            html.P("Genes from all selected items will be combined for the enrichment analysis.",
-                                   className="text-muted small mb-3"),
-                            
-                            # ID donde se insertarán las tarjetas seleccionables (Output del callback)
-                            html.Div(id='enrichment-visual-selector', children=[ # <- ID FINAL
+                            dbc.Row([
+                                dbc.Col([
+                                    html.P("Genes from all selected items will be combined for the enrichment analysis.",
+                                        className="text-muted small mb-3"),
+                                ], width=9),
+                                dbc.Col([
+                                    # NUEVO: Botón para limpiar la selección
+                                    dbc.Button("🗑️ Clear Selection", 
+                                        id="clear-enrichment-selection-btn", 
+                                        color="danger", 
+                                        size="sm", 
+                                        className="w-100 mb-3"),
+                                ], width=3)
+                            ]),
+                            html.Div(id='enrichment-visual-selector', children=[
                                 html.P("Loading items...", className="text-muted text-center py-4")
                             ])
                         ], className="mb-4"),
-                        # END: Estructura Alineada con Grupos de Genes
 
-                        # START: PANEL DE EDICIÓN DE SELECCIÓN (Genes combinados)
-                        html.Div(id='enrichment-selection-panel'), # <- ID FINAL
-                        # END: PANEL DE EDICIÓN DE SELECCIÓN
+                        # Panel de Resumen de Selección
+                        html.Div(id='enrichment-selection-panel'), 
 
                         html.Hr(),
 
-                        html.Div([
-                            dbc.Col([
-                                dbc.Label("Select Organism:", className="fw-bold"),
-                                dcc.Dropdown(
-                                    id='organism-dropdown', # <- ID FINAL
-                                    options=organism_options, 
-                                    value='hsapiens',
-                                    placeholder="Select organism for enrichment analysis",
-                                    className="mb-3"
-                                )
-                            ], width=6, className="mb-3"),
-
-                            dbc.Button("🚀 Run Enrichment Analysis",
-                                     id="run-enrichment-btn", # <- ID FINAL
-                                     color="success",
-                                     disabled=True,
-                                     className="mb-3")
-                        ]),
-
-                        html.Hr(),
-
-                        dcc.Loading([
-                            html.Div(id="enrichment-results") # <- ID FINAL
-                        ], type="default"),
+                        # PESTAÑAS INTERNAS DE SERVICIOS
+                        html.H5("Select Enrichment Service:", className="mb-3"),
+                        dbc.Tabs([
+                            dbc.Tab(label="g:Profiler (GO, KEGG, REAC)", tab_id="gprofiler-tab", children=[
+                                create_gprofiler_layout(organism_options)
+                            ]),
+                            dbc.Tab(label="Reactome Pathways", tab_id="reactome-tab", children=[
+                                create_reactome_layout()
+                            ]),
+                        ], id="enrichment-service-tabs", active_tab="gprofiler-tab"),
                         
                     ])
                 ])
