@@ -1,9 +1,9 @@
-# services/reactome_service.py (CÓDIGO FINAL VERIFICADO CON DOCUMENTACIÓN)
+# services/reactome_service.py (CÓDIGO FINAL ESTABLE Y ROBUSTO CON 5 ESPECIES)
 
 """
 Reactome Pathway Enrichment Analysis Service
-SOLUCIÓN DEFINITIVA: Usamos reactome2py.analysis.identifiers(), 
-que es la función correcta para una lista de IDs en la versión 3.0.0.
+FALLBACK EXTENDIDO FINAL: Incluye Homo sapiens, Mus musculus, Rattus norvegicus, 
+Danio rerio, y Saccharomyces cerevisiae.
 """
 
 import logging
@@ -21,40 +21,49 @@ class ReactomeService:
     @staticmethod
     def get_reactome_organisms():
         """
-        [Mantenido para conservar el fallback que funciona]
-        Recupera los organismos disponibles usando reactome2py.content.species(). 
+        Intenta obtener la lista completa de organismos. Si falla o está vacía, 
+        aplica el fallback extendido con 5 organismos modelo comunes.
         """
-        HOMO_SAPIENS_FALLBACK = [{'label': ReactomeService.DEFAULT_ORGANISM, 'value': ReactomeService.DEFAULT_ORGANISM}]
+        # 🔑 FALLBACK EXTENDIDO FINAL CON 5 ESPECIES MODELO 🔑
+        EXTENDED_FALLBACK = [
+            {'label': 'Homo sapiens (Human)', 'value': 'Homo sapiens'},
+            {'label': 'Mus musculus (Mouse)', 'value': 'Mus musculus'},
+            {'label': 'Rattus norvegicus (Rat)', 'value': 'Rattus norvegicus'},
+            {'label': 'Danio rerio (Zebrafish)', 'value': 'Danio rerio'},
+            {'label': 'Saccharomyces cerevisiae (Yeast)', 'value': 'Saccharomyces cerevisiae'}
+        ]
         
         try:
             logger.info("Fetching Reactome species list using reactome2py.content.species().")
             
-            # Usamos content.species()
             species_data = content.species()
             options = []
             
             for species in species_data:
                 if species.get('pathwayCounts', 0) > 0:
-                     options.append({'label': species['displayName'], 'value': species['displayName']})
+                     display_name = species['displayName']
+                     # Usamos el nombre del organismo si no hay un nombre común fácil de obtener.
+                     options.append({'label': display_name, 'value': display_name})
             
             if options:
                 options.sort(key=lambda x: (x['value'] != 'Homo sapiens', x['value']))
-                logger.info(f"Fetched {len(options)} Reactome species with pathways.")
+                logger.info(f"Fetched {len(options)} Reactome species with pathways. (Success)")
                 return options
             else:
-                logger.warning("Fetched 0 species with pathways. Applying Homo sapiens fallback.")
-                return HOMO_SAPIENS_FALLBACK
+                logger.warning("Fetched 0 species with pathways. Applying final extended fallback.")
+                return EXTENDED_FALLBACK
 
         except Exception as e:
             logger.error(f"Error fetching Reactome species with reactome2py: {str(e)}")
-            logger.warning("Error fetching species. Applying Homo sapiens fallback.")
-            return HOMO_SAPIENS_FALLBACK
+            logger.warning("Error fetching species. Applying final extended fallback.")
+            return EXTENDED_FALLBACK
 
 
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Executes Reactome pathway enrichment analysis using reactome2py.analysis.identifiers().
+        Ejecuta el análisis de enriquecimiento utilizando la función probada y funcional
+        de reactome2py.analysis.identifiers().
         """
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
@@ -64,18 +73,16 @@ class ReactomeService:
              organism_name = ReactomeService.DEFAULT_ORGANISM
         
         try:
-            # 🔑 PASO CLAVE: Convertir la lista de Python a una cadena separada por comas (formato requerido por identifiers)
-            ids_string = ','.join(gene_list)
-            
             logger.info(f"Starting Reactome enrichment for {len(gene_list)} genes in {organism_name} using analysis.identifiers().")
             
-            # 🔑 SOLUCIÓN DEFINITIVA: Llamada a analysis.identifiers
+            ids_string = ','.join(gene_list)
+            
             report_data = analysis.identifiers( 
-                ids=ids_string,              # Usamos la cadena de IDs separada por comas
+                ids=ids_string,              
                 species=organism_name, 
-                projection=False,            # False por defecto, pero puedes cambiarlo
-                page_size='999999',          # Aseguramos obtener todos los resultados en una sola página
-                p_value='1.0'                # No aplicamos corte de p-value aquí, lo hacemos después.
+                projection=False,            
+                page_size='999999',          
+                p_value='1.0'                
             )
             
             pathways = report_data.get('pathways', [])
