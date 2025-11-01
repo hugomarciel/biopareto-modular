@@ -210,7 +210,7 @@ app.layout = dbc.Container([
     dcc.Store(id='pareto-layout-store', data={}), 
     dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
     dcc.Store(id='gprofiler-results-store', data=[]), 
-    dcc.Store(id='reactome-results-store', data=[]),
+    dcc.Store(id='reactome-results-store', data=None),
     
     # NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
     dcc.Store(id='enrichment-render-trigger-store', data=None), 

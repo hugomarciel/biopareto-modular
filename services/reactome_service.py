@@ -70,16 +70,15 @@ class ReactomeService:
             logger.warning("Processing error fetching species. Applying extended fallback.")
             return EXTENDED_FALLBACK
 
-
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Ejecuta el análisis de enriquecimiento manteniendo la función probada y funcional
-        de reactome2py.analysis.identifiers().
+        Ejecuta el análisis de enriquecimiento y retorna los resultados y metadatos.
         """
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
-            return []
+            # Retornar una estructura vacía con metadatos si no hay genes para analizar
+            return {'results': [], 'token': 'N/A', 'organism_used': organism_name, 'genes_analyzed': 0}
 
         if organism_name is None:
              organism_name = ReactomeService.DEFAULT_ORGANISM
@@ -87,7 +86,7 @@ class ReactomeService:
         try:
             logger.info(f"Starting Reactome enrichment for {len(gene_list)} genes in {organism_name} using analysis.identifiers().")
             
-            # Esta parte usa reactome2py, que sabemos que funciona para el análisis.
+            # Esta parte usa reactome2py.analysis, que funciona para el análisis.
             ids_string = ','.join(gene_list)
             
             report_data = analysis.identifiers( 
@@ -100,7 +99,12 @@ class ReactomeService:
             
             pathways = report_data.get('pathways', [])
             
-            logger.info(f"Received {len(pathways)} total pathways from Reactome.")
+            # 🔑 NUEVO: Extraer metadatos clave del reporte 🔑
+            # El token debe estar en el nivel superior del JSON del reporte
+            analysis_token = report_data.get('token', 'N/A')
+            organism_used = organism_name # Usamos el nombre enviado, que Reactome valida
+            
+            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token: {analysis_token}")
             
             # Mapeo a un formato de resultados simplificado y usable
             mapped_results = []
@@ -118,7 +122,14 @@ class ReactomeService:
                 })
                 
             logger.info(f"Final mapped results count: {len(mapped_results)}")
-            return mapped_results
+            
+            # 🔑 RETORNA EL DICCIONARIO COMPLETO con metadatos 🔑
+            return {
+                'results': mapped_results,
+                'token': analysis_token,
+                'organism_used': organism_used,
+                'genes_analyzed': len(gene_list)
+            }
 
         except Exception as e:
             logger.error(f"Error executing Reactome enrichment with reactome2py: {str(e)}")

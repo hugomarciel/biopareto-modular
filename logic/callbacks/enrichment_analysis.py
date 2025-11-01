@@ -393,6 +393,7 @@ def register_enrichment_callbacks(app):
     )
     def display_gprofiler_results(stored_data):
         
+        # 🔑 CAMBIO 1: Manejar el caso de fallo de conexión (Error grave) 🔑
         if stored_data is None:
             return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True
 
@@ -402,15 +403,16 @@ def register_enrichment_callbacks(app):
             gene_list = stored_data.get('gene_list', [])
             organism = stored_data.get('organism', 'Unknown Organism')
         else:
-            # Esto manejaría el caso de datos vacíos o iniciales si no es un diccionario
-            enrichment_data_list = stored_data
+            # 🔑 CAMBIO 2: Si stored_data no es un dict o lista (raro), forzar un estado de inicio
+            enrichment_data_list = []
             gene_list = []
             organism = 'Unknown Organism'
 
-        
-        if not enrichment_data_list:
-            gene_count_msg = f" (Genes Analyzed: {len(gene_list)})" if len(gene_list) > 0 else ""
-            organism_msg = f" for organism: {organism}"
+
+        # 🔑 CAMBIO 3: Manejo del estado inicial (Store vacío) 🔑
+        if not enrichment_data_list and not gene_list:
+            # Estado inicial o después de Clear (no hay resultados ni genes analizados)
+            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True
             
             if len(gene_list) == 0 and organism != 'Unknown Organism':
                 # Si el análisis se disparó pero no había genes
@@ -563,28 +565,25 @@ def register_enrichment_callbacks(app):
         gene_list = [g for g in combined_genes if g and isinstance(g, str)]
 
         if not gene_list:
-            # CAMBIO: Retornar diccionario con lista de resultados vacía
-            return {'results': [], 'gene_list': [], 'organism': organism_name}
+            # Retornar diccionario con lista de resultados vacía
+            # 🔑 IMPORTANTE: Retorna el diccionario con la clave 'results' vacía y los metadatos
+            return {'results': [], 'gene_list': [], 'organism_used': organism_name, 'token': 'N/A', 'genes_analyzed': 0}
 
         # 2. Ejecutar servicio de Reactome
-        results = ReactomeService.get_enrichment(gene_list, organism_name)
+        # 🔑 El servicio ahora retorna un diccionario: {'results': [...], 'token': '...', 'organism_used': '...'}
+        service_response = ReactomeService.get_enrichment(gene_list, organism_name)
 
-        if results is None:
+        if service_response is None:
             # Si hay error en API, devuelve None.
             return None
         
-        if not results:
-             # CAMBIO: Retornar diccionario con lista de resultados vacía
-             return {'results': [], 'gene_list': gene_list, 'organism': organism_name}
+        # 🔑 ACTUALIZACIÓN: DEVOLVER EL service_response COMPLETO
+        # Añadimos gene_list al diccionario de respuesta del servicio para mantener la consistencia
+        service_response['gene_list'] = gene_list
         
-        # CAMBIO: Retorna un diccionario con los resultados, la lista de genes y el organismo
-        return {
-            'results': results, 
-            'gene_list': gene_list, 
-            'organism': organism_name
-        }
+        return service_response
 
-    # 5.5. Callback para mostrar los resultados de Reactome (MODIFICADO: LECTURA DEL STORE)
+    # 5.5. Callback para mostrar los resultados de Reactome (MODIFICADO: LECTURA DEL STORE Y METADATOS)
     @app.callback(
         [Output('reactome-results-content', 'children'),
          Output('clear-reactome-results-btn', 'disabled')], 
@@ -592,44 +591,53 @@ def register_enrichment_callbacks(app):
     )
     def display_reactome_results(stored_data):
         
+        # 🔑 CORRECCIÓN 1: Manejar el Store Inicial (data=None) 🔑
         if stored_data is None:
-            return dbc.Alert("Error connecting to Reactome API or receiving response.", color="danger"), True
+            # Mensaje por defecto antes de que se ejecute el análisis
+            return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True
 
         # NUEVO: Desempaquetar los datos del Store
         if isinstance(stored_data, dict):
+            # AHORA EXTRAEMOS LA LISTA DE VÍAS DESDE LA CLAVE 'results'
             enrichment_data_list = stored_data.get('results', [])
-            gene_list = stored_data.get('gene_list', [])
-            organism = stored_data.get('organism', 'Unknown Organism')
+            
+            # EXTRAER METADATOS DEL SERVICIO
+            analysis_token = stored_data.get('token', 'N/A')
+            organism = stored_data.get('organism_used', 'Unknown Organism') 
+            gene_list = stored_data.get('gene_list', []) # Lista de genes combinada
+            genes_analyzed = len(gene_list)
         else:
-            # Manejar el caso de datos vacíos o iniciales
+            # Caso de datos iniciales o formato inesperado (debería ser raro después del fix en app.py)
             enrichment_data_list = []
-            gene_list = []
+            genes_analyzed = 0
             organism = 'Unknown Organism'
+            analysis_token = 'N/A'
             
         
-        # NUEVO: Mensajes si no hay resultados
+        # 🔑 CONSTRUIR EL MENSAJE RESUMEN COMPLETO (Usado en ambos casos: éxito y no resultados) 🔑
+        summary_message_md = f"Found **{len(enrichment_data_list)}** significant Reactome pathways. " + \
+                             f"(Genes Analyzed: {genes_analyzed} | Organism: **{organism}** | Token: **{analysis_token}**)"
+        
+        # 🔑 CORRECCIÓN 2: MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
         if not enrichment_data_list:
-            gene_count_msg = f" (Genes Analyzed: {len(gene_list)})" if len(gene_list) > 0 else ""
-            organism_msg = f" for organism: {organism}"
             
-            if len(gene_list) == 0 and organism != 'Unknown Organism':
-                return dbc.Alert(f"No genes selected for analysis on {organism}.", color="warning"), True
+            # 🔑 Mensaje simplificado como se solicitó 🔑
+            simplified_no_results_message = f"No significant pathways found in Reactome. (Genes Analyzed: {genes_analyzed} | Organism: **{organism}**)"
             
-            return html.Div(f"Click 'Run Reactome Analysis' to display results{gene_count_msg}{organism_msg}.", className="text-muted text-center p-4"), True
+            return html.Div(
+                [
+                    dbc.Alert([
+                        html.P(dcc.Markdown(simplified_no_results_message), className="mb-0")
+                    ], color="info", className="mt-3")
+                ]
+            ), False # Habilita el botón de limpiar
         
-        # Lógica de renderizado
+        # Lógica de renderizado para RESULTADOS EXISTENTES
         df = pd.DataFrame(enrichment_data_list)
         
         # Ordenar por FDR (o p-value)
         df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         
-        # Creación del mensaje de resumen
-        gene_count = len(gene_list)
-        summary_message = html.P([
-            html.Span(f"Found {len(df)} significant Reactome pathways. "),
-            html.Strong(f"(Genes Analyzed: {gene_count} | Organism: {organism})")
-        ], className="text-muted")
-
         # Seleccionar y renombrar columnas para display
         display_df = df[['source', 'term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
@@ -666,8 +674,9 @@ def register_enrichment_callbacks(app):
         # Create results display
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
-            # CAMBIO: Usar el nuevo summary_message
-            summary_message,
+            
+            # Mostrar el mensaje resumen con formato Markdown (incluye Token)
+            html.P(dcc.Markdown(summary_message_md), className="text-muted"),
             
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
@@ -705,7 +714,6 @@ def register_enrichment_callbacks(app):
         ]
 
         return html.Div(results_content), False # Habilita el botón de limpiar
-
 
  # 5.6. Callback para limpiar los resultados de Reactome (NUEVO)
     @app.callback(
