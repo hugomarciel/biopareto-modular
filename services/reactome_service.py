@@ -1,144 +1,90 @@
-# services/reactome_service.py
+# services/reactome_service.py (CÓDIGO FINAL VERIFICADO CON DOCUMENTACIÓN)
 
 """
 Reactome Pathway Enrichment Analysis Service
-Uses the Reactome Content Service API (Analysis tab)
+SOLUCIÓN DEFINITIVA: Usamos reactome2py.analysis.identifiers(), 
+que es la función correcta para una lista de IDs en la versión 3.0.0.
 """
 
-import requests
 import logging
-import json
+import json 
+import reactome2py.analysis as analysis
+import reactome2py.content as content
 
 logger = logging.getLogger(__name__)
 
 class ReactomeService:
-    """Service to connect with the Reactome Content Service API for pathway enrichment."""
-
-    # URL correcta para iniciar el análisis (POST), incluyendo 'projection'
-    ANALYSIS_SERVICE_URL = "https://reactome.org/AnalysisService/identifiers/projection" 
-    # NUEVA URL para obtener la lista de especies
-    SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
+    """Service to connect with the Reactome Content and Analysis Service API via reactome2py."""
     
-    # Organismo por defecto (Human)
     DEFAULT_ORGANISM = "Homo sapiens"
-
-    # Diccionario para mapear nombres de organismos largos a códigos Reactome
-    ORGANISM_CODE_MAP = {
-        "Homo sapiens": "HSA",
-        "Mus musculus": "MMU",
-        "Rattus norvegicus": "RNO",
-        # Añadir más organismos si la app los soporta
-    }
-
-    @staticmethod
-    def _get_reactome_species_code(organism_name):
-        """Convierte el nombre del organismo a su código corto, si está disponible."""
-        return ReactomeService.ORGANISM_CODE_MAP.get(organism_name, organism_name)
 
     @staticmethod
     def get_reactome_organisms():
-        """Fetch available organisms from Reactome API and return Dash options format."""
+        """
+        [Mantenido para conservar el fallback que funciona]
+        Recupera los organismos disponibles usando reactome2py.content.species(). 
+        """
+        HOMO_SAPIENS_FALLBACK = [{'label': ReactomeService.DEFAULT_ORGANISM, 'value': ReactomeService.DEFAULT_ORGANISM}]
+        
         try:
-            response = requests.get(ReactomeService.SPECIES_URL, timeout=10)
-            if response.status_code == 200:
-                species_data = response.json()
-                options = []
-                for sp in species_data:
-                    # Reactome devuelve 'displayName' como nombre completo (e.g., 'Homo sapiens')
-                    display_name = sp.get('displayName') 
-                    # Usamos el nombre completo para el 'value', ya que es lo que el servicio de análisis espera/usa.
-                    if display_name:
-                         options.append({'label': display_name, 'value': display_name})
-                
-                # Ordenar alfabéticamente
-                return sorted(options, key=lambda x: x['label'])
+            logger.info("Fetching Reactome species list using reactome2py.content.species().")
+            
+            # Usamos content.species()
+            species_data = content.species()
+            options = []
+            
+            for species in species_data:
+                if species.get('pathwayCounts', 0) > 0:
+                     options.append({'label': species['displayName'], 'value': species['displayName']})
+            
+            if options:
+                options.sort(key=lambda x: (x['value'] != 'Homo sapiens', x['value']))
+                logger.info(f"Fetched {len(options)} Reactome species with pathways.")
+                return options
             else:
-                logger.error(f"Error fetching Reactome species: {response.status_code} - {response.text}")
-                return ReactomeService._get_fallback_organisms()
-        except Exception as e:
-            logger.error(f"Error fetching Reactome species: {e}")
-            return ReactomeService._get_fallback_organisms()
+                logger.warning("Fetched 0 species with pathways. Applying Homo sapiens fallback.")
+                return HOMO_SAPIENS_FALLBACK
 
-    @staticmethod
-    def _get_fallback_organisms():
-        """Fallback organism list for Reactome."""
-        return [
-            {'label': 'Homo sapiens', 'value': 'Homo sapiens'},
-            {'label': 'Mus musculus', 'value': 'Mus musculus'},
-            {'label': 'Rattus norvegicus', 'value': 'Rattus norvegicus'},
-        ]
+        except Exception as e:
+            logger.error(f"Error fetching Reactome species with reactome2py: {str(e)}")
+            logger.warning("Error fetching species. Applying Homo sapiens fallback.")
+            return HOMO_SAPIENS_FALLBACK
+
 
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Executes Reactome pathway enrichment analysis.
+        Executes Reactome pathway enrichment analysis using reactome2py.analysis.identifiers().
         """
         if not gene_list:
+            logger.warning("No gene list provided for Reactome enrichment.")
             return []
-        
-        # El servicio de Reactome usa el nombre completo de la especie (ej: "Homo sapiens") para 'species',
-        # por lo que no es necesario el código corto en esta función de enriquecimiento, pero lo mantengo por si acaso.
-        species_code = ReactomeService._get_reactome_species_code(organism_name) 
+
+        if organism_name is None:
+             organism_name = ReactomeService.DEFAULT_ORGANISM
         
         try:
-            # 1. Enviar lista de genes para iniciar el análisis
-            post_data = "\n".join(gene_list)
+            # 🔑 PASO CLAVE: Convertir la lista de Python a una cadena separada por comas (formato requerido por identifiers)
+            ids_string = ','.join(gene_list)
             
-            logger.info(f"Submitting {len(gene_list)} genes to Reactome for {organism_name}.")
-
-            # Utilizamos el nombre completo del organismo para el parámetro 'species'
-            response = requests.post(
-                ReactomeService.ANALYSIS_SERVICE_URL, 
-                data=post_data, 
-                params={'species': organism_name}, 
-                headers={'Content-Type': 'text/plain'}, 
-                timeout=45
+            logger.info(f"Starting Reactome enrichment for {len(gene_list)} genes in {organism_name} using analysis.identifiers().")
+            
+            # 🔑 SOLUCIÓN DEFINITIVA: Llamada a analysis.identifiers
+            report_data = analysis.identifiers( 
+                ids=ids_string,              # Usamos la cadena de IDs separada por comas
+                species=organism_name, 
+                projection=False,            # False por defecto, pero puedes cambiarlo
+                page_size='999999',          # Aseguramos obtener todos los resultados en una sola página
+                p_value='1.0'                # No aplicamos corte de p-value aquí, lo hacemos después.
             )
-
-            if response.status_code != 200:
-                logger.error(f"Reactome POST error: {response.status_code} - {response.text}")
-                return None
-            
-            # 2. Obtener el token de análisis del encabezado o del cuerpo JSON
-            analysis_token = response.headers.get('X-Analysisservice-Token')
-            
-            if not analysis_token:
-                try:
-                    response_json = response.json()
-                    analysis_token = response_json.get('summary', {}).get('token')
-                except json.JSONDecodeError:
-                    logger.error("Reactome did not return a token and response body is not valid JSON.")
-                    return None
-                
-            if not analysis_token:
-                 logger.error(f"Reactome did not return an analysis token. Response body: {response.text[:200]}...")
-                 return None
-            
-            logger.info(f"Reactome analysis started. Token: {analysis_token}")
-
-            # 3. Obtener el reporte de enriquecimiento con el token
-            report_url = f"https://reactome.org/AnalysisService/download/{analysis_token}/result.json"
-            report_response = requests.get(report_url, timeout=30)
-            
-            if report_response.status_code != 200:
-                logger.error(f"Reactome GET Report error: {report_response.status_code} - {report_response.text}")
-                return None
-                
-            report_data = report_response.json()
             
             pathways = report_data.get('pathways', [])
             
-            logger.info(f"Received {len(pathways)} total pathways from Reactome before filtering.")
+            logger.info(f"Received {len(pathways)} total pathways from Reactome.")
             
-            # Muestra todos los resultados
-            significant_pathways = pathways 
-            
-            logger.info(f"Displaying {len(significant_pathways)} pathways (FDR filter temporarily disabled).")
-
             # Mapeo a un formato de resultados simplificado y usable
             mapped_results = []
-            for p in significant_pathways:
-                # Nos aseguramos de acceder a los datos de entidades de forma segura
+            for p in pathways:
                 entities = p.get('entities', {})
                 
                 mapped_results.append({
@@ -155,5 +101,5 @@ class ReactomeService:
             return mapped_results
 
         except Exception as e:
-            logger.error(f"Error executing Reactome enrichment: {str(e)}")
+            logger.error(f"Error executing Reactome enrichment with reactome2py: {str(e)}")
             return None
