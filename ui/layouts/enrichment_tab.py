@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc
 # Asegúrate de que este servicio se haya importado correctamente en app.py para obtener organismos
 from services.gprofiler_service import get_organisms_from_api 
+from services.reactome_service import ReactomeService
 
 # --- Componente de Layout de g:Profiler ---
 def create_gprofiler_layout(organism_options):
@@ -31,12 +32,19 @@ def create_gprofiler_layout(organism_options):
     ], className="mt-3")
 
 # --- Componente de Layout de Reactome ---
-def create_reactome_layout():
+def create_reactome_layout(organism_options):
     return html.Div([
         dbc.Row([
             dbc.Col([
-                dbc.Label("Target Organism Name:", className="fw-bold"),
-                dbc.Input(id='reactome-organism-input', type="text", value='Homo sapiens', placeholder="E.g., Homo sapiens, Mus musculus", className="mb-3")
+                dbc.Label("Select Target Organism:", className="fw-bold"),
+                # CAMBIO: Usar dcc.Dropdown y organismo por defecto 'Homo sapiens'
+                dcc.Dropdown(
+                    id='reactome-organism-input', 
+                    options=organism_options, 
+                    value='Homo sapiens', 
+                    placeholder="Select organism for Reactome analysis", 
+                    className="mb-3"
+                )
             ], width=6),
             dbc.Col([
                 dbc.Button("🚀 Run Reactome Analysis", id="run-reactome-btn", color="warning", disabled=True, className="mb-3 w-100")
@@ -58,7 +66,9 @@ def create_reactome_layout():
 
 def create_enrichment_tab_modified(): 
     """Create biological analysis tab with internal tabs for Multi-API support."""
-    organism_options = get_organisms_from_api() 
+    organism_options_gprofiler = get_organisms_from_api() 
+    # NUEVA LLAMADA
+    organism_options_reactome = ReactomeService.get_reactome_organisms()
     
     return dbc.Container([
         dbc.Row([
@@ -73,7 +83,7 @@ def create_enrichment_tab_modified():
 
                         html.Hr(),
 
-                        # Selector de Items (Ahora con botón de limpiar)
+                        # Selector de Items
                         html.Div([
                             html.H5("Select Items for Gene Aggregation:", className="mb-3"),
                             dbc.Row([
@@ -104,10 +114,12 @@ def create_enrichment_tab_modified():
                         html.H5("Select Enrichment Service:", className="mb-3"),
                         dbc.Tabs([
                             dbc.Tab(label="g:Profiler (GO, KEGG, REAC)", tab_id="gprofiler-tab", children=[
-                                create_gprofiler_layout(organism_options)
+                                # CAMBIO: Pasar el listado de g:Profiler
+                                create_gprofiler_layout(organism_options_gprofiler)
                             ]),
                             dbc.Tab(label="Reactome Pathways", tab_id="reactome-tab", children=[
-                                create_reactome_layout()
+                                # CAMBIO: Pasar el listado de Reactome
+                                create_reactome_layout(organism_options_reactome)
                             ]),
                         ], id="enrichment-service-tabs", active_tab="gprofiler-tab"),
                         

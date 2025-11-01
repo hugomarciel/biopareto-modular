@@ -16,6 +16,8 @@ class ReactomeService:
 
     # URL correcta para iniciar el análisis (POST), incluyendo 'projection'
     ANALYSIS_SERVICE_URL = "https://reactome.org/AnalysisService/identifiers/projection" 
+    # NUEVA URL para obtener la lista de especies
+    SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
     
     # Organismo por defecto (Human)
     DEFAULT_ORGANISM = "Homo sapiens"
@@ -33,6 +35,38 @@ class ReactomeService:
         """Convierte el nombre del organismo a su código corto, si está disponible."""
         return ReactomeService.ORGANISM_CODE_MAP.get(organism_name, organism_name)
 
+    @staticmethod
+    def get_reactome_organisms():
+        """Fetch available organisms from Reactome API and return Dash options format."""
+        try:
+            response = requests.get(ReactomeService.SPECIES_URL, timeout=10)
+            if response.status_code == 200:
+                species_data = response.json()
+                options = []
+                for sp in species_data:
+                    # Reactome devuelve 'displayName' como nombre completo (e.g., 'Homo sapiens')
+                    display_name = sp.get('displayName') 
+                    # Usamos el nombre completo para el 'value', ya que es lo que el servicio de análisis espera/usa.
+                    if display_name:
+                         options.append({'label': display_name, 'value': display_name})
+                
+                # Ordenar alfabéticamente
+                return sorted(options, key=lambda x: x['label'])
+            else:
+                logger.error(f"Error fetching Reactome species: {response.status_code} - {response.text}")
+                return ReactomeService._get_fallback_organisms()
+        except Exception as e:
+            logger.error(f"Error fetching Reactome species: {e}")
+            return ReactomeService._get_fallback_organisms()
+
+    @staticmethod
+    def _get_fallback_organisms():
+        """Fallback organism list for Reactome."""
+        return [
+            {'label': 'Homo sapiens', 'value': 'Homo sapiens'},
+            {'label': 'Mus musculus', 'value': 'Mus musculus'},
+            {'label': 'Rattus norvegicus', 'value': 'Rattus norvegicus'},
+        ]
 
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
@@ -42,7 +76,9 @@ class ReactomeService:
         if not gene_list:
             return []
         
-        species_code = ReactomeService._get_reactome_species_code(organism_name)
+        # El servicio de Reactome usa el nombre completo de la especie (ej: "Homo sapiens") para 'species',
+        # por lo que no es necesario el código corto en esta función de enriquecimiento, pero lo mantengo por si acaso.
+        species_code = ReactomeService._get_reactome_species_code(organism_name) 
         
         try:
             # 1. Enviar lista de genes para iniciar el análisis
@@ -50,10 +86,11 @@ class ReactomeService:
             
             logger.info(f"Submitting {len(gene_list)} genes to Reactome for {organism_name}.")
 
+            # Utilizamos el nombre completo del organismo para el parámetro 'species'
             response = requests.post(
                 ReactomeService.ANALYSIS_SERVICE_URL, 
                 data=post_data, 
-                params={'species': species_code}, 
+                params={'species': organism_name}, 
                 headers={'Content-Type': 'text/plain'}, 
                 timeout=45
             )
@@ -89,15 +126,12 @@ class ReactomeService:
                 
             report_data = report_response.json()
             
-            # Reactome devuelve una lista de objetos de 'pathways' en el campo 'pathways'
             pathways = report_data.get('pathways', [])
             
             logger.info(f"Received {len(pathways)} total pathways from Reactome before filtering.")
             
-            # --- CORRECCIÓN CLAVE: Desactivar filtro para mostrar todos los resultados ---
-            # Si el filtro estaba activo (e.g., FDR < 0.05), estaba eliminando todos los caminos.
-            # significant_pathways = [p for p in pathways if p.get('entities', {}).get('fdr', 1.0) < 0.05]
-            significant_pathways = pathways # Muestra todos los resultados
+            # Muestra todos los resultados
+            significant_pathways = pathways 
             
             logger.info(f"Displaying {len(significant_pathways)} pathways (FDR filter temporarily disabled).")
 
