@@ -1,0 +1,11 @@
+# BioPareto Analyzer - Versiones específicas para Python 3.13
+dash>=2.17.0
+dash-bootstrap-components>=1.6.0
+plotly>=5.20.0
+pandas>=2.1.0
+numpy>=1.26.0
+requests>=2.31.0
+matplotlib>=3.7.0
+reportlab>=4.0.0
+matplotlib-venn
+reactome2py
