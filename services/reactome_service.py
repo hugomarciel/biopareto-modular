@@ -1,4 +1,4 @@
-# services/reactome_service.py (CÓDIGO CORREGIDO PARA USAR SPECIES ID)
+# services/reactome_service.py
 
 """
 Reactome Pathway Enrichment Analysis Service
@@ -14,101 +14,123 @@ logger = logging.getLogger(__name__)
 class ReactomeService:
     """Service to connect with the Reactome Content Service API for pathway enrichment."""
 
-    # URL para iniciar el análisis (POST), incluyendo 'projection'
+    # URL correcta para iniciar el análisis (POST), incluyendo 'projection'
     ANALYSIS_SERVICE_URL = "https://reactome.org/AnalysisService/identifiers/projection" 
-    # URL para obtener el reporte
-    REPORT_SERVICE_URL = "https://reactome.org/AnalysisService/report"
-    # URL para obtener la lista de especies
+    # NUEVA URL para obtener la lista de especies
     SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
     
-    # Organismo por defecto (Human ID)
-    DEFAULT_ORGANISM_ID = 9606
+    # Organismo por defecto (Human)
+    DEFAULT_ORGANISM = "Homo sapiens"
 
-    # 1. Función de fallback (corregida para usar IDs)
+    # Diccionario para mapear nombres de organismos largos a códigos Reactome
+    ORGANISM_CODE_MAP = {
+        "Homo sapiens": "HSA",
+        "Mus musculus": "MMU",
+        "Rattus norvegicus": "RNO",
+        # Añadir más organismos si la app los soporta
+    }
+
     @staticmethod
-    def _get_fallback_organisms():
-        """Fallback organism list using Species IDs."""
-        return [
-            {'label': 'Homo sapiens', 'value': 9606},
-            {'label': 'Mus musculus', 'value': 10090},
-            {'label': 'Rattus norvegicus', 'value': 10116},
-            {'label': 'Danio rerio', 'value': 7955},
-        ]
-    
-    # 2. Función para obtener la lista de organismos con ID
+    def _get_reactome_species_code(organism_name):
+        """Convierte el nombre del organismo a su código corto, si está disponible."""
+        return ReactomeService.ORGANISM_CODE_MAP.get(organism_name, organism_name)
+
     @staticmethod
     def get_reactome_organisms():
-        """Fetch available organisms from Reactome API and use dbId as value."""
+        """Fetch available organisms from Reactome API and return Dash options format."""
         try:
             response = requests.get(ReactomeService.SPECIES_URL, timeout=10)
             if response.status_code == 200:
                 species_data = response.json()
                 options = []
                 for sp in species_data:
-                    # Usar dbId (Species ID) como el valor, que la API necesita
-                    options.append({'label': sp.get('displayName', 'Unknown'), 'value': sp.get('dbId', sp['displayName'])})
-                # Ordenar options alfabéticamente por nombre
+                    # Reactome devuelve 'displayName' como nombre completo (e.g., 'Homo sapiens')
+                    display_name = sp.get('displayName') 
+                    # Usamos el nombre completo para el 'value', ya que es lo que el servicio de análisis espera/usa.
+                    if display_name:
+                         options.append({'label': display_name, 'value': display_name})
+                
+                # Ordenar alfabéticamente
                 return sorted(options, key=lambda x: x['label'])
             else:
+                logger.error(f"Error fetching Reactome species: {response.status_code} - {response.text}")
                 return ReactomeService._get_fallback_organisms()
         except Exception as e:
-            logger.error(f"Error fetching Reactome organisms: {e}")
+            logger.error(f"Error fetching Reactome species: {e}")
             return ReactomeService._get_fallback_organisms()
-        
-    # 3. Función de enriquecimiento (CORREGIDA para usar Species ID)
+
     @staticmethod
-    def get_enrichment(gene_list, organism_id):
+    def _get_fallback_organisms():
+        """Fallback organism list for Reactome."""
+        return [
+            {'label': 'Homo sapiens', 'value': 'Homo sapiens'},
+            {'label': 'Mus musculus', 'value': 'Mus musculus'},
+            {'label': 'Rattus norvegicus', 'value': 'Rattus norvegicus'},
+        ]
+
+    @staticmethod
+    def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
         Executes Reactome pathway enrichment analysis.
-        organism_id is now the species dbId (e.g., 9606 for human).
         """
+        if not gene_list:
+            return []
+        
+        # El servicio de Reactome usa el nombre completo de la especie (ej: "Homo sapiens") para 'species',
+        # por lo que no es necesario el código corto en esta función de enriquecimiento, pero lo mantengo por si acaso.
+        species_code = ReactomeService._get_reactome_species_code(organism_name) 
+        
         try:
-            # --- Paso 1: Iniciar el Análisis (Obtener el token) ---
-            analysis_payload = {
-                "identifiers": gene_list,
-                # La clave 'species' debe ser el dbId.
-                "species": str(organism_id) # Reactome prefiere el ID como string aquí.
-            }
+            # 1. Enviar lista de genes para iniciar el análisis
+            post_data = "\n".join(gene_list)
+            
+            logger.info(f"Submitting {len(gene_list)} genes to Reactome for {organism_name}.")
 
-            analysis_response = requests.post(
+            # Utilizamos el nombre completo del organismo para el parámetro 'species'
+            response = requests.post(
                 ReactomeService.ANALYSIS_SERVICE_URL, 
-                data=json.dumps(analysis_payload), 
-                headers={'Content-Type': 'application/json'},
-                timeout=30
+                data=post_data, 
+                params={'species': organism_name}, 
+                headers={'Content-Type': 'text/plain'}, 
+                timeout=45
             )
 
-            if analysis_response.status_code != 200:
-                logger.error(f"Error in Reactome Analysis Service (Step 1): {analysis_response.status_code} - {analysis_response.text}")
+            if response.status_code != 200:
+                logger.error(f"Reactome POST error: {response.status_code} - {response.text}")
                 return None
+            
+            # 2. Obtener el token de análisis del encabezado o del cuerpo JSON
+            analysis_token = response.headers.get('X-Analysisservice-Token')
+            
+            if not analysis_token:
+                try:
+                    response_json = response.json()
+                    analysis_token = response_json.get('summary', {}).get('token')
+                except json.JSONDecodeError:
+                    logger.error("Reactome did not return a token and response body is not valid JSON.")
+                    return None
+                
+            if not analysis_token:
+                 logger.error(f"Reactome did not return an analysis token. Response body: {response.text[:200]}...")
+                 return None
+            
+            logger.info(f"Reactome analysis started. Token: {analysis_token}")
 
-            analysis_data = analysis_response.json()
-            token = analysis_data.get('summary', {}).get('token')
-
-            if not token:
-                logger.error("Reactome analysis token not found in response.")
-                return []
-
-            # --- Paso 2: Obtener el Reporte (Usar el token y el species ID) ---
-            # La URL para el reporte requiere el token y el species ID
-            report_url = f"{ReactomeService.REPORT_SERVICE_URL}/{token}/species/{organism_id}"
+            # 3. Obtener el reporte de enriquecimiento con el token
+            report_url = f"https://reactome.org/AnalysisService/download/{analysis_token}/result.json"
             report_response = requests.get(report_url, timeout=30)
             
             if report_response.status_code != 200:
-                logger.error(f"Error in Reactome Analysis Service (Step 2): {report_response.status_code} - {report_response.text}")
-                # Intentamos limpiar el token
-                requests.delete(f"{ReactomeService.REPORT_SERVICE_URL}/{token}")
+                logger.error(f"Reactome GET Report error: {report_response.status_code} - {report_response.text}")
                 return None
-
+                
             report_data = report_response.json()
             
-            # Limpiamos el token después de obtener el reporte
-            requests.delete(f"{ReactomeService.REPORT_SERVICE_URL}/{token}")
-
             pathways = report_data.get('pathways', [])
             
             logger.info(f"Received {len(pathways)} total pathways from Reactome before filtering.")
             
-            # Muestra todos los resultados (como se definió anteriormente)
+            # Muestra todos los resultados
             significant_pathways = pathways 
             
             logger.info(f"Displaying {len(significant_pathways)} pathways (FDR filter temporarily disabled).")
