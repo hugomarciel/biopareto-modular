@@ -78,7 +78,7 @@ class ReactomeService:
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
             # Retornar una estructura vacía con metadatos si no hay genes para analizar
-            return {'results': [], 'token': 'N/A', 'organism_used': organism_name, 'genes_analyzed': 0}
+            return {'results': [], 'token': 'N/A', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': 0}
 
         if organism_name is None:
              organism_name = ReactomeService.DEFAULT_ORGANISM
@@ -86,9 +86,9 @@ class ReactomeService:
         try:
             logger.info(f"Starting Reactome enrichment for {len(gene_list)} genes in {organism_name} using analysis.identifiers().")
             
-            # Esta parte usa reactome2py.analysis, que funciona para el análisis.
             ids_string = ','.join(gene_list)
             
+            # 🔑 Ejecución del análisis con reactome2py.analysis
             report_data = analysis.identifiers( 
                 ids=ids_string,              
                 species=organism_name, 
@@ -99,14 +99,28 @@ class ReactomeService:
             
             pathways = report_data.get('pathways', [])
             
-            # 🔑 NUEVO: Extraer metadatos clave del reporte 🔑
-            # El token debe estar en el nivel superior del JSON del reporte
+            # 🔑 CORRECCIÓN DEL TOKEN Y ORGANISMO USADO POR LA API 🔑
+            # 1. Intentar extraer el token directamente si existe (método poco probable)
             analysis_token = report_data.get('token', 'N/A')
-            organism_used = organism_name # Usamos el nombre enviado, que Reactome valida
             
-            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token: {analysis_token}")
+            # 2. Si el token no se encuentra, buscarlo en la clave 'summary' o 'resourceSummary'
+            if analysis_token == 'N/A' and 'summary' in report_data:
+                # El token en el summary de la API de Reactome suele ser la clave 'token'
+                analysis_token = report_data['summary'].get('token', 'N/A')
+                
+            # 3. Si aún es N/A, usar un placeholder especial para indicar que la librería lo oculta
+            if analysis_token == 'N/A':
+                 analysis_token = 'Hidden by reactome2py' 
+                 
+            # 4. Extraer el nombre del organismo validado (Analizado/Recibido)
+            organism_used_api = organism_name # Valor por defecto
+            if 'resourceSummary' in report_data and report_data['resourceSummary']:
+                organism_used_api = report_data['resourceSummary'][0].get('speciesName', organism_name)
+
             
-            # Mapeo a un formato de resultados simplificado y usable
+            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token: {analysis_token}. Organism Used (API): {organism_used_api}")
+            
+            # Mapeo a un formato de resultados simplificado y usable (se mantiene)
             mapped_results = []
             for p in pathways:
                 entities = p.get('entities', {})
@@ -123,11 +137,12 @@ class ReactomeService:
                 
             logger.info(f"Final mapped results count: {len(mapped_results)}")
             
-            # 🔑 RETORNA EL DICCIONARIO COMPLETO con metadatos 🔑
+            # 🔑 RETORNA EL DICCIONARIO COMPLETO con metadatos y organismo enviado/recibido 🔑
             return {
                 'results': mapped_results,
                 'token': analysis_token,
-                'organism_used': organism_used,
+                'organism_used_api': organism_used_api, # Organismo devuelto (Analizado)
+                'organism_selected': organism_name,     # Organismo enviado (Seleccionado)
                 'genes_analyzed': len(gene_list)
             }
 

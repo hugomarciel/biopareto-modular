@@ -583,7 +583,7 @@ def register_enrichment_callbacks(app):
         
         return service_response
 
-    # 5.5. Callback para mostrar los resultados de Reactome (MODIFICADO: LECTURA DEL STORE Y METADATOS)
+   # 5.5. Callback para mostrar los resultados de Reactome (MODIFICADO: SEPARACIÓN DE METADATOS)
     @app.callback(
         [Output('reactome-results-content', 'children'),
          Output('clear-reactome-results-btn', 'disabled')], 
@@ -591,46 +591,55 @@ def register_enrichment_callbacks(app):
     )
     def display_reactome_results(stored_data):
         
-        # 🔑 CORRECCIÓN 1: Manejar el Store Inicial (data=None) 🔑
         if stored_data is None:
-            # Mensaje por defecto antes de que se ejecute el análisis
             return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True
 
-        # NUEVO: Desempaquetar los datos del Store
+        # Desempaquetar los datos del Store
         if isinstance(stored_data, dict):
-            # AHORA EXTRAEMOS LA LISTA DE VÍAS DESDE LA CLAVE 'results'
             enrichment_data_list = stored_data.get('results', [])
             
-            # EXTRAER METADATOS DEL SERVICIO
+            # 🔑 EXTRAER METADATOS DEL SERVICIO (Incluye organismo API y organismo seleccionado) 🔑
             analysis_token = stored_data.get('token', 'N/A')
-            organism = stored_data.get('organism_used', 'Unknown Organism') 
-            gene_list = stored_data.get('gene_list', []) # Lista de genes combinada
+            organism_used_api = stored_data.get('organism_used_api', 'N/A')
+            organism_selected = stored_data.get('organism_selected', 'N/A')
+            gene_list = stored_data.get('gene_list', [])
             genes_analyzed = len(gene_list)
         else:
-            # Caso de datos iniciales o formato inesperado (debería ser raro después del fix en app.py)
+            # Caso de datos iniciales o formato inesperado
             enrichment_data_list = []
             genes_analyzed = 0
-            organism = 'Unknown Organism'
+            organism_used_api = 'N/A'
+            organism_selected = 'N/A'
             analysis_token = 'N/A'
             
         
-        # 🔑 CONSTRUIR EL MENSAJE RESUMEN COMPLETO (Usado en ambos casos: éxito y no resultados) 🔑
-        summary_message_md = f"Found **{len(enrichment_data_list)}** significant Reactome pathways. " + \
-                             f"(Genes Analyzed: {genes_analyzed} | Organism: **{organism}** | Token: **{analysis_token}**)"
+        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN CON SEPARACIÓN 🔑
         
-        # 🔑 CORRECCIÓN 2: MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
+        # Mensaje de Input (Enviado)
+        input_message = f"**Sent (Input):** Analized Genes : **{genes_analyzed}** | Selected Organism : **{organism_selected}**"
+        
+        # Mensaje de Output (Recibido/Analizado)
+        output_message = f"**Analized (Output):** Validated Organism: **{organism_used_api}** | Analysis Token: **{analysis_token}**"
+        
+        # Mensaje de Vías Encontradas
+        pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
+        
+        summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
+        
+        # 🔑 MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
         if not enrichment_data_list:
             
-            # 🔑 Mensaje simplificado como se solicitó 🔑
-            simplified_no_results_message = f"No significant pathways found in Reactome. (Genes Analyzed: {genes_analyzed} | Organism: **{organism}**)"
+            # Mensaje simplificado para no resultados
+            simplified_no_results_message = f"No significant pathways found in Reactome.\n\n{input_message}"
             
             return html.Div(
                 [
                     dbc.Alert([
-                        html.P(dcc.Markdown(simplified_no_results_message), className="mb-0")
+                        html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
                     ], color="info", className="mt-3")
                 ]
             ), False # Habilita el botón de limpiar
+
         
         # Lógica de renderizado para RESULTADOS EXISTENTES
         df = pd.DataFrame(enrichment_data_list)
@@ -641,7 +650,7 @@ def register_enrichment_callbacks(app):
         # Seleccionar y renombrar columnas para display
         display_df = df[['source', 'term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
-        # Configure columns for DataTable (MISMA LÓGICA)
+        # Configuración de columnas (se mantiene)
         display_columns = []
         for col in display_df.columns:
             if col == 'fdr_value':
@@ -675,8 +684,8 @@ def register_enrichment_callbacks(app):
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
             
-            # Mostrar el mensaje resumen con formato Markdown (incluye Token)
-            html.P(dcc.Markdown(summary_message_md), className="text-muted"),
+            # Mostrar el mensaje resumen con formato Markdown (incluye Token y separación)
+            html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
             
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
