@@ -385,7 +385,7 @@ def register_enrichment_callbacks(app):
         }
 
 
-    # 4.5. Callback para mostrar los resultados de g:Profiler (NUEVO: LECTURA DEL STORE)
+    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO: UNBOUNDLOCALERROR)
     @app.callback(
         [Output('gprofiler-results-content', 'children'),
          Output('clear-gprofiler-results-btn', 'disabled')], 
@@ -393,57 +393,97 @@ def register_enrichment_callbacks(app):
     )
     def display_gprofiler_results(stored_data):
         
-        # 🔑 CAMBIO 1: Manejar el caso de fallo de conexión (Error grave) 🔑
+        # Mapeo de códigos de organismo de g:Profiler a nombres comunes
+        organism_map = {
+            'hsapiens': 'Homo sapiens',
+            'mmusculus': 'Mus musculus',
+            'rnorvegicus': 'Rattus norvegicus',
+            'drerio': 'Danio rerio',
+            'dmelanogaster': 'Drosophila melanogaster',
+            'celegans': 'Caenorhabditis elegans',
+            # Añadir más si es necesario
+        }
+
+        # 🔑 CORRECCIÓN: Inicialización segura de variables clave 🔑
+        enrichment_data_list = []
+        gene_list = []
+        organism_code = 'N/A'
+        organism_selected_name = 'N/A'
+        organism_validated_name = 'N/A'
+        
+        # Manejo del estado de error grave o conexión fallida
         if stored_data is None:
             return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True
 
-        # Desempaquetar los datos del Store
+        # Desempaquetar los datos del Store (que ya no es None, sino un dict o lista)
         if isinstance(stored_data, dict):
             enrichment_data_list = stored_data.get('results', [])
             gene_list = stored_data.get('gene_list', [])
-            organism = stored_data.get('organism', 'Unknown Organism')
-        else:
-            # 🔑 CAMBIO 2: Si stored_data no es un dict o lista (raro), forzar un estado de inicio
-            enrichment_data_list = []
-            gene_list = []
-            organism = 'Unknown Organism'
-
-
-        # 🔑 CAMBIO 3: Manejo del estado inicial (Store vacío) 🔑
-        if not enrichment_data_list and not gene_list:
-            # Estado inicial o después de Clear (no hay resultados ni genes analizados)
-            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True
+            organism_code = stored_data.get('organism', 'hsapiens')
             
-            if len(gene_list) == 0 and organism != 'Unknown Organism':
-                # Si el análisis se disparó pero no había genes
-                return dbc.Alert(f"No genes selected for analysis on {organism}.", color="warning"), True
-
-            return html.Div(f"Click 'Run g:Profiler Analysis' to display results{gene_count_msg}{organism_msg}.", className="text-muted text-center p-4"), True 
+            # Datos para el mensaje
+            organism_selected_name = organism_map.get(organism_code, organism_code)
+            organism_validated_name = organism_map.get(organism_code, organism_code)
         
-        # Lógica de renderizado (copiada del callback anterior)
-        df = pd.DataFrame(enrichment_data_list)
+        
+        genes_analyzed = len(gene_list)
 
+        # 🔑 MANEJO DEL ESTADO INICIAL (STORE VACÍO) 🔑
+        if not enrichment_data_list and not gene_list:
+            # Estado inicial (antes del primer análisis) o después de Clear.
+            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True
+
+        
+        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN CON SEPARACIÓN (SIN TOKEN) 🔑
+        
+        # Mensaje de Input (Enviado)
+        input_message = f"**Enviados (Input):** Genes Analizados: **{genes_analyzed}** | Organismo Seleccionado: **{organism_selected_name}**"
+        
+        # Mensaje de Output (Recibido/Analizado)
+        output_message = f"**Analizados (Output):** Organismo Validado: **{organism_validated_name}**"
+        
+        pathways_message = f"Found **{len(enrichment_data_list)}** significant terms."
+        
+        summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
+        
+        # 🔑 MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
+        if not enrichment_data_list:
+            
+            # Mensaje simplificado para no resultados
+            simplified_no_results_message = f"No significant pathways found in g:Profiler.\n\n{input_message}"
+            
+            return html.Div(
+                [
+                    dbc.Alert([
+                        html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
+                    ], color="info", className="mt-3")
+                ]
+            ), False # Habilita el botón de limpiar
+
+        
+        # Lógica de renderizado para RESULTADOS EXISTENTES
+        df = pd.DataFrame(enrichment_data_list)
+        
+        # Filtramos por significancia (solo resultados significativos)
         if 'significant' in df.columns:
             df = df[df['significant'] == True]
         
-        # Creación del mensaje de resumen
-        gene_count = len(gene_list)
-        summary_message = html.P([
-            html.Span(f"Found {len(df)} significant terms. "),
-            html.Strong(f"(Genes Analyzed: {gene_count} | Organism: {organism})")
-        ], className="text-muted")
-
-
+        # Si el DataFrame queda vacío después del filtrado
         if df.empty:
-            return dbc.Alert([
-                html.P("g:Profiler found no significant enrichment results."),
-                summary_message # Mostrar el resumen incluso si está vacío
-            ], color="info"), False
+            simplified_no_results_message = f"No **significant** pathways found in g:Profiler after filtering.\n\n{input_message}"
+            
+            return html.Div(
+                [
+                    dbc.Alert([
+                        html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
+                    ], color="info", className="mt-3")
+                ]
+            ), False
 
         df = df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
         display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'intersections']].copy()
         
-        # Configuración de columnas (MISMA LÓGICA)
+        # Configuración de columnas (se mantiene)
         display_columns = []
         for col in display_df.columns:
             if col == 'p_value':
@@ -476,8 +516,9 @@ def register_enrichment_callbacks(app):
         # Create results display
         results_content = [
             html.H4("g:Profiler Enrichment Results", className="mb-3"),
-            # CAMBIO: Usar el nuevo summary_message
-            summary_message, 
+            
+            # Mostrar el mensaje resumen con formato Markdown (incluye separación)
+            html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
             
             dash_table.DataTable(
                 id='enrichment-results-table-gprofiler', 
@@ -515,7 +556,7 @@ def register_enrichment_callbacks(app):
             )
         ]
 
-        return html.Div(results_content), False # Habilita el botón de limpiar
+        return html.Div(results_content), False
 
 
     # 4.6. Callback para limpiar los resultados de g:Profiler (NUEVO)
