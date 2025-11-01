@@ -1,15 +1,15 @@
-# services/reactome_service.py (CÓDIGO FINAL ESTABLE Y ROBUSTO CON 5 ESPECIES)
+# services/reactome_service.py (SOLUCIÓN HÍBRIDA FINAL Y EXTENDIDA)
 
 """
 Reactome Pathway Enrichment Analysis Service
-FALLBACK EXTENDIDO FINAL: Incluye Homo sapiens, Mus musculus, Rattus norvegicus, 
-Danio rerio, y Saccharomyces cerevisiae.
+SOLUCIÓN FINAL: Utiliza requests para obtener la lista de especies (reparando el filtro) 
+y mantiene reactome2py para el análisis de enriquecimiento funcional.
 """
 
 import logging
 import json 
-import reactome2py.analysis as analysis
-import reactome2py.content as content
+import requests 
+import reactome2py.analysis as analysis 
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,15 @@ class ReactomeService:
     """Service to connect with the Reactome Content and Analysis Service API via reactome2py."""
     
     DEFAULT_ORGANISM = "Homo sapiens"
+    
+    # 🔑 URL API Directa para obtener todas las especies (la misma que usaste en el ejemplo funcional)
+    SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
 
     @staticmethod
     def get_reactome_organisms():
         """
-        Intenta obtener la lista completa de organismos. Si falla o está vacía, 
-        aplica el fallback extendido con 5 organismos modelo comunes.
+        Obtiene la lista completa de organismos disponibles en Reactome utilizando la API directa (requests).
+        Garantiza el fallback extendido con 5 organismos modelo comunes.
         """
         # 🔑 FALLBACK EXTENDIDO FINAL CON 5 ESPECIES MODELO 🔑
         EXTENDED_FALLBACK = [
@@ -34,35 +37,44 @@ class ReactomeService:
         ]
         
         try:
-            logger.info("Fetching Reactome species list using reactome2py.content.species().")
+            logger.info(f"Fetching Reactome species list from direct API: {ReactomeService.SPECIES_URL}")
             
-            species_data = content.species()
+            response = requests.get(ReactomeService.SPECIES_URL, timeout=10)
+            response.raise_for_status() # Lanza excepción para códigos 4xx/5xx
+            
+            species_data = response.json()
             options = []
             
             for species in species_data:
-                if species.get('pathwayCounts', 0) > 0:
-                     display_name = species['displayName']
-                     # Usamos el nombre del organismo si no hay un nombre común fácil de obtener.
+                # 🔑 REPARACIÓN: Usamos la lógica simple que sabes que funcionaba: solo verificamos displayName.
+                display_name = species.get('displayName')
+                
+                if display_name:
                      options.append({'label': display_name, 'value': display_name})
             
             if options:
+                # Si se obtiene una lista, la ordenamos, priorizando Homo sapiens
                 options.sort(key=lambda x: (x['value'] != 'Homo sapiens', x['value']))
-                logger.info(f"Fetched {len(options)} Reactome species with pathways. (Success)")
+                logger.info(f"Fetched {len(options)} Reactome species. (Success)")
                 return options
             else:
-                logger.warning("Fetched 0 species with pathways. Applying final extended fallback.")
+                logger.warning("Fetched 0 species via direct API. Applying extended fallback.")
                 return EXTENDED_FALLBACK
 
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error connecting to Reactome API for species list: {str(e)}")
+            logger.warning("Connection error fetching species. Applying extended fallback.")
+            return EXTENDED_FALLBACK
         except Exception as e:
-            logger.error(f"Error fetching Reactome species with reactome2py: {str(e)}")
-            logger.warning("Error fetching species. Applying final extended fallback.")
+            logger.error(f"Unexpected error processing Reactome species list: {str(e)}")
+            logger.warning("Processing error fetching species. Applying extended fallback.")
             return EXTENDED_FALLBACK
 
 
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Ejecuta el análisis de enriquecimiento utilizando la función probada y funcional
+        Ejecuta el análisis de enriquecimiento manteniendo la función probada y funcional
         de reactome2py.analysis.identifiers().
         """
         if not gene_list:
@@ -75,6 +87,7 @@ class ReactomeService:
         try:
             logger.info(f"Starting Reactome enrichment for {len(gene_list)} genes in {organism_name} using analysis.identifiers().")
             
+            # Esta parte usa reactome2py, que sabemos que funciona para el análisis.
             ids_string = ','.join(gene_list)
             
             report_data = analysis.identifiers( 
