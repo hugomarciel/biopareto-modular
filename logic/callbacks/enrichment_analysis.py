@@ -625,28 +625,39 @@ def register_enrichment_callbacks(app):
   
 
 
-
-   # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: ELIMINACIÓN DE 'SOURCE' Y AJUSTE DE ANCHOS)
+    # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: MANEJO DEL ÁMBITO DE results_content)
     @app.callback(
         [Output('reactome-results-content', 'children'),
          Output('clear-reactome-results-btn', 'disabled'),
-         # NUEVO: Resetear el contenedor del diagrama al mostrar nuevos resultados de la tabla
-         Output('reactome-diagram-output', 'children', allow_duplicate=True)], 
+         Output('reactome-diagram-output', 'children', allow_duplicate=True),
+         Output('reactome-fireworks-output', 'children', allow_duplicate=True)], 
         Input('reactome-results-store', 'data'),
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
         
-        # Resetear el contenedor del diagrama a un placeholder
+        # 1. Definir Placeholders e Inicialización de Variables
         placeholder_diagram = html.Div(
             dbc.Alert("Select a pathway from the table below to visualize the gene overlay.", color="secondary"), 
             className="p-3"
         )
+        placeholder_fireworks = html.Div(
+            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info"), 
+            className="p-3"
+        )
         
+        # Valor de retorno para el caso inicial o de error
+        initial_return = (
+            html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), 
+            True, # Botón de Clear deshabilitado
+            placeholder_diagram, 
+            placeholder_fireworks
+        )
+
         if stored_data is None or not isinstance(stored_data, dict):
             # Estado inicial o error de conexión
-            return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True, placeholder_diagram
-
+            raise PreventUpdate # Mejor prevenir que devolver el mensaje inicial
+        
         # Desempaquetar los datos del Store
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
@@ -656,86 +667,74 @@ def register_enrichment_callbacks(app):
         genes_analyzed = len(gene_list)
             
         
-        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN 🔑
+        # 2. Generación del IFRAME de Fireworks
+        fireworks_content = placeholder_fireworks
+        if analysis_token and analysis_token != 'N/A' and organism_used_api and len(enrichment_data_list) > 0:
+            organism_encoded = organism_used_api.replace(' ', '%20')
+            fireworks_url = (
+                f"https://reactome.org/PathwayBrowser/?species={organism_encoded}"
+                f"&analysis={analysis_token}"
+            )
+            
+            fireworks_content = html.Iframe(
+                src=fireworks_url,
+                style={
+                    "width": "100%", 
+                    "height": "500px", 
+                    "border": "none"
+                },
+                title=f"Reactome Pathway Browser/Fireworks visualization for {organism_used_api}"
+            )
+
         
+        # 3. Construcción del Mensaje Resumen
         input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected}**"
         output_message = f"**Analized (Output):** Validated Organism: **{organism_used_api}** | Analysis Token: **{analysis_token}**"
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
-        # 🔑 MANEJO DE NO RESULTADOS 🔑
+        # 4. Manejo de NO RESULTADOS (Error de API o no hay vías significativas)
         if not enrichment_data_list:
             simplified_no_results_message = f"No significant pathways found in Reactome.\n\n{input_message}"
-            return html.Div(
+            # ASIGNACIÓN DE results_content para esta ruta
+            results_content = html.Div(
                 [dbc.Alert([html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")], color="info", className="mt-3")]
-            ), False, placeholder_diagram
+            )
+            # Retorno inmediato para esta ruta
+            return results_content, False, placeholder_diagram, fireworks_content
 
-        
-        # Lógica de renderizado para RESULTADOS EXISTENTES
+
+        # 5. Lógica de renderizado para RESULTADOS EXITOSOS (Tabla)
         df = pd.DataFrame(enrichment_data_list)
         df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         
-        # 1. ❌ ELIMINAR 'source' de la lista de columnas ❌
+        # Seleccionar columnas para display
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
-        
-        # Lista de IDs de columnas a ocultar
         hidden_cols = ['description']
         
-        # Configuración de columnas
         display_columns = []
         for col in display_df.columns:
-            # 1. Ajuste para FDR
             if col == 'fdr_value':
-                 column_config = {
-                    'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'},
-                    'hideable': True
-                }
-            # 2. Ajuste para P-Value
+                 column_config = {'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
             elif col == 'p_value':
-                column_config = {
-                    'name': 'P-Value', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'},
-                    'hideable': True
-                }
-            # 3. Ajuste para Genes Matched
+                column_config = {'name': 'P-Value', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
             elif col == 'entities_found':
-                column_config = {
-                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric',
-                    'hideable': True
-                }
-            # 4. Ajuste para Pathway Size
+                column_config = {'name': 'Genes\nMatched', 'id': col, 'type': 'numeric', 'hideable': True}
             elif col == 'entities_total':
-                column_config = {
-                    'name': 'Pathway\nSize', 'id': col, 'type': 'numeric',
-                    'hideable': True
-                }
-            # 5. Pathway Name
+                column_config = {'name': 'Pathway\nSize', 'id': col, 'type': 'numeric', 'hideable': True}
             elif col == 'term_name':
-                column_config = {
-                    'name': 'Pathway Name', 'id': col, 'type': 'text',
-                    'hideable': True
-                }
-            # 6. ST_ID (Oculto)
+                column_config = {'name': 'Pathway Name', 'id': col, 'type': 'text', 'hideable': True}
             elif col == 'description': 
-                 column_config = {
-                    'name': 'ST_ID', 'id': col, 'type': 'text' 
-                }
+                 column_config = {'name': 'ST_ID', 'id': col, 'type': 'text'}
             else:
                 column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': True}
             
-            # 2. ❌ ELIMINAR ASIGNACIÓN DE ANCHO (width, minWidth, maxWidth) DENTRO DE ESTE BUCLE ❌
-            # Esto corrige el error 'Invalid component prop columns[0] key width supplied'
-            
             display_columns.append(column_config)
-        
-        # Create results display
+            
+        # 6. ASIGNACIÓN FINAL DE results_content (Para la ruta exitosa)
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
-            
-            # Mostrar el mensaje resumen con formato Markdown (incluye Token)
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
-            
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
                 data=display_df.to_dict('records'),
@@ -748,52 +747,24 @@ def register_enrichment_callbacks(app):
                 page_action="native",
                 page_current=0,
                 page_size=10,
-                
-                # 🔑 AJUSTES DE ESTILO PARA CONTROLAR EL DESBORDAMIENTO Y PRIORIZAR 'Pathway Name' 🔑
                 style_table={'overflowX': 'auto', 'minWidth': '100%'}, 
-                
                 style_cell_conditional=[
-                    # 🎯 PRIORIDAD: Dar el 50% del ancho a Pathway Name
                     {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
-                    # Reducir el ancho de las columnas numéricas
                     {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
                     {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
                     {'if': {'column_id': 'entities_found'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
                     {'if': {'column_id': 'entities_total'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
                 ],
-                style_cell={
-                    'textAlign': 'center', # El texto por defecto va centrado
-                    'padding': '8px',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis',
-                },
-                style_header={
-                    'backgroundColor': 'rgb(230, 230, 230)',
-                    'fontWeight': 'bold',
-                    'whiteSpace': 'normal', 
-                    'height': 'auto',
-                    'padding': '10px 8px'
-                },
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': 'rgb(248, 248, 248)'
-                    }
-                ],
-                tooltip_data=[
-                    {'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')
-                ],
+                style_cell={'textAlign': 'center', 'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis'},
+                style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}],
+                tooltip_data=[{'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')],
                 tooltip_duration=None,
             )
         ]
 
-        # Retornar los resultados, habilitar limpieza, y resetear el diagrama
-        return html.Div(results_content), False, placeholder_diagram
-
-
-
-
-
+        # 7. Retornar los 4 valores (Ahora results_content está definido)
+        return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
 
 

@@ -32,7 +32,11 @@ def create_gprofiler_layout(organism_options):
     ], className="mt-3")
 
 
-# --- Componente de Layout de Reactome (CORREGIDO para layout vertical y MAXIMIZAR IMAGEN) ---
+# ui/layouts/enrichment_tab.py (Función create_reactome_layout CORREGIDA Y ACTUALIZADA)
+
+# ... (Las funciones create_gprofiler_layout y create_enrichment_tab_layout se mantienen)
+
+# --- Componente de Layout de Reactome (CORREGIDO para layout vertical con Fireworks) ---
 def create_reactome_layout(organism_options):
     return html.Div([
         dbc.Row([
@@ -56,7 +60,22 @@ def create_reactome_layout(organism_options):
         
         html.Hr(),
         
-        # 1. CONTENEDOR DE RESULTADOS TABULARES
+        # 1. CONTENEDOR DE VISUALIZACIÓN GLOBAL (FIREWORKS)
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Global Pathway Overview (Fireworks)", className="mb-0")),
+                    dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), # Eliminamos padding excesivo
+                        # 🔑 NUEVO CONTENEDOR PARA EL IFRAME DE FIREWORKS 🔑
+                        html.Div(id='reactome-fireworks-output', children=[
+                            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info")
+                        ], className="p-1 border rounded")
+                    
+                ], className="h-100"),
+            ], width=12) # Ocupa todo el ancho en la parte superior
+        ], className="g-4 mb-4"), 
+        
+        # 2. CONTENEDOR DE RESULTADOS TABULARES
         dbc.Row([
             dbc.Col([
                 dcc.Loading(
@@ -66,17 +85,13 @@ def create_reactome_layout(organism_options):
             ], width=12),
         ], className="g-4 mb-4"),
         
-        # 2. CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA
+        # 3. CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA (Abajo de la tabla)
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader(html.H4("Reactome Pathway Visualization (Data Overlay)", className="mb-0")),
                     
-                    # 🔑 CAMBIO CLAVE 1: Eliminamos el padding 'p-3' predeterminado del CardBody (className="")
                     dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), 
-                        
-                        # ESTE ES EL CONTENEDOR DE SALIDA
-                        # 🔑 CAMBIO CLAVE 2: Ajustamos el padding del div interno (p-3 -> p-1)
                         html.Div(id='reactome-diagram-output', children=[
                             dbc.Alert("Select a pathway from the table of results above to visualize the gene overlay.", color="secondary")
                         ], className="p-1 border rounded")
@@ -86,9 +101,6 @@ def create_reactome_layout(organism_options):
         ], className="g-4")
         
     ], className="mt-3")
-
-# ... (El resto del archivo enrichment_tab.py se mantiene igual)
-
 
 
 def create_enrichment_tab_modified(): 
