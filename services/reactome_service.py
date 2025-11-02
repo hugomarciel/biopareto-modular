@@ -1,11 +1,8 @@
-# services/reactome_service.py
+# services/reactome_service.py (CÓDIGO COMPLETO CON DEBUGGING DE ORGANISMO)
 
 """
 Reactome Pathway Enrichment Analysis Service
-SOLUCIÓN DEFINITIVA: Implementa un flujo híbrido: 
-1. POST inicial con reactome2py.analysis.identifiers() para obtener el Token.
-2. Construcción de URL RESTful directa para la visualización del diagrama (Diagram Exporter).
-3. Utiliza requests para obtener la lista de especies (solucionando el fallo de reactome2py).
+Añadidos logs de DEBUG para verificar el organismo utilizado por la API.
 """
 
 import logging
@@ -30,8 +27,7 @@ class ReactomeService:
     @staticmethod
     def get_reactome_organisms():
         """
-        Obtiene la lista completa de organismos disponibles en Reactome utilizando la API directa (requests).
-        Garantiza el fallback extendido con 5 organismos modelo comunes si la API falla.
+        Obtiene la lista completa de organismos disponibles en Reactome.
         """
         # FALLBACK EXTENDIDO FINAL CON 5 ESPECIES MODELO
         EXTENDED_FALLBACK = [
@@ -52,14 +48,12 @@ class ReactomeService:
             options = []
             
             for species in species_data:
-                # Utilizamos la lógica simple de tu ejemplo funcional anterior
                 display_name = species.get('displayName')
                 
                 if display_name:
                      options.append({'label': display_name, 'value': display_name})
             
             if options:
-                # Si se obtiene una lista, la ordenamos, priorizando Homo sapiens
                 options.sort(key=lambda x: (x['value'] != 'Homo sapiens', x['value']))
                 logger.info(f"Fetched {len(options)} Reactome species. (Success)")
                 return options
@@ -80,8 +74,8 @@ class ReactomeService:
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Ejecuta el análisis de enriquecimiento utilizando reactome2py.analysis.identifiers(), 
-        que maneja la caché de la API y extrae el token para la visualización.
+        Ejecuta el análisis de enriquecimiento y extrae el token para la visualización.
+        Añadido logging para verificar el organismo.
         """
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
@@ -90,13 +84,14 @@ class ReactomeService:
         if organism_name is None:
              organism_name = ReactomeService.DEFAULT_ORGANISM
         
-        ids_string = ','.join(gene_list) # Convertir la lista de Python a una cadena separada por comas
+        ids_string = ','.join(gene_list)
 
         analysis_token = 'N/A'
         organism_used_api = organism_name
         
         try:
-            logger.info(f"Starting Reactome stable analysis for {len(gene_list)} genes in {organism_name} using analysis.identifiers()...")
+            # --- LOG DE ENTRADA AL SERVICIO ---
+            logger.info(f"SERVICE INPUT DEBUG: Running enrichment with species parameter: {organism_name} for {len(gene_list)} genes.")
             
             # --- 1. LLAMADA ESTABLE Y FUNCIONAL CON reactome2py ---
             report_data = analysis.identifiers( 
@@ -107,25 +102,23 @@ class ReactomeService:
                 p_value='1.0'                
             )
             
-            # --- 2. Extracción de metadatos (aceptando el token fijo/cacheadado) ---
-            pathways = report_data.get('pathways', [])
-
-            # El token debe estar en el nivel superior o en summary
+            # --- 2. Extracción de metadatos ---
             analysis_token = report_data.get('token', 'N/A')
             if analysis_token == 'N/A' and 'summary' in report_data and report_data['summary']:
                 analysis_token = report_data['summary'].get('token', 'N/A')
             
-            # Si el token sigue siendo N/A (ej. por datos cacheados), generamos un ID de referencia
             if analysis_token == 'N/A':
                  analysis_token = 'REF_' + str(hash(ids_string))[:8] 
             
+            # Extraer el organismo que la API USÓ REALMENTE
             if 'resourceSummary' in report_data and report_data['resourceSummary']:
                 organism_used_api = report_data['resourceSummary'][0].get('speciesName', organism_name)
 
+            # --- LOG DE SALIDA DEL SERVICIO ---
+            logger.info(f"SERVICE OUTPUT DEBUG: API reported using organism: {organism_used_api}. Final Token: {analysis_token}")
             
-            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token: {analysis_token}. Organism Used (API): {organism_used_api}")
-            
-            # --- 3. Mapeo a resultados (igual que antes) ---
+            # --- 3. Mapeo a resultados ---
+            pathways = report_data.get('pathways', [])
             mapped_results = []
             for p in pathways:
                 entities = p.get('entities', {})
@@ -135,14 +128,12 @@ class ReactomeService:
                     'p_value': entities.get('pValue', 1.0), 'entities_found': entities.get('found', 0), 
                     'entities_total': entities.get('total', 0), 'fdr_value': entities.get('fdr', 1.0)
                 })
-                
-            logger.info(f"Final mapped results count: {len(mapped_results)}")
             
             # RETORNA EL DICCIONARIO COMPLETO con metadatos
             return {
                 'results': mapped_results,
                 'token': analysis_token,
-                'organism_used_api': organism_used_api,
+                'organism_used_api': organism_used_api, # El valor verificado
                 'organism_selected': organism_name,
                 'gene_list': gene_list,
                 'genes_analyzed': len(gene_list)
@@ -154,16 +145,9 @@ class ReactomeService:
 
     @staticmethod
     def get_diagram_url(pathway_st_id, analysis_token, file_format="png", quality="7"):
-        """
-        Genera la URL RESTful para obtener la imagen de un diagrama de vía
-        con los resultados del análisis de enriquecimiento superpuestos (overlay).
-
-        NOTA: Esta función es una llamada REST directa al Content Service de Reactome,
-              ya que reactome2py no encapsula este endpoint.
-        """
+        # ... (Función se mantiene igual) ...
         if not pathway_st_id or not analysis_token or analysis_token.startswith('REF_'):
             logger.error("Missing valid pathway ID or analysis token to generate diagram URL.")
-            # Devolver una URL vacía o placeholder si el token es de referencia
             return "/assets/reactome_placeholder.png" 
 
         # URL base + ID de la vía + formato + parámetros de consulta

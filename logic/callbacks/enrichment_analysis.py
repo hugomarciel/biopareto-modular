@@ -571,7 +571,7 @@ def register_enrichment_callbacks(app):
             return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}
         raise PreventUpdate
 
-   # 5. Callback para ejecutar el análisis de Reactome (Mantenido)
+   # 5. Callback para ejecutar el análisis de Reactome (AÑADIDO LOG DE INPUT)
     @app.callback(
         # CAMBIO: Ahora guarda en un Store específico para Reactome
         Output('reactome-results-store', 'data', allow_duplicate=True), 
@@ -591,7 +591,7 @@ def register_enrichment_callbacks(app):
         for idx in selected_indices:
             item = items[idx]
             item_type = item.get('type', '')
-            
+            # ... (Lógica de recolección de genes) ...
             if item_type == 'solution':
                 combined_genes.update(item.get('data', {}).get('selected_genes', []))
             elif item_type == 'solution_set':
@@ -609,8 +609,10 @@ def register_enrichment_callbacks(app):
             # Retornar diccionario con lista de resultados vacía
             return {'results': [], 'token': 'N/A', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': 0}
 
+        # --- LOG DE DEBUGGING DE DASH INPUT ---
+        logger.info(f"DASH INPUT DEBUG: Value read from dropdown 'reactome-organism-input' is: {organism_name}")
+        
         # 2. Ejecutar servicio de Reactome
-        # El servicio ahora retorna un diccionario: {'results': [...], 'token': '...', 'organism_used': '...'}
         service_response = ReactomeService.get_enrichment(gene_list, organism_name)
 
         if service_response is None:
@@ -624,8 +626,11 @@ def register_enrichment_callbacks(app):
 
   
 
+    # logic/callbacks/enrichment_analysis.py (Función display_reactome_results CORREGIDA)
 
-    # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: MANEJO DEL ÁMBITO DE results_content)
+# ... (El código anterior se mantiene igual hasta aquí) ...
+
+    # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: MANEJO DE NameError EN LA TABLA)
     @app.callback(
         [Output('reactome-results-content', 'children'),
          Output('clear-reactome-results-btn', 'disabled'),
@@ -636,7 +641,7 @@ def register_enrichment_callbacks(app):
     )
     def display_reactome_results(stored_data):
         
-        # 1. Definir Placeholders e Inicialización de Variables
+        # 1. Definir Placeholders
         placeholder_diagram = html.Div(
             dbc.Alert("Select a pathway from the table below to visualize the gene overlay.", color="secondary"), 
             className="p-3"
@@ -646,17 +651,8 @@ def register_enrichment_callbacks(app):
             className="p-3"
         )
         
-        # Valor de retorno para el caso inicial o de error
-        initial_return = (
-            html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), 
-            True, # Botón de Clear deshabilitado
-            placeholder_diagram, 
-            placeholder_fireworks
-        )
-
         if stored_data is None or not isinstance(stored_data, dict):
-            # Estado inicial o error de conexión
-            raise PreventUpdate # Mejor prevenir que devolver el mensaje inicial
+            raise PreventUpdate
         
         # Desempaquetar los datos del Store
         enrichment_data_list = stored_data.get('results', [])
@@ -668,21 +664,21 @@ def register_enrichment_callbacks(app):
             
         
         # 2. Generación del IFRAME de Fireworks
+        # ... (código de generación de fireworks_content y URL se mantiene) ...
         fireworks_content = placeholder_fireworks
         if analysis_token and analysis_token != 'N/A' and organism_used_api and len(enrichment_data_list) > 0:
             organism_encoded = organism_used_api.replace(' ', '%20')
             fireworks_url = (
                 f"https://reactome.org/PathwayBrowser/?species={organism_encoded}"
-                f"&analysis={analysis_token}"
+                f"#DTAB=AN&ANALYSIS={analysis_token}"
             )
             
+            # LOG CRÍTICO
+            logger.info(f"FIREWORKS URL DEBUG: Final URL being sent to iFrame: {fireworks_url}")
+
             fireworks_content = html.Iframe(
                 src=fireworks_url,
-                style={
-                    "width": "100%", 
-                    "height": "500px", 
-                    "border": "none"
-                },
+                style={"width": "100%", "height": "500px", "border": "none"},
                 title=f"Reactome Pathway Browser/Fireworks visualization for {organism_used_api}"
             )
 
@@ -693,25 +689,30 @@ def register_enrichment_callbacks(app):
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
-        # 4. Manejo de NO RESULTADOS (Error de API o no hay vías significativas)
+        # 4. Manejo de NO RESULTADOS (Inicialización del DataFrame vacío)
         if not enrichment_data_list:
             simplified_no_results_message = f"No significant pathways found in Reactome.\n\n{input_message}"
-            # ASIGNACIÓN DE results_content para esta ruta
             results_content = html.Div(
                 [dbc.Alert([html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")], color="info", className="mt-3")]
             )
+            
+            # 🔑 INICIALIZACIÓN DE DATAFRAMES VACÍOS para evitar NameError en la tabla 🔑
+            df = pd.DataFrame()
+            display_df = pd.DataFrame() 
+            
             # Retorno inmediato para esta ruta
             return results_content, False, placeholder_diagram, fireworks_content
 
 
         # 5. Lógica de renderizado para RESULTADOS EXITOSOS (Tabla)
+        # 🔑 CREACIÓN DE DATAFRAMES 🔑
         df = pd.DataFrame(enrichment_data_list)
         df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
-        
-        # Seleccionar columnas para display
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
-        hidden_cols = ['description']
         
+        # 6. ASIGNACIÓN FINAL DE results_content (Para la ruta exitosa)
+        # ... (Código de configuración de columnas display_columns se mantiene) ...
+        hidden_cols = ['description']
         display_columns = []
         for col in display_df.columns:
             if col == 'fdr_value':
@@ -730,14 +731,16 @@ def register_enrichment_callbacks(app):
                 column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': True}
             
             display_columns.append(column_config)
-            
-        # 6. ASIGNACIÓN FINAL DE results_content (Para la ruta exitosa)
+
+        # 7. Construcción de la tabla
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
+            
+            # 🔑 ESTA LÍNEA ES DONDE OCURRÍA EL ERROR 🔑
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
-                data=display_df.to_dict('records'),
+                data=display_df.to_dict('records'), # AHORA display_df está definido en todos los caminos
                 columns=display_columns,
                 hidden_columns=hidden_cols, 
                 row_selectable='single', 
@@ -763,9 +766,8 @@ def register_enrichment_callbacks(app):
             )
         ]
 
-        # 7. Retornar los 4 valores (Ahora results_content está definido)
+        # 8. Retornar los 4 valores
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
-
 
 
 
