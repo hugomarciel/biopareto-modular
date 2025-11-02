@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py (CÓDIGO FINAL CORREGIDO, ELIMINANDO DUPLICADO)
+# logic/callbacks/enrichment_analysis.py (CÓDIGO FINAL CON VISUALIZACIÓN DE DIAGRAMA)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -8,10 +8,13 @@ import pandas as pd
 import json
 from collections import defaultdict
 from datetime import datetime
+import logging
+
 # Importamos AMBOS servicios
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
 
+logger = logging.getLogger(__name__)
 
 def register_enrichment_callbacks(app): 
 
@@ -293,10 +296,7 @@ def register_enrichment_callbacks(app):
         is_disabled = not (selected_indices and len(selected_indices) > 0)
         return is_disabled, is_disabled
     
-    # *** ELIMINADO: EL CALLBACK 3.5 DUPLICADO HA SIDO REMOVIDO ***
-
-
-   # 4. Callback para ejecutar el análisis de g:Profiler (MODIFICADO: SÓLO ALMACENA EN STORE)
+   # 4. Callback para ejecutar el análisis de g:Profiler (Mantenido)
     @app.callback(
         # CAMBIO: Ahora guarda en un Store específico para g:Profiler
         Output('gprofiler-results-store', 'data', allow_duplicate=True), 
@@ -385,7 +385,7 @@ def register_enrichment_callbacks(app):
         }
 
 
-    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO: UNBOUNDLOCALERROR)
+    # 4.5. Callback para mostrar los resultados de g:Profiler (Mantenido)
     @app.callback(
         [Output('gprofiler-results-content', 'children'),
          Output('clear-gprofiler-results-btn', 'disabled')], 
@@ -437,10 +437,10 @@ def register_enrichment_callbacks(app):
         # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN CON SEPARACIÓN (SIN TOKEN) 🔑
         
         # Mensaje de Input (Enviado)
-        input_message = f"**Enviados (Input):** Genes Analizados: **{genes_analyzed}** | Organismo Seleccionado: **{organism_selected_name}**"
+        input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
         
         # Mensaje de Output (Recibido/Analizado)
-        output_message = f"**Analizados (Output):** Organismo Validado: **{organism_validated_name}**"
+        output_message = f"**Analized (Output):** Validated Organism: **{organism_validated_name}**"
         
         pathways_message = f"Found **{len(enrichment_data_list)}** significant terms."
         
@@ -559,7 +559,7 @@ def register_enrichment_callbacks(app):
         return html.Div(results_content), False
 
 
-    # 4.6. Callback para limpiar los resultados de g:Profiler (NUEVO)
+    # 4.6. Callback para limpiar los resultados de g:Profiler (Mantenido)
     @app.callback(
         Output('gprofiler-results-store', 'data', allow_duplicate=True),
         Input('clear-gprofiler-results-btn', 'n_clicks'), 
@@ -571,7 +571,7 @@ def register_enrichment_callbacks(app):
             return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}
         raise PreventUpdate
 
-   # 5. Callback para ejecutar el análisis de Reactome (MODIFICADO: SÓLO ALMACENA EN STORE)
+   # 5. Callback para ejecutar el análisis de Reactome (Mantenido)
     @app.callback(
         # CAMBIO: Ahora guarda en un Store específico para Reactome
         Output('reactome-results-store', 'data', allow_duplicate=True), 
@@ -607,117 +607,125 @@ def register_enrichment_callbacks(app):
 
         if not gene_list:
             # Retornar diccionario con lista de resultados vacía
-            # 🔑 IMPORTANTE: Retorna el diccionario con la clave 'results' vacía y los metadatos
-            return {'results': [], 'gene_list': [], 'organism_used': organism_name, 'token': 'N/A', 'genes_analyzed': 0}
+            return {'results': [], 'token': 'N/A', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': 0}
 
         # 2. Ejecutar servicio de Reactome
-        # 🔑 El servicio ahora retorna un diccionario: {'results': [...], 'token': '...', 'organism_used': '...'}
+        # El servicio ahora retorna un diccionario: {'results': [...], 'token': '...', 'organism_used': '...'}
         service_response = ReactomeService.get_enrichment(gene_list, organism_name)
 
         if service_response is None:
             # Si hay error en API, devuelve None.
             return None
         
-        # 🔑 ACTUALIZACIÓN: DEVOLVER EL service_response COMPLETO
-        # Añadimos gene_list al diccionario de respuesta del servicio para mantener la consistencia
+        # ACTUALIZACIÓN: DEVOLVER EL service_response COMPLETO
         service_response['gene_list'] = gene_list
         
         return service_response
 
-   # 5.5. Callback para mostrar los resultados de Reactome (MODIFICADO: SEPARACIÓN DE METADATOS)
+  
+
+
+
+   # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: ELIMINACIÓN DE 'SOURCE' Y AJUSTE DE ANCHOS)
     @app.callback(
         [Output('reactome-results-content', 'children'),
-         Output('clear-reactome-results-btn', 'disabled')], 
-        Input('reactome-results-store', 'data')
+         Output('clear-reactome-results-btn', 'disabled'),
+         # NUEVO: Resetear el contenedor del diagrama al mostrar nuevos resultados de la tabla
+         Output('reactome-diagram-output', 'children', allow_duplicate=True)], 
+        Input('reactome-results-store', 'data'),
+        prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
         
-        if stored_data is None:
-            return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True
+        # Resetear el contenedor del diagrama a un placeholder
+        placeholder_diagram = html.Div(
+            dbc.Alert("Select a pathway from the table below to visualize the gene overlay.", color="secondary"), 
+            className="p-3"
+        )
+        
+        if stored_data is None or not isinstance(stored_data, dict):
+            # Estado inicial o error de conexión
+            return html.Div("Click 'Run Reactome Analysis' to display results.", className="text-muted text-center p-4"), True, placeholder_diagram
 
         # Desempaquetar los datos del Store
-        if isinstance(stored_data, dict):
-            enrichment_data_list = stored_data.get('results', [])
-            
-            # 🔑 EXTRAER METADATOS DEL SERVICIO (Incluye organismo API y organismo seleccionado) 🔑
-            analysis_token = stored_data.get('token', 'N/A')
-            organism_used_api = stored_data.get('organism_used_api', 'N/A')
-            organism_selected = stored_data.get('organism_selected', 'N/A')
-            gene_list = stored_data.get('gene_list', [])
-            genes_analyzed = len(gene_list)
-        else:
-            # Caso de datos iniciales o formato inesperado
-            enrichment_data_list = []
-            genes_analyzed = 0
-            organism_used_api = 'N/A'
-            organism_selected = 'N/A'
-            analysis_token = 'N/A'
+        enrichment_data_list = stored_data.get('results', [])
+        analysis_token = stored_data.get('token', 'N/A')
+        organism_used_api = stored_data.get('organism_used_api', 'N/A')
+        organism_selected = stored_data.get('organism_selected', 'N/A')
+        gene_list = stored_data.get('gene_list', [])
+        genes_analyzed = len(gene_list)
             
         
-        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN CON SEPARACIÓN 🔑
+        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN 🔑
         
-        # Mensaje de Input (Enviado)
-        input_message = f"**Sent (Input):** Analized Genes : **{genes_analyzed}** | Selected Organism : **{organism_selected}**"
-        
-        # Mensaje de Output (Recibido/Analizado)
+        input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected}**"
         output_message = f"**Analized (Output):** Validated Organism: **{organism_used_api}** | Analysis Token: **{analysis_token}**"
-        
-        # Mensaje de Vías Encontradas
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
-        
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
-        # 🔑 MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
+        # 🔑 MANEJO DE NO RESULTADOS 🔑
         if not enrichment_data_list:
-            
-            # Mensaje simplificado para no resultados
             simplified_no_results_message = f"No significant pathways found in Reactome.\n\n{input_message}"
-            
             return html.Div(
-                [
-                    dbc.Alert([
-                        html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
-                    ], color="info", className="mt-3")
-                ]
-            ), False # Habilita el botón de limpiar
+                [dbc.Alert([html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")], color="info", className="mt-3")]
+            ), False, placeholder_diagram
 
         
         # Lógica de renderizado para RESULTADOS EXISTENTES
         df = pd.DataFrame(enrichment_data_list)
-        
-        # Ordenar por FDR (o p-value)
         df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         
-        # Seleccionar y renombrar columnas para display
-        display_df = df[['source', 'term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
+        # 1. ❌ ELIMINAR 'source' de la lista de columnas ❌
+        display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
-        # Configuración de columnas (se mantiene)
+        # Lista de IDs de columnas a ocultar
+        hidden_cols = ['description']
+        
+        # Configuración de columnas
         display_columns = []
         for col in display_df.columns:
+            # 1. Ajuste para FDR
             if col == 'fdr_value':
                  column_config = {
                     'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'}
+                    'format': {'specifier': '.2e'},
+                    'hideable': True
                 }
+            # 2. Ajuste para P-Value
             elif col == 'p_value':
                 column_config = {
                     'name': 'P-Value', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'}
+                    'format': {'specifier': '.2e'},
+                    'hideable': True
                 }
+            # 3. Ajuste para Genes Matched
             elif col == 'entities_found':
                 column_config = {
-                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric'
+                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric',
+                    'hideable': True
                 }
+            # 4. Ajuste para Pathway Size
             elif col == 'entities_total':
                 column_config = {
-                    'name': 'Pathway\nSize', 'id': col, 'type': 'numeric'
+                    'name': 'Pathway\nSize', 'id': col, 'type': 'numeric',
+                    'hideable': True
                 }
+            # 5. Pathway Name
             elif col == 'term_name':
                 column_config = {
-                    'name': 'Pathway Name', 'id': col, 'type': 'text'
+                    'name': 'Pathway Name', 'id': col, 'type': 'text',
+                    'hideable': True
+                }
+            # 6. ST_ID (Oculto)
+            elif col == 'description': 
+                 column_config = {
+                    'name': 'ST_ID', 'id': col, 'type': 'text' 
                 }
             else:
-                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text'}
+                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': True}
+            
+            # 2. ❌ ELIMINAR ASIGNACIÓN DE ANCHO (width, minWidth, maxWidth) DENTRO DE ESTE BUCLE ❌
+            # Esto corrige el error 'Invalid component prop columns[0] key width supplied'
             
             display_columns.append(column_config)
         
@@ -725,28 +733,46 @@ def register_enrichment_callbacks(app):
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
             
-            # Mostrar el mensaje resumen con formato Markdown (incluye Token y separación)
+            # Mostrar el mensaje resumen con formato Markdown (incluye Token)
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
             
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
                 data=display_df.to_dict('records'),
                 columns=display_columns,
+                hidden_columns=hidden_cols, 
+                row_selectable='single', 
+                selected_rows=[],
                 sort_action="native",
                 filter_action="native",
                 page_action="native",
                 page_current=0,
-                page_size=15,
+                page_size=10,
+                
+                # 🔑 AJUSTES DE ESTILO PARA CONTROLAR EL DESBORDAMIENTO Y PRIORIZAR 'Pathway Name' 🔑
+                style_table={'overflowX': 'auto', 'minWidth': '100%'}, 
+                
+                style_cell_conditional=[
+                    # 🎯 PRIORIDAD: Dar el 50% del ancho a Pathway Name
+                    {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
+                    # Reducir el ancho de las columnas numéricas
+                    {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
+                    {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
+                    {'if': {'column_id': 'entities_found'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
+                    {'if': {'column_id': 'entities_total'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
+                ],
                 style_cell={
-                    'textAlign': 'left',
+                    'textAlign': 'center', # El texto por defecto va centrado
                     'padding': '8px',
-                    'maxWidth': '200px',
                     'overflow': 'hidden',
                     'textOverflow': 'ellipsis',
                 },
                 style_header={
                     'backgroundColor': 'rgb(230, 230, 230)',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'whiteSpace': 'normal', 
+                    'height': 'auto',
+                    'padding': '10px 8px'
                 },
                 style_data_conditional=[
                     {
@@ -755,17 +781,92 @@ def register_enrichment_callbacks(app):
                     }
                 ],
                 tooltip_data=[
-                    {
-                        'description': {'value': row['description'], 'type': 'text'}
-                    } for row in display_df.to_dict('records')
+                    {'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')
                 ],
                 tooltip_duration=None,
             )
         ]
 
-        return html.Div(results_content), False # Habilita el botón de limpiar
+        # Retornar los resultados, habilitar limpieza, y resetear el diagrama
+        return html.Div(results_content), False, placeholder_diagram
 
- # 5.6. Callback para limpiar los resultados de Reactome (NUEVO)
+
+
+
+
+
+
+
+
+    # 6. 🚀 CALLBACK DE VISUALIZACIÓN DEL DIAGRAMA COLOREADO (NUEVO)
+    @app.callback(
+        Output('reactome-diagram-output', 'children'),
+        # Escuchar la SELECCIÓN de fila en la tabla
+        Input('enrichment-results-table-reactome', 'selected_rows'),
+        # Necesitar los datos brutos de la tabla para obtener el ST_ID
+        State('enrichment-results-table-reactome', 'data'),
+        # Necesitar el token para generar la URL coloreada
+        State('reactome-results-store', 'data'),
+        prevent_initial_call=True
+    )
+    def visualize_reactome_diagram(selected_rows, table_data, stored_results):
+        """Genera y muestra la imagen de la vía de Reactome con el overlay de genes."""
+
+        if not selected_rows or not table_data:
+            # Si no hay selección, o si la tabla aún no se carga
+            raise PreventUpdate
+        
+        # 1. Extraer datos del Store de Resultados (Token)
+        if not stored_results or stored_results.get('token') in [None, 'N/A'] or stored_results.get('token').startswith('REF_'):
+            return html.Div(dbc.Alert("Analysis Token not available or invalid.", color="warning"), className="p-3")
+
+        analysis_token = stored_results['token']
+        
+        # 2. Obtener el Stable ID (ST_ID) de la vía seleccionada
+        # selected_rows es una lista de índices de fila (page_current * page_size + index)
+        selected_index = selected_rows[0]
+        selected_pathway_data = table_data[selected_index]
+        
+        # El ST_ID (Stable ID) está en la columna 'description'
+        pathway_st_id = selected_pathway_data.get('description')
+        pathway_name = selected_pathway_data.get('term_name')
+
+        if not pathway_st_id:
+            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3")
+
+        # 3. Generar la URL de la Imagen Coloreada
+        diagram_url = ReactomeService.get_diagram_url(
+            pathway_st_id=pathway_st_id, 
+            analysis_token=analysis_token,
+            file_format="png" # PNG para la mayoría de los diagramas, SVG para alta resolución
+        )
+        
+        if diagram_url == "/assets/reactome_placeholder.png":
+             return html.Div(dbc.Alert("Could not generate diagram URL (Token issue).", color="warning"), className="p-3")
+
+        # 4. Renderizar la Imagen en Dash
+        return html.Div([
+            html.H5(f"Pathway Visualization: {pathway_name}", className="mt-3"),
+            html.P(f"Stable ID: {pathway_st_id}", className="text-muted small"),
+            html.A(
+                html.Img(
+                    src=diagram_url, 
+                    alt=f"Reactome Diagram for {pathway_name} with gene overlay.",
+                    style={'maxWidth': '100%', 'height': 'auto', 'border': '1px solid #ddd', 'borderRadius': '5px'}
+                ),
+                # Enlace para abrir el diagrama interactivo de Reactome en una nueva pestaña
+                href=f"https://reactome.org/content/detail/{pathway_st_id}?analysis={analysis_token}",
+                target="_blank",
+                className="d-block mt-3"
+            ),
+            html.P(
+                html.Strong("Click the image to view the interactive diagram on Reactome.org"), 
+                className="text-center text-info small mt-2"
+            )
+        ], className="mt-4 p-3 border rounded shadow-sm")
+        
+        
+    # 6.5. Callback para limpiar los resultados de Reactome (Mantenido)
     @app.callback(
         Output('reactome-results-store', 'data', allow_duplicate=True),
         Input('clear-reactome-results-btn', 'n_clicks'), 
@@ -773,6 +874,6 @@ def register_enrichment_callbacks(app):
     )
     def clear_reactome_results(n_clicks):
         if n_clicks and n_clicks > 0:
-            # CAMBIO: Retorna un diccionario vacío en el formato del Store
+            # Retorna un diccionario vacío en el formato del Store
             return {'results': [], 'gene_list': [], 'organism': 'Homo sapiens'}
         raise PreventUpdate

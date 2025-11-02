@@ -3,8 +3,8 @@
 """
 Reactome Pathway Enrichment Analysis Service
 SOLUCIÓN DEFINITIVA: Implementa un flujo híbrido: 
-1. POST inicial con requests para forzar la generación de un nuevo Token.
-2. GET con reactome2py.analysis.token() usando el nuevo Token para recuperar el reporte.
+1. POST inicial con reactome2py.analysis.identifiers() para obtener el Token.
+2. Construcción de URL RESTful directa para la visualización del diagrama (Diagram Exporter).
 3. Utiliza requests para obtener la lista de especies (solucionando el fallo de reactome2py).
 """
 
@@ -23,8 +23,8 @@ class ReactomeService:
     # URL para obtener la lista de especies (Content Service - API Directa)
     SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
     
-    # URL para iniciar un nuevo análisis (Analysis Service - POST Directo)
-    ANALYSIS_POST_URL = "https://reactome.org/AnalysisService/identifiers"
+    # URL Base para el Diagram Exporter (para generar la imagen coloreada)
+    DIAGRAM_EXPORTER_BASE_URL = "https://reactome.org/ContentService/exporter/diagram/"
 
 
     @staticmethod
@@ -80,8 +80,8 @@ class ReactomeService:
     @staticmethod
     def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
         """
-        Ejecuta el análisis de enriquecimiento utilizando el flujo simple y estable de 
-        reactome2py.analysis.identifiers(), el cual maneja la caché de la API.
+        Ejecuta el análisis de enriquecimiento utilizando reactome2py.analysis.identifiers(), 
+        que maneja la caché de la API y extrae el token para la visualización.
         """
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
@@ -98,8 +98,7 @@ class ReactomeService:
         try:
             logger.info(f"Starting Reactome stable analysis for {len(gene_list)} genes in {organism_name} using analysis.identifiers()...")
             
-            # --- 1. LLAMADA ESTABLE Y FUNCIONAL ---
-            # Esta función maneja internamente el POST/GET y caché de Reactome.
+            # --- 1. LLAMADA ESTABLE Y FUNCIONAL CON reactome2py ---
             report_data = analysis.identifiers( 
                 ids=ids_string,              
                 species=organism_name, 
@@ -111,24 +110,22 @@ class ReactomeService:
             # --- 2. Extracción de metadatos (aceptando el token fijo/cacheadado) ---
             pathways = report_data.get('pathways', [])
 
-            # El token DEBE estar en el nivel superior para ser extraído, o en summary
+            # El token debe estar en el nivel superior o en summary
             analysis_token = report_data.get('token', 'N/A')
-            
             if analysis_token == 'N/A' and 'summary' in report_data and report_data['summary']:
                 analysis_token = report_data['summary'].get('token', 'N/A')
             
-            # Si el token sigue siendo N/A, generamos un ID de referencia (REF_) que cambie con los genes
+            # Si el token sigue siendo N/A (ej. por datos cacheados), generamos un ID de referencia
             if analysis_token == 'N/A':
-                 analysis_token = 'REF_' + str(hash(ids_string))[:8] # Generar un ID basado en el hash de los genes
+                 analysis_token = 'REF_' + str(hash(ids_string))[:8] 
             
             if 'resourceSummary' in report_data and report_data['resourceSummary']:
                 organism_used_api = report_data['resourceSummary'][0].get('speciesName', organism_name)
 
             
-            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token (Cacheadado/REF): {analysis_token}. Organism Used (API): {organism_used_api}")
+            logger.info(f"Received {len(pathways)} total pathways from Reactome. Token: {analysis_token}. Organism Used (API): {organism_used_api}")
             
             # --- 3. Mapeo a resultados (igual que antes) ---
-            
             mapped_results = []
             for p in pathways:
                 entities = p.get('entities', {})
@@ -147,9 +144,37 @@ class ReactomeService:
                 'token': analysis_token,
                 'organism_used_api': organism_used_api,
                 'organism_selected': organism_name,
+                'gene_list': gene_list,
                 'genes_analyzed': len(gene_list)
             }
 
         except Exception as e:
             logger.error(f"Error executing Reactome enrichment (Stable Identifiers Flow): {str(e)}")
             return None
+
+    @staticmethod
+    def get_diagram_url(pathway_st_id, analysis_token, file_format="png", quality="7"):
+        """
+        Genera la URL RESTful para obtener la imagen de un diagrama de vía
+        con los resultados del análisis de enriquecimiento superpuestos (overlay).
+
+        NOTA: Esta función es una llamada REST directa al Content Service de Reactome,
+              ya que reactome2py no encapsula este endpoint.
+        """
+        if not pathway_st_id or not analysis_token or analysis_token.startswith('REF_'):
+            logger.error("Missing valid pathway ID or analysis token to generate diagram URL.")
+            # Devolver una URL vacía o placeholder si el token es de referencia
+            return "/assets/reactome_placeholder.png" 
+
+        # URL base + ID de la vía + formato + parámetros de consulta
+        url = (
+            f"{ReactomeService.DIAGRAM_EXPORTER_BASE_URL}"
+            f"{pathway_st_id}.{file_format}?"
+            f"token={analysis_token}"
+        )
+        
+        if file_format in ["png", "jpg"] and quality:
+             url += f"&quality={quality}"
+             
+        logger.info(f"Generated Diagram URL for {pathway_st_id} with token.")
+        return url

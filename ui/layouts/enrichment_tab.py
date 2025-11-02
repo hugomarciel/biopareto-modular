@@ -31,13 +31,13 @@ def create_gprofiler_layout(organism_options):
         )
     ], className="mt-3")
 
-# --- Componente de Layout de Reactome ---
+
+# --- Componente de Layout de Reactome (CORREGIDO para layout vertical y MAXIMIZAR IMAGEN) ---
 def create_reactome_layout(organism_options):
     return html.Div([
         dbc.Row([
             dbc.Col([
                 dbc.Label("Select Target Organism:", className="fw-bold"),
-                # CAMBIO: Usar dcc.Dropdown y organismo por defecto 'Homo sapiens'
                 dcc.Dropdown(
                     id='reactome-organism-input', 
                     options=organism_options, 
@@ -50,23 +50,57 @@ def create_reactome_layout(organism_options):
                 dbc.Button("🚀 Run Reactome Analysis", id="run-reactome-btn", color="warning", disabled=True, className="mb-3 w-100")
             ], width=3),
             dbc.Col([
-                # NUEVO: Botón para limpiar resultados específicos
                 dbc.Button("🗑️ Clear Results", id="clear-reactome-results-btn", color="light", disabled=True, className="mb-3 w-100"),
             ], width=3)
         ], className="mb-3 align-items-end"),
         
         html.Hr(),
-        # NUEVO: Área de resultados específica para Reactome
-        dcc.Loading(
-            html.Div(id="reactome-results-content"), 
-            type="default"
-        )
+        
+        # 1. CONTENEDOR DE RESULTADOS TABULARES
+        dbc.Row([
+            dbc.Col([
+                dcc.Loading(
+                    html.Div(id="reactome-results-content"), 
+                    type="default"
+                )
+            ], width=12),
+        ], className="g-4 mb-4"),
+        
+        # 2. CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Reactome Pathway Visualization (Data Overlay)", className="mb-0")),
+                    
+                    # 🔑 CAMBIO CLAVE 1: Eliminamos el padding 'p-3' predeterminado del CardBody (className="")
+                    dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), 
+                        
+                        # ESTE ES EL CONTENEDOR DE SALIDA
+                        # 🔑 CAMBIO CLAVE 2: Ajustamos el padding del div interno (p-3 -> p-1)
+                        html.Div(id='reactome-diagram-output', children=[
+                            dbc.Alert("Select a pathway from the table of results above to visualize the gene overlay.", color="secondary")
+                        ], className="p-1 border rounded")
+                    
+                ], className="h-100"),
+            ], width=12) 
+        ], className="g-4")
+        
     ], className="mt-3")
+
+# ... (El resto del archivo enrichment_tab.py se mantiene igual)
+
 
 
 def create_enrichment_tab_modified(): 
     """Create biological analysis tab with internal tabs for Multi-API support."""
-    organism_options_gprofiler = get_organisms_from_api() 
+    
+    # Manejar importación para gprofiler por si get_organisms_from_api no existe o falla
+    try:
+        organism_options_gprofiler = get_organisms_from_api() 
+    except Exception:
+        # Fallback si el servicio gprofiler no está disponible
+        organism_options_gprofiler = [{'label': 'Homo sapiens', 'value': 'hsapiens'}]
+        
     # NUEVA LLAMADA
     organism_options_reactome = ReactomeService.get_reactome_organisms()
     
