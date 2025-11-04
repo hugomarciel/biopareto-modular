@@ -6,11 +6,7 @@ from dash import html, dcc
 from services.gprofiler_service import get_organisms_from_api 
 from services.reactome_service import ReactomeService
 
-# --- Componente de Layout de g:Profiler ---
-# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot)
-
-# --- Componente de Layout de g:Profiler ---
-# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot - REEMPLAZO COMPLETO)
+# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot - ELIMINADO Threshold Display Type)
 
 # --- Componente de Layout de g:Profiler ---
 def create_gprofiler_layout(organism_options):
@@ -24,16 +20,16 @@ def create_gprofiler_layout(organism_options):
                 dbc.Button("🚀 Run g:Profiler Analysis", id="run-gprofiler-btn", color="success", disabled=True, className="mb-3 w-100"),
             ], width=3),
             dbc.Col([
-                # NUEVO: Botón para limpiar resultados específicos
+                # Botón para limpiar resultados específicos
                 dbc.Button("🗑️ Clear Results", id="clear-gprofiler-results-btn", color="light", disabled=True, className="mb-3 w-100"),
             ], width=3)
         ], className="mb-3 align-items-end"),
         
         html.Hr(),
 
-        # 🔑 CONTENEDOR PARA EL MANHATTAN PLOT Y CONTROLES (DEBE ESTAR PRESENTE) 🔑
+        # CONTENEDOR PARA EL MANHATTAN PLOT Y CONTROLES
         dbc.Card([
-            dbc.CardHeader(html.H4("Manhattan Plot: Functional Enrichment", className="mb-0")),
+            dbc.CardHeader(html.H4("Manhattan Plot: Functional Enrichment (Gold Standard Filter)", className="mb-0")),
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
@@ -47,22 +43,10 @@ def create_gprofiler_layout(organism_options):
                             step=0.001,
                             className="form-control mb-3"
                         )
-                    ], width=4),
-                    dbc.Col([
-                        dbc.Label("Threshold Display Type:"),
-                        dcc.Dropdown(
-                            id='gprofiler-threshold-type-dropdown',
-                            options=[
-                                {'label': 'Bonferroni Corrected P-Value (Default)', 'value': 'bonferroni'},
-                                {'label': 'User-defined P-Value', 'value': 'user'}
-                            ],
-                            value='bonferroni',
-                            clearable=False,
-                            className="mb-3"
-                        )
-                    ], width=8)
+                    ], width=12), # 🔑 CAMBIO CLAVE: Aumentar el ancho a 12 para que ocupe todo el espacio 🔑
+                    # ❌ REMOVIDO: Threshold Display Type Dropdown
                 ]),
-                # 🔑 COMPONENTE DEL GRÁFICO (El Output que Dash no encuentra) 🔑
+                # COMPONENTE DEL GRÁFICO
                 dcc.Loading(
                     dcc.Graph(id='gprofiler-manhattan-plot', config={'displayModeBar': False}),
                     type="default"

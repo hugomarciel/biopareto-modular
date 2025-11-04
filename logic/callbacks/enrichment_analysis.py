@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 # logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot - CORREGIDA FINAL)
 
-def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
+# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot - ELIMINADO threshold_type)
+
+def create_gprofiler_manhattan_plot(df, threshold_value):
     """
     Crea un Manhattan Plot para los resultados de g:Profiler.
     El 'Gold Standard' es la línea de umbral.
@@ -70,6 +72,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     # 2. Definir el Umbral (Eje Y) y el Coloreado Gold Standard
     
     y_threshold = -np.log10(line_threshold_value)
+    # 🔑 Etiqueta simplificada 🔑
     line_name = f"Gold Standard Threshold (P < {line_threshold_value:.2e})"
     
     
@@ -89,10 +92,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
         lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
     )
     
-    # 🔑 NUEVO CÁLCULO: Mapear intersection_size al tamaño del marcador 🔑
-    # Normalizar el tamaño de intersección para que el punto más grande no sea excesivo.
-    # Usamos una escala logarítmica y añadimos un offset mínimo (e.g., 5)
-    # para que los puntos pequeños no desaparezcan.
+    # 🔑 CÁLCULO: Mapear intersection_size al tamaño del marcador (se mantiene) 🔑
     min_size = 5
     max_size = 25
     
@@ -163,7 +163,6 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
 
     # 7. Configurar el Tooltip y el TAMAÑO DEL MARCADOR
     fig.update_traces(
-        # 🔑 MODIFICACIÓN CLAVE: El tamaño del marcador ahora es dinámico 🔑
         marker=dict(
             size=df['marker_size'], 
             opacity=0.8, 
@@ -539,28 +538,24 @@ def register_enrichment_callbacks(app):
             'organism': organism
         }
 
-    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO Y AÑADIDO STATE DE PESTAÑA)
+    # logic/callbacks/enrichment_analysis.py (Callback display_gprofiler_results CORREGIDO - ELIMINADO threshold_type)
+
+    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO - ELIMINADO threshold_type)
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
-         # SALIDA DUPLICADA: MANTENER allow_duplicate=True
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
         [Input('gprofiler-results-store', 'data'),
-         Input('gprofiler-threshold-input', 'value'), # Input para el Gold Standard
-         Input('gprofiler-threshold-type-dropdown', 'value')], # Input para el tipo de Gold Standard
+         Input('gprofiler-threshold-input', 'value')], # 🔑 CAMBIO CLAVE: Eliminado threshold_type 🔑
         [State('main-tabs', 'active_tab'),
-         State('enrichment-service-tabs', 'active_tab')], # 🔑 AÑADIDO STATE INTERNO 🔑
+         State('enrichment-service-tabs', 'active_tab')], 
         prevent_initial_call=True
     )
-    def display_gprofiler_results(stored_data, threshold_value, threshold_type, main_active_tab, service_active_tab):
+    def display_gprofiler_results(stored_data, threshold_value, main_active_tab, service_active_tab):
         
         # 🔑 PREVENCIÓN DE EJECUCIÓN 🔑
-        # Previene la actualización si no estamos en la pestaña principal de enriquecimiento
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
-        
-        # NOTE: La prevención de service_active_tab == 'gprofiler-tab' se realiza implícitamente por Dash
-        # cuando el componente gprofiler-manhattan-plot no se ha cargado en el DOM.
         
         # Mapeo de códigos de organismo de g:Profiler a nombres comunes
         organism_map = {
@@ -593,10 +588,10 @@ def register_enrichment_callbacks(app):
             return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
 
         
-        # 3. Lógica de Filtrado Gold Standard (Bonferroni/User-defined)
+        # 3. Lógica de Filtrado Gold Standard (Ahora unificado)
         df = pd.DataFrame(enrichment_data_list)
         
-        # 🔑 VALIDACIÓN SÓLIDA PARA EL FILTRADO Y PLOTEO 🔑
+        # 🔑 VALIDACIÓN SÓLIDA PARA OBTENER EL VALOR REAL DE FILTRO 🔑
         
         # Intentar convertir a float
         try:
@@ -611,24 +606,16 @@ def register_enrichment_callbacks(app):
         
         filtered_df = df.copy()
 
-        # El filtrado de la tabla debe usar el valor de umbral (val_threshold)
-        if threshold_type == 'bonferroni' or threshold_type == 'user':
-            # Aplicar el filtro usando el valor ingresado por el usuario (val_threshold)
-            filtered_df = filtered_df[filtered_df['p_value'] < val_threshold]
-            filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
-
-        else:
-             # Si no hay tipo seleccionado, mostramos todos los 'significant' por defecto de gProfiler
-            filtered_df = filtered_df[filtered_df['significant'] == True].copy()
-            filter_message = "Filtered by g:Profiler's internal significance threshold."
-
+        # Filtrado Unificado (siempre sobre P-Value corregido)
+        filtered_df = filtered_df[filtered_df['p_value'] < val_threshold]
+        filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
+        
         
         # 4. Generación del Manhattan Plot
-        # 🔑 NOTA IMPORTANTE: df_plot debe contener todos los puntos significativos para que el gráfico no los "desaparezca"
         df_plot = df[df['significant'] == True].copy() 
         
-        # La validación robusta que retiene el valor ingresado se aplica DENTRO de la función de ploteo
-        manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value, threshold_type)
+        # 🔑 CAMBIO CLAVE: Llamada a la función sin el parámetro threshold_type 🔑
+        manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value)
         
         
         # 5. Manejo de No Resultados Post-Filtro
