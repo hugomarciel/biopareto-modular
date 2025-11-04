@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py (CÓDIGO FINAL CON VISUALIZACIÓN DE DIAGRAMA Y CORRECCIÓN DE CALLBACKS DUPLICADOS)
+# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO FINAL Y CORREGIDO)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -9,7 +9,8 @@ import json
 from collections import defaultdict
 from datetime import datetime
 import logging
-import numpy as np # Importar numpy
+import numpy as np
+import math # Importar math para manejar la validación de log
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -20,15 +21,32 @@ from services.reactome_service import ReactomeService
 
 logger = logging.getLogger(__name__)
 
-# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot)
+# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot - CORREGIDA FINAL)
 
 def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     """
     Crea un Manhattan Plot para los resultados de g:Profiler.
     El 'Gold Standard' es la línea de umbral.
     """
+    
+    # 1. 🔑 CORRECCIÓN #1: Validación Robusta y Asignación de Valor de Línea 🔑
+    # El valor que realmente mueve la línea y se usa en la etiqueta
+    line_threshold_value = 0.05 
+    
+    try:
+        # 1. Intentar convertir a float
+        float_threshold = float(threshold_value)
+        
+        # 2. Asignar solo si es válido (entre 0 exclusivo y 1 inclusivo)
+        if 0 < float_threshold <= 1.0:
+            line_threshold_value = float_threshold
+        
+    except (TypeError, ValueError):
+        # Si es None o no numérico, ya se asignó 0.05
+        pass
+    
+    
     if df.empty:
-        # Crea un gráfico vacío con un mensaje si no hay datos
         fig = go.Figure()
         fig.update_layout(
             title="No significant terms to display in the Manhattan Plot.",
@@ -43,7 +61,6 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     df['-log10(P-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
     
     # 1. Preparar el DataFrame para la visualización del Manhattan Plot (Eje X)
-    # Usaremos 'source' (fuente) como el análogo del cromosoma.
     source_order = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
     df['source'] = pd.Categorical(df['source'], categories=source_order, ordered=True)
     df = df.sort_values(['source', 'p_value'], ascending=[True, True])
@@ -51,31 +68,50 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     # Asignar una posición secuencial dentro de cada fuente
     df['term_index'] = df.groupby('source').cumcount() + 1
     
-    # 2. Asignar colores por fuente para el efecto de tablero de ajedrez
+    # 2. Definir el Umbral (Eje Y) y el Coloreado Gold Standard
+    
+    # 🔑 CORRECCIÓN #2: El cálculo ahora usa el valor validado que retiene la precisión 🔑
+    y_threshold = -np.log10(line_threshold_value)
+    # 🔑 CORRECCIÓN #3: La etiqueta usa el valor validado que retiene la precisión 🔑
+    line_name = f"Gold Standard Threshold (P < {line_threshold_value:.2e})"
+    
+    
+    # COLOREADO GOLD STANDARD: Crea una columna booleana para colorear puntos por encima del umbral.
+    df['is_gold_standard'] = df['-log10(P-value)'] >= y_threshold
+    
+    # Definir mapa de colores: Si es Gold Standard, rojo; si no, color por fuente.
     source_colors = px.colors.qualitative.Bold
     source_color_map = {source: source_colors[i % len(source_colors)] for i, source in enumerate(df['source'].unique())}
-    df['color'] = df['source'].map(source_color_map)
+    color_map = {'Gold': 'red'} 
+    for source, color in source_color_map.items():
+        color_map[source] = color 
 
-    # 3. Crear el gráfico con Plotly
+
+    # 3. Crear la columna de color para el gráfico
+    df['plot_color_group'] = df.apply(
+        lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
+    )
+    
+    # 4. Crear el gráfico con Plotly
     fig = px.scatter(
         df,
         x='term_index',
         y='-log10(P-value)',
-        color='source',
-        color_discrete_map=source_color_map,
-        custom_data=['term_name', 'p_value', 'intersection_size', 'source'],
+        color='plot_color_group',
+        color_discrete_map=color_map,
+        custom_data=['term_name', 'p_value', 'intersection_size', 'source', 'is_gold_standard'],
         hover_data={
-            'term_index': False, # Ocultar del hover
+            'term_index': False, 
             '-log10(P-value)': ':.2f',
             'term_name': True,
             'p_value': ':.2e',
             'intersection_size': True,
-            'source': True
+            'source': True,
+            'is_gold_standard': True
         }
     )
     
-    # 4. Configurar el eje X para mostrar las fuentes
-    # Usar las categorías para las etiquetas del eje X (centradas)
+    # 5. Configurar el eje X y las líneas divisorias (se mantiene igual)
     source_labels = df.groupby('source')['term_index'].agg(['min', 'max']).reset_index()
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     
@@ -92,7 +128,6 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
             'title': '-log10(P-value)',
             'automargin': True
         },
-        # Añadir líneas divisorias verticales entre fuentes
         shapes=[
             dict(
                 type='line',
@@ -103,20 +138,11 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
         ],
         showlegend=True,
         height=550,
-        margin={'t': 30, 'b': 50, 'l': 50, 'r': 10}, # Ajustar márgenes
+        margin={'t': 30, 'b': 50, 'l': 50, 'r': 10}, 
         plot_bgcolor='white'
     )
 
-    # 5. Agregar la línea de umbral (Gold Standard)
-    if threshold_type == 'bonferroni':
-        # Para g:Profiler, un valor común para "altamente significativo" es 0.05
-        y_threshold = -np.log10(threshold_value)
-        line_name = f"Gold Standard Threshold (-log10({threshold_value}))"
-    else: # user-defined
-        y_threshold = -np.log10(threshold_value)
-        line_name = f"User Threshold (-log10({threshold_value}))"
-    
-    # Agregar línea horizontal para el umbral
+    # 6. Agregar la línea de umbral (Gold Standard)
     fig.add_hline(
         y=y_threshold, 
         line_dash="dot", 
@@ -125,7 +151,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
         annotation_position="top right"
     )
 
-    # 6. Configurar el Tooltip
+    # 7. Configurar el Tooltip (Actualizado para mostrar Gold Standard)
     fig.update_traces(
         marker=dict(size=8, opacity=0.8, line=dict(width=0.5, color='DarkSlateGrey')),
         hovertemplate=(
@@ -134,6 +160,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
             "<b>-log10(P-value):</b> %{y:.2f}<br>"
             "<b>P-value:</b> %{customdata[1]:.2e}<br>"
             "<b>Genes Matched:</b> %{customdata[2]}<br>"
+            "<b>Gold Standard:</b> %{customdata[4]}<br>"
             "<extra></extra>"
         )
     )
@@ -502,39 +529,40 @@ def register_enrichment_callbacks(app):
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
          # SALIDA DUPLICADA: MANTENER allow_duplicate=True
-         Output('gprofiler-manhattan-plot', 'figure')], 
+         Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
         [Input('gprofiler-results-store', 'data'),
          Input('gprofiler-threshold-input', 'value'), # Input para el Gold Standard
          Input('gprofiler-threshold-type-dropdown', 'value')], # Input para el tipo de Gold Standard
-        [State('main-tabs', 'active_tab')], # 🔑 NUEVO STATE 🔑
+        [State('main-tabs', 'active_tab'),
+         State('enrichment-service-tabs', 'active_tab')], # 🔑 AÑADIDO STATE INTERNO 🔑
         prevent_initial_call=True
     )
-    def display_gprofiler_results(stored_data, threshold_value, threshold_type, active_tab):
+    def display_gprofiler_results(stored_data, threshold_value, threshold_type, main_active_tab, service_active_tab):
         
-        # 🔑 NUEVA PREVENCIÓN DE EJECUCIÓN 🔑
-        if active_tab != 'enrichment-tab':
-            # Previene la actualización si no estamos en la pestaña principal de enriquecimiento
+        # 🔑 PREVENCIÓN DE EJECUCIÓN 🔑
+        # Previene la actualización si no estamos en la pestaña principal de enriquecimiento
+        if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
-            
+        
+        # NOTE: La prevención de service_active_tab == 'gprofiler-tab' se realiza implícitamente por Dash
+        # cuando el componente gprofiler-manhattan-plot no se ha cargado en el DOM.
+        
         # Mapeo de códigos de organismo de g:Profiler a nombres comunes
         organism_map = {
             'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus',
             'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans',
         }
 
-        # 🔑 CORRECCIÓN CLAVE: Inicialización de variables para evitar UnboundLocalError 🔑
+        # 2. Inicialización y Desempaquetado
         enrichment_data_list = []
         gene_list = []
         organism_code = 'N/A'
         organism_selected_name = 'N/A'
         organism_validated_name = 'N/A'
         
-        # Manejo del estado de error grave o conexión fallida
         if stored_data is None:
-            # Devuelve un gráfico vacío en caso de error
             return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True, go.Figure()
 
-        # Desempaquetar los datos del Store
         if isinstance(stored_data, dict):
             enrichment_data_list = stored_data.get('results', [])
             gene_list = stored_data.get('gene_list', [])
@@ -547,63 +575,76 @@ def register_enrichment_callbacks(app):
         genes_analyzed = len(gene_list)
 
         if not enrichment_data_list and not gene_list:
-            # Devuelve un gráfico vacío si no hay datos para correr
             return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
 
         
-        # Construcción del Mensaje Resumen
-        input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
-        output_message = f"**Analized (Output):** Validated Organism: **{organism_validated_name}**"
-        pathways_message = f"Found **{len(enrichment_data_list)}** significant terms."
-        summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
-        
-        # Manejo de No Resultados
-        if not enrichment_data_list:
-            simplified_no_results_message = f"No significant pathways found in g:Profiler.\n\n{input_message}"
-            
-            # Devuelve el mensaje de alerta y un gráfico vacío
-            return html.Div(
-                [
-                    dbc.Alert([
-                        html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
-                    ], color="info", className="mt-3")
-                ]
-            ), False, go.Figure()
-
-        
-        # Lógica de renderizado para RESULTADOS EXISTENTES
+        # 3. Lógica de Filtrado Gold Standard (Bonferroni/User-defined)
         df = pd.DataFrame(enrichment_data_list)
         
-        # 🔑 FILTRADO para el Manhattan Plot (usamos todos los términos significativos)
-        df_plot = df[df['significant'] == True].copy()
+        # 🔑 VALIDACIÓN SÓLIDA PARA EL FILTRADO Y PLOTEO 🔑
         
-        # 🔑 GENERACIÓN DEL MANHATTAN PLOT 🔑
+        # Intentar convertir a float
+        try:
+            val_threshold = float(threshold_value)
+        except (TypeError, ValueError):
+            val_threshold = 0.05
+        
+        # Validación de rango y asignación para filtrado de tabla
+        if not (0 < val_threshold <= 1.0):
+            val_threshold = 0.05
+        
+        
+        filtered_df = df.copy()
+
+        # El filtrado de la tabla debe usar el valor de umbral (val_threshold)
+        if threshold_type == 'bonferroni' or threshold_type == 'user':
+            # Aplicar el filtro usando el valor ingresado por el usuario (val_threshold)
+            filtered_df = filtered_df[filtered_df['p_value'] < val_threshold]
+            filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
+
+        else:
+             # Si no hay tipo seleccionado, mostramos todos los 'significant' por defecto de gProfiler
+            filtered_df = filtered_df[filtered_df['significant'] == True].copy()
+            filter_message = "Filtered by g:Profiler's internal significance threshold."
+
+        
+        # 4. Generación del Manhattan Plot
+        # 🔑 NOTA IMPORTANTE: df_plot debe contener todos los puntos significativos para que el gráfico no los "desaparezca"
+        df_plot = df[df['significant'] == True].copy() 
+        
+        # La validación robusta que retiene el valor ingresado se aplica DENTRO de la función de ploteo
         manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value, threshold_type)
         
-        if 'significant' in df.columns:
-            df = df[df['significant'] == True]
         
-        if df.empty:
-            simplified_no_results_message = f"No **significant** pathways found in g:Profiler after filtering.\n\n{input_message}"
+        # 5. Manejo de No Resultados Post-Filtro
+        if filtered_df.empty:
+            input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
+            simplified_no_results_message = f"No **significant** pathways found after applying the Gold Standard filter ({val_threshold}).\n\n{input_message}"
             
-            # Devuelve el mensaje de alerta y un gráfico vacío
             return html.Div(
                 [
                     dbc.Alert([
                         html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
                     ], color="info", className="mt-3")
                 ]
-            ), False, go.Figure()
+            ), False, manhattan_fig
 
-        df = df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
         
-        # 🔑 CAMBIO CLAVE: Definición del DataFrame de visualización 🔑
-        display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
+        # 6. Lógica de renderizado para RESULTADOS EXISTENTES (Tabla)
         
-        # 🔑 CORRECCIÓN #1: Ocultar la columna 'source_order_display' por defecto.
+        display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
+        display_df = display_df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
+        
+        # Construcción del Mensaje Resumen
+        input_message = f"**Sent (Input)::** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
+        output_message = f"**Analized (Output):** Validated Organism: **{organism_validated_name}**"
+        pathways_message = f"Displaying **{len(display_df)}** terms. {filter_message}"
+        summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
+        
+        # ... (Configuración de columnas y tabla se mantienen igual) ...
+
         hidden_cols = ['source_order_display'] 
 
-        # Configuración de columnas (CORREGIDA)
         display_columns = []
         for col in display_df.columns:
             is_hideable = True
@@ -644,7 +685,6 @@ def register_enrichment_callbacks(app):
                     'name': 'Source', 'id': col, 'type': 'text',
                     'hideable': is_hideable
                 }
-            # 🔑 NUEVA COLUMNA DE ORDENAMIENTO (source_order_display) 🔑
             elif col == 'source_order_display':
                 column_config = {
                     'name': 'Source\nOrder', 
@@ -679,11 +719,9 @@ def register_enrichment_callbacks(app):
                 
                 style_table={'overflowX': 'auto', 'minWidth': '100%'},
                 
-                # AJUSTES CLAVE DE ANCHO PARA PRIORIZAR DESCRIPCIÓN Y NOMBRE
                 style_cell_conditional=[
                     {'if': {'column_id': 'term_name'}, 'width': '15%', 'minWidth': '100px', 'textAlign': 'left'}, 
                     {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px', 'maxWidth': '350px', 'textAlign': 'left'},
-                    # La columna Source Order ya está oculta, pero mantenemos su ancho por si se muestra
                     {'if': {'column_id': 'source_order_display'}, 'width': '10%', 'minWidth': '60px', 'maxWidth': '80px', 'textAlign': 'center'}, 
                     {'if': {'column_id': 'p_value'}, 'width': '8%', 'minWidth': '70px', 'maxWidth': '80px', 'textAlign': 'center'},
                     {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
@@ -694,13 +732,12 @@ def register_enrichment_callbacks(app):
                 ],
                 
                 style_cell={'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'normal'},
-                # 🔑 CORRECCIÓN #2: Modificación de style_header para permitir el apilamiento de texto/iconos
                 style_header={
                     'backgroundColor': 'rgb(230, 230, 230)',
                     'fontWeight': 'bold',
                     'whiteSpace': 'normal', 
                     'height': 'auto',
-                    'padding': '10px 8px' # Se reduce el padding superior/inferior
+                    'padding': '10px 8px'
                 },
                 style_data_conditional=[
                     {
@@ -708,13 +745,12 @@ def register_enrichment_callbacks(app):
                         'backgroundColor': 'rgb(248, 248, 248)'
                     }
                 ],
-                # ❌ ELIMINAMOS TOOLTIP DE INTERSECTIONS
                 tooltip_duration=None,
             )
         ]
 
-        return html.Div(results_content), False, manhattan_fig # 🔑 Retorno del nuevo Output 🔑
-    
+        return html.Div(results_content), False, manhattan_fig
+        
     # 4.6. Callback para limpiar los resultados de g:Profiler (Mantenido)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
@@ -836,7 +872,7 @@ def register_enrichment_callbacks(app):
 
         
         # 3. Construcción del Mensaje Resumen
-        input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected}**"
+        input_message = f"**Sent (Input)::** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected}**"
         output_message = f"**Analized (Output):** Validated Organism: **{organism_used_api}** | Analysis Token: **{analysis_token}**"
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
