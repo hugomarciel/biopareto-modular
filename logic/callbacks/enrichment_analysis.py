@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO FINAL Y CORREGIDO)
+# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO FINAL CON TAMAÑO DINÁMICO)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -29,8 +29,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     El 'Gold Standard' es la línea de umbral.
     """
     
-    # 1. 🔑 CORRECCIÓN #1: Validación Robusta y Asignación de Valor de Línea 🔑
-    # El valor que realmente mueve la línea y se usa en la etiqueta
+    # 1. Validación Robusta y Asignación de Valor de Línea
     line_threshold_value = 0.05 
     
     try:
@@ -70,9 +69,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     
     # 2. Definir el Umbral (Eje Y) y el Coloreado Gold Standard
     
-    # 🔑 CORRECCIÓN #2: El cálculo ahora usa el valor validado que retiene la precisión 🔑
     y_threshold = -np.log10(line_threshold_value)
-    # 🔑 CORRECCIÓN #3: La etiqueta usa el valor validado que retiene la precisión 🔑
     line_name = f"Gold Standard Threshold (P < {line_threshold_value:.2e})"
     
     
@@ -91,6 +88,19 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
     df['plot_color_group'] = df.apply(
         lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
     )
+    
+    # 🔑 NUEVO CÁLCULO: Mapear intersection_size al tamaño del marcador 🔑
+    # Normalizar el tamaño de intersección para que el punto más grande no sea excesivo.
+    # Usamos una escala logarítmica y añadimos un offset mínimo (e.g., 5)
+    # para que los puntos pequeños no desaparezcan.
+    min_size = 5
+    max_size = 25
+    
+    # Calcular el tamaño del punto basado en el logaritmo de la intersección + un factor base
+    df['marker_size'] = np.log10(df['intersection_size'].clip(lower=1)) * (max_size - min_size) / np.log10(df['intersection_size'].max()) + min_size
+    # Asegurar que el tamaño no exceda el máximo
+    df['marker_size'] = df['marker_size'].clip(upper=max_size)
+
     
     # 4. Crear el gráfico con Plotly
     fig = px.scatter(
@@ -151,9 +161,14 @@ def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
         annotation_position="top right"
     )
 
-    # 7. Configurar el Tooltip (Actualizado para mostrar Gold Standard)
+    # 7. Configurar el Tooltip y el TAMAÑO DEL MARCADOR
     fig.update_traces(
-        marker=dict(size=8, opacity=0.8, line=dict(width=0.5, color='DarkSlateGrey')),
+        # 🔑 MODIFICACIÓN CLAVE: El tamaño del marcador ahora es dinámico 🔑
+        marker=dict(
+            size=df['marker_size'], 
+            opacity=0.8, 
+            line=dict(width=0.5, color='DarkSlateGrey')
+        ),
         hovertemplate=(
             "<b>Term:</b> %{customdata[0]}<br>"
             "<b>Source:</b> %{customdata[3]}<br>"
@@ -618,7 +633,7 @@ def register_enrichment_callbacks(app):
         
         # 5. Manejo de No Resultados Post-Filtro
         if filtered_df.empty:
-            input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
+            input_message = f"**Sent (Input)::** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
             simplified_no_results_message = f"No **significant** pathways found after applying the Gold Standard filter ({val_threshold}).\n\n{input_message}"
             
             return html.Div(
