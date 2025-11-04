@@ -1,4 +1,4 @@
-# services/gprofiler_service.py
+# services/gprofiler_service.py (CÓDIGO COMPLETO CON CORRECCIÓN DE ORGANISMOS)
 
 """
 gProfiler API Service
@@ -28,6 +28,9 @@ class GProfilerService:
                 "sources": ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"]
             }
 
+            # Añadir logging de la llamada
+            logger.info(f"g:Profiler: Calling API for organism '{organism}' with {len(gene_list)} genes.")
+            
             response = requests.post(GProfilerService.BASE_URL, json=payload, timeout=30)
 
             if response.status_code == 200:
@@ -44,32 +47,40 @@ class GProfilerService:
             logger.error(f"Error connecting with g:Profiler: {str(e)}")
             return None
 
+    @staticmethod
+    def _get_fallback_organisms():
+        """Fallback organism list"""
+        return [
+            {'label': 'Homo sapiens (hsapiens)', 'value': 'hsapiens'},
+            {'label': 'Mus musculus (mmusculus)', 'value': 'mmusculus'},
+            {'label': 'Rattus norvegicus (rnorvegicus)', 'value': 'rnorvegicus'},
+            {'label': 'Danio rerio (drerio)', 'value': 'drerio'},
+            {'label': 'Drosophila melanogaster (dmelanogaster)', 'value': 'dmelanogaster'},
+            {'label': 'Caenorhabditis elegans (celegans)', 'value': 'celegans'}
+        ]
 
-def get_organisms_from_api():
-    """Fetch available organisms from gProfiler API"""
-    try:
-        response = requests.get(GProfilerService.ORGANISMS_URL, timeout=10)
-        if response.status_code == 200:
+    @staticmethod
+    def get_organisms_from_api():
+        """Fetch available organisms from gProfiler API"""
+        try:
+            logger.info("g:Profiler: Attempting to fetch full organism list.")
+            response = requests.get(GProfilerService.ORGANISMS_URL, timeout=10)
+            response.raise_for_status()  # Lanza excepción para códigos 4xx/5xx
+
             organisms_data = response.json()
             options = []
             for org in organisms_data:
+                # Asegurarse de que el ID del organismo (código corto) se usa como valor
                 display_name = f"{org.get('display_name', org['id'])} ({org['id']})"
                 options.append({'label': display_name, 'value': org['id']})
+            
+            logger.info(f"g:Profiler: Successfully fetched {len(options)} organisms.")
             return sorted(options, key=lambda x: x['label'])
-        else:
-            return _get_fallback_organisms()
-    except Exception as e:
-        logger.error(f"Error fetching organisms: {e}")
-        return _get_fallback_organisms()
-
-
-def _get_fallback_organisms():
-    """Fallback organism list"""
-    return [
-        {'label': 'Homo sapiens (hsapiens)', 'value': 'hsapiens'},
-        {'label': 'Mus musculus (mmusculus)', 'value': 'mmusculus'},
-        {'label': 'Rattus norvegicus (rnorvegicus)', 'value': 'rnorvegicus'},
-        {'label': 'Danio rerio (drerio)', 'value': 'drerio'},
-        {'label': 'Drosophila melanogaster (dmelanogaster)', 'value': 'dmelanogaster'},
-        {'label': 'Caenorhabditis elegans (celegans)', 'value': 'celegans'}
-    ]
+        
+        except Exception as e:
+            logger.error(f"g:Profiler: Failed to fetch organisms. Falling back. Error: {e}")
+            return GProfilerService._get_fallback_organisms()
+        
+# Mantenemos esta función para compatibilidad con la importación en app.py, pero solo llama a la clase
+def get_organisms_from_api():
+    return GProfilerService.get_organisms_from_api()

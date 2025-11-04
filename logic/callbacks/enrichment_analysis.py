@@ -295,8 +295,11 @@ def register_enrichment_callbacks(app):
         """Habilitar/deshabilitar ambos botones de enriquecimiento si hay genes seleccionados."""
         is_disabled = not (selected_indices and len(selected_indices) > 0)
         return is_disabled, is_disabled
-    
-   # 4. Callback para ejecutar el análisis de g:Profiler (Mantenido)
+  
+
+   # logic/callbacks/enrichment_analysis.py (Función run_gprofiler_analysis CORREGIDA con source_order)
+
+    # 4. Callback para ejecutar el análisis de g:Profiler (CORREGIDO: Extracción de source_order)
     @app.callback(
         # CAMBIO: Ahora guarda en un Store específico para g:Profiler
         Output('gprofiler-results-store', 'data', allow_duplicate=True), 
@@ -331,38 +334,28 @@ def register_enrichment_callbacks(app):
         gene_list = [g for g in combined_genes if g and isinstance(g, str)]
 
         if not gene_list:
-            # CAMBIO: Retornar diccionario con lista de resultados vacía
             return {'results': [], 'gene_list': [], 'organism': organism}
 
         # 2. Ejecutar servicio de g:Profiler
         results = GProfilerService.get_enrichment(gene_list, organism)
 
         if results is None:
-            # Si hay error en API, devuelve None. El display callback lo manejará.
             return None 
         
         if not results:
-             # Si no hay resultados, devuelve lista vacía.
-             # CAMBIO: Retornar diccionario con lista de resultados vacía
              return {'results': [], 'gene_list': gene_list, 'organism': organism}
 
 
-        # 3. Procesar resultados de g:Profiler
+        # 3. Procesar resultados de g:Profiler (REEMPLAZO DE COLUMNA 'INTERSECTIONS' POR 'source_order')
         enrichment_data_list = []
         for term in results:
-            intersections = term.get('intersections', [])
-            if isinstance(intersections, list):
-                # Lógica para aplanar la lista de intersecciones
-                flat_intersections = []
-                for sublist in intersections:
-                    if isinstance(sublist, list):
-                        flat_intersections.extend([str(item) for item in sublist])
-                    else:
-                        flat_intersections.append(str(sublist))
-                intersections_str = ', '.join(flat_intersections)
-            else:
-                intersections_str = str(intersections)
-
+            
+            # 🔑 OBTENEMOS EL VALOR FUNCIONAL DE ORDEN (source_order) 🔑
+            # (Lo convertimos a string para la tabla)
+            source_order_value = str(term.get('source_order', 'N/A'))
+            
+            # NOTA: Eliminamos la extracción de 'intersections' ya que era la fuente del error de datos.
+            
             enrichment_data_list.append({
                 'source': term.get('source', ''),
                 'term_name': term.get('name', ''), 
@@ -373,7 +366,8 @@ def register_enrichment_callbacks(app):
                 'intersection_size': term.get('intersection_size', 0),
                 'precision': term.get('precision', 0.0),
                 'recall': term.get('recall', 0.0),
-                'intersections': intersections_str,  
+                # 🔑 AÑADIMOS LA CLAVE DE SALIDA QUE REEMPLAZA 'intersections' 🔑
+                'source_order_display': source_order_value, 
                 'significant': term.get('significant', False)
             })
 
@@ -384,8 +378,9 @@ def register_enrichment_callbacks(app):
             'organism': organism
         }
 
+    # logic/callbacks/enrichment_analysis.py (Fragmento de la Función display_gprofiler_results)
 
-    # 4.5. Callback para mostrar los resultados de g:Profiler (Mantenido)
+    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO: Layout y NameError)
     @app.callback(
         [Output('gprofiler-results-content', 'children'),
          Output('clear-gprofiler-results-btn', 'disabled')], 
@@ -395,16 +390,11 @@ def register_enrichment_callbacks(app):
         
         # Mapeo de códigos de organismo de g:Profiler a nombres comunes
         organism_map = {
-            'hsapiens': 'Homo sapiens',
-            'mmusculus': 'Mus musculus',
-            'rnorvegicus': 'Rattus norvegicus',
-            'drerio': 'Danio rerio',
-            'dmelanogaster': 'Drosophila melanogaster',
-            'celegans': 'Caenorhabditis elegans',
-            # Añadir más si es necesario
+            'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus',
+            'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans',
         }
 
-        # 🔑 CORRECCIÓN: Inicialización segura de variables clave 🔑
+        # 🔑 CORRECCIÓN CLAVE: Inicialización de variables para evitar UnboundLocalError 🔑
         enrichment_data_list = []
         gene_list = []
         organism_code = 'N/A'
@@ -415,41 +405,30 @@ def register_enrichment_callbacks(app):
         if stored_data is None:
             return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True
 
-        # Desempaquetar los datos del Store (que ya no es None, sino un dict o lista)
+        # Desempaquetar los datos del Store
         if isinstance(stored_data, dict):
             enrichment_data_list = stored_data.get('results', [])
             gene_list = stored_data.get('gene_list', [])
             organism_code = stored_data.get('organism', 'hsapiens')
             
-            # Datos para el mensaje
             organism_selected_name = organism_map.get(organism_code, organism_code)
             organism_validated_name = organism_map.get(organism_code, organism_code)
         
         
         genes_analyzed = len(gene_list)
 
-        # 🔑 MANEJO DEL ESTADO INICIAL (STORE VACÍO) 🔑
         if not enrichment_data_list and not gene_list:
-            # Estado inicial (antes del primer análisis) o después de Clear.
             return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True
 
         
-        # 🔑 CONSTRUCCIÓN DEL MENSAJE RESUMEN CON SEPARACIÓN (SIN TOKEN) 🔑
-        
-        # Mensaje de Input (Enviado)
+        # Construcción del Mensaje Resumen
         input_message = f"**Sent (Input):** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
-        
-        # Mensaje de Output (Recibido/Analizado)
         output_message = f"**Analized (Output):** Validated Organism: **{organism_validated_name}**"
-        
         pathways_message = f"Found **{len(enrichment_data_list)}** significant terms."
-        
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
-        # 🔑 MANEJO DE NO RESULTADOS Y MENSAJE INFORMATIVO SIMPLIFICADO 🔑
+        # Manejo de No Resultados
         if not enrichment_data_list:
-            
-            # Mensaje simplificado para no resultados
             simplified_no_results_message = f"No significant pathways found in g:Profiler.\n\n{input_message}"
             
             return html.Div(
@@ -458,17 +437,15 @@ def register_enrichment_callbacks(app):
                         html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
                     ], color="info", className="mt-3")
                 ]
-            ), False # Habilita el botón de limpiar
+            ), False
 
         
         # Lógica de renderizado para RESULTADOS EXISTENTES
         df = pd.DataFrame(enrichment_data_list)
         
-        # Filtramos por significancia (solo resultados significativos)
         if 'significant' in df.columns:
             df = df[df['significant'] == True]
         
-        # Si el DataFrame queda vacío después del filtrado
         if df.empty:
             simplified_no_results_message = f"No **significant** pathways found in g:Profiler after filtering.\n\n{input_message}"
             
@@ -481,35 +458,65 @@ def register_enrichment_callbacks(app):
             ), False
 
         df = df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
-        display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'intersections']].copy()
         
-        # Configuración de columnas (se mantiene)
+        # 🔑 CAMBIO CLAVE: Definición del DataFrame de visualización 🔑
+        # Eliminamos 'intersections' y usamos 'source_order_display'
+        display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
+        
+        # 🔑 CORRECCIÓN #1: Ocultar la columna 'source_order_display' por defecto.
+        hidden_cols = ['source_order_display'] 
+
+        # Configuración de columnas (CORREGIDA)
         display_columns = []
         for col in display_df.columns:
+            is_hideable = True
+            
             if col == 'p_value':
                 column_config = {
                     'name': 'P-Value', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'}
+                    'format': {'specifier': '.2e'}, 'hideable': is_hideable
                 }
             elif col == 'intersection_size':
                 column_config = {
-                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric'
+                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric',
+                    'hideable': is_hideable
                 }
             elif col == 'term_size':
                 column_config = {
-                    'name': 'Term\nSize', 'id': col, 'type': 'numeric'
-                }
-            elif col == 'term_name':
-                column_config = {
-                    'name': 'Term Name', 'id': col, 'type': 'text'
+                    'name': 'Term\nSize', 'id': col, 'type': 'numeric',
+                    'hideable': is_hideable
                 }
             elif col in ['precision', 'recall']:
                 column_config = {
                     'name': col.capitalize(), 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.3f'}
+                    'format': {'specifier': '.3f'},
+                    'hideable': is_hideable
+                }
+            elif col == 'term_name':
+                column_config = {
+                    'name': 'Term Name', 'id': col, 'type': 'text',
+                    'hideable': is_hideable
+                }
+            elif col == 'description':
+                column_config = {
+                    'name': 'Description', 'id': col, 'type': 'text',
+                    'hideable': is_hideable
+                }
+            elif col == 'source':
+                 column_config = {
+                    'name': 'Source', 'id': col, 'type': 'text',
+                    'hideable': is_hideable
+                }
+            # 🔑 NUEVA COLUMNA DE ORDENAMIENTO (source_order_display) 🔑
+            elif col == 'source_order_display':
+                column_config = {
+                    'name': 'Source\nOrder', 
+                    'id': col, 
+                    'type': 'text',
+                    'hideable': is_hideable
                 }
             else:
-                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text'}
+                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': is_hideable}
             
             display_columns.append(column_config)
         
@@ -524,21 +531,39 @@ def register_enrichment_callbacks(app):
                 id='enrichment-results-table-gprofiler', 
                 data=display_df.to_dict('records'),
                 columns=display_columns,
+                
+                hidden_columns=hidden_cols, 
+                
                 sort_action="native",
                 filter_action="native",
                 page_action="native",
                 page_current=0,
                 page_size=15,
-                style_cell={
-                    'textAlign': 'left',
-                    'padding': '8px',
-                    'maxWidth': '200px',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis',
-                },
+                
+                style_table={'overflowX': 'auto', 'minWidth': '100%'},
+                
+                # AJUSTES CLAVE DE ANCHO PARA PRIORIZAR DESCRIPCIÓN Y NOMBRE
+                style_cell_conditional=[
+                    {'if': {'column_id': 'term_name'}, 'width': '15%', 'minWidth': '100px', 'textAlign': 'left'}, 
+                    {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px', 'maxWidth': '350px', 'textAlign': 'left'},
+                    # La columna Source Order ya está oculta, pero mantenemos su ancho por si se muestra
+                    {'if': {'column_id': 'source_order_display'}, 'width': '10%', 'minWidth': '60px', 'maxWidth': '80px', 'textAlign': 'center'}, 
+                    {'if': {'column_id': 'p_value'}, 'width': '8%', 'minWidth': '70px', 'maxWidth': '80px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'precision'}, 'width': '7%', 'minWidth': '50px', 'maxWidth': '65px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'recall'}, 'width': '7%', 'minWidth': '50px', 'maxWidth': '65px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'source'}, 'width': '7%', 'minWidth': '60px', 'maxWidth': '60px', 'textAlign': 'center'},
+                ],
+                
+                style_cell={'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'normal'},
+                # 🔑 CORRECCIÓN #2: Modificación de style_header para permitir el apilamiento de texto/iconos
                 style_header={
                     'backgroundColor': 'rgb(230, 230, 230)',
-                    'fontWeight': 'bold'
+                    'fontWeight': 'bold',
+                    'whiteSpace': 'normal', 
+                    'height': 'auto',
+                    'padding': '10px 8px' # Se reduce el padding superior/inferior
                 },
                 style_data_conditional=[
                     {
@@ -546,18 +571,15 @@ def register_enrichment_callbacks(app):
                         'backgroundColor': 'rgb(248, 248, 248)'
                     }
                 ],
-                tooltip_data=[
-                    {
-                        'intersections': {'value': row['intersections'], 'type': 'text'},
-                        'description': {'value': row['description'], 'type': 'text'}
-                    } for row in display_df.to_dict('records')
-                ],
+                # ❌ ELIMINAMOS TOOLTIP DE INTERSECTIONS
                 tooltip_duration=None,
             )
         ]
 
         return html.Div(results_content), False
-
+    
+# ... el resto del código del archivo enrichment_analysis.py se mantiene...
+    
 
     # 4.6. Callback para limpiar los resultados de g:Profiler (Mantenido)
     @app.callback(
@@ -850,3 +872,68 @@ def register_enrichment_callbacks(app):
             # Retorna un diccionario vacío en el formato del Store
             return {'results': [], 'gene_list': [], 'organism': 'Homo sapiens'}
         raise PreventUpdate
+    # 7. 🔄 CALLBACK PARA AJUSTE DINÁMICO DE ANCHOS (Toggle Columns)
+    @app.callback(
+        # Output: Actualizar el estilo de la cabecera y el estilo de las celdas
+        [Output('enrichment-results-table-gprofiler', 'style_header_conditional'),
+        Output('enrichment-results-table-gprofiler', 'style_data_conditional')],
+        # Input: Escuchar la propiedad 'columns' que cambia cuando el usuario hace toggle
+        Input('enrichment-results-table-gprofiler', 'columns'),
+        # State: El estilo condicional que ya definimos (para no perderlo)
+        State('enrichment-results-table-gprofiler', 'style_data_conditional')
+    )
+    def adjust_gprofiler_column_widths_dynamically(current_columns, base_style_data_conditional):
+        """
+        Redistribuye el ancho de las columnas cuando el usuario oculta o muestra columnas
+        para que Intersections y Description tengan suficiente espacio.
+        """
+        if current_columns is None:
+            raise PreventUpdate
+
+        # Verificar si 'intersections' está visible
+        is_intersections_visible = any(col['id'] == 'intersections' and not col.get('hidden', False) for col in current_columns)
+
+        if is_intersections_visible:
+            # 🔑 MODO ANCHO (Prioridad a Intersections y Description) 🔑
+            
+            # Estilo para la cabecera (Header Style)
+            style_header_conditional = [
+                {'if': {'column_id': 'intersections'}, 'minWidth': '150px', 'width': '20%', 'maxWidth': '300px'},
+                {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px'},
+                # Reducir el resto de columnas numéricas para liberar espacio
+                {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '40px'},
+                {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '40px'},
+                {'if': {'column_id': 'source'}, 'width': '5%', 'minWidth': '40px'},
+            ]
+            
+            # Estilo para los datos (Data Style) - Mismos anchos
+            style_data_conditional = [
+                {'if': {'column_id': 'intersections'}, 'minWidth': '150px', 'width': '20%', 'maxWidth': '300px'},
+                {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px'},
+                {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '40px'},
+                {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '40px'},
+                {'if': {'column_id': 'source'}, 'width': '5%', 'minWidth': '40px'},
+            ]
+
+        else:
+            # 🛡️ MODO POR DEFECTO (Las columnas de texto tienen un ancho razonable) 🛡️
+            # Aquí podemos usar los anchos definidos en el estilo original de style_cell_conditional
+            
+            style_header_conditional = [] # No necesitamos un estilo header condicional complejo en modo normal
+            
+            # Usamos el estilo condicional que ya definimos en style_cell_conditional para el modo por defecto
+            # (Se asume que style_data_conditional del DataTable está bien configurado con style_cell_conditional)
+            style_data_conditional = base_style_data_conditional # Usar el estilo base del DataTable
+
+        
+        # Nota: DataTable solo acepta style_data_conditional, no style_header_conditional en la práctica para anchos.
+        # Usaremos style_data_conditional para anchos y style_header_conditional para el fondo.
+        
+        # Dado que los anchos se definen en style_cell_conditional (que ya está en tu layout), 
+        # simplemente actualizamos esa propiedad aquí.
+
+        # En Dash, los anchos se deben aplicar en style_data_conditional o style_cell_conditional.
+        # El style_header_conditional es principalmente para colores y fuentes. 
+        
+        # Para ser puristas, devolvemos el cambio en las propiedades que controlan el ancho del contenido:
+        return style_header_conditional, style_data_conditional
