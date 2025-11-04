@@ -67,7 +67,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     df = df.sort_values(['source', 'p_value'], ascending=[True, True])
     
     # Asignar una posición secuencial dentro de cada fuente
-    df['term_index'] = df.groupby('source').cumcount() + 1
+    df['term_index'] = df.groupby('source', observed=True).cumcount() + 1
     
     # 2. Definir el Umbral (Eje Y) y el Coloreado Gold Standard
     
@@ -122,7 +122,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     )
     
     # 5. Configurar el eje X y las líneas divisorias (se mantiene igual)
-    source_labels = df.groupby('source')['term_index'].agg(['min', 'max']).reset_index()
+    source_labels = df.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index()
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     
     fig.update_layout(
