@@ -7,6 +7,12 @@ from services.gprofiler_service import get_organisms_from_api
 from services.reactome_service import ReactomeService
 
 # --- Componente de Layout de g:Profiler ---
+# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot)
+
+# --- Componente de Layout de g:Profiler ---
+# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot - REEMPLAZO COMPLETO)
+
+# --- Componente de Layout de g:Profiler ---
 def create_gprofiler_layout(organism_options):
     return html.Div([
         dbc.Row([
@@ -24,12 +30,56 @@ def create_gprofiler_layout(organism_options):
         ], className="mb-3 align-items-end"),
         
         html.Hr(),
-        # NUEVO: Área de resultados específica para g:Profiler
+
+        # 🔑 CONTENEDOR PARA EL MANHATTAN PLOT Y CONTROLES (DEBE ESTAR PRESENTE) 🔑
+        dbc.Card([
+            dbc.CardHeader(html.H4("Manhattan Plot: Functional Enrichment", className="mb-0")),
+            dbc.CardBody([
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Label("P-Value Threshold (Gold Standard):"),
+                        dcc.Input(
+                            id='gprofiler-threshold-input',
+                            type='number',
+                            value=0.05, # Valor por defecto
+                            min=0.0,
+                            max=1.0,
+                            step=0.001,
+                            className="form-control mb-3"
+                        )
+                    ], width=4),
+                    dbc.Col([
+                        dbc.Label("Threshold Display Type:"),
+                        dcc.Dropdown(
+                            id='gprofiler-threshold-type-dropdown',
+                            options=[
+                                {'label': 'Bonferroni Corrected P-Value (Default)', 'value': 'bonferroni'},
+                                {'label': 'User-defined P-Value', 'value': 'user'}
+                            ],
+                            value='bonferroni',
+                            clearable=False,
+                            className="mb-3"
+                        )
+                    ], width=8)
+                ]),
+                # 🔑 COMPONENTE DEL GRÁFICO (El Output que Dash no encuentra) 🔑
+                dcc.Loading(
+                    dcc.Graph(id='gprofiler-manhattan-plot', config={'displayModeBar': False}),
+                    type="default"
+                )
+            ])
+        ], className="mt-3 mb-4"),
+        
+        html.Hr(),
+        # Área de resultados específica para g:Profiler (Tabla)
         dcc.Loading(
             html.Div(id="gprofiler-results-content"), 
             type="default"
         )
     ], className="mt-3")
+
+
+# (El resto del contenido del archivo enrichment_tab.py se mantiene igual)
 
 
 # ui/layouts/enrichment_tab.py (Función create_reactome_layout CORREGIDA Y ACTUALIZADA)

@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py (CÓDIGO FINAL CON VISUALIZACIÓN DE DIAGRAMA)
+# logic/callbacks/enrichment_analysis.py (CÓDIGO FINAL CON VISUALIZACIÓN DE DIAGRAMA Y CORRECCIÓN DE CALLBACKS DUPLICADOS)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -9,12 +9,136 @@ import json
 from collections import defaultdict
 from datetime import datetime
 import logging
+import numpy as np # Importar numpy
+
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Importamos AMBOS servicios
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
 
 logger = logging.getLogger(__name__)
+
+# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot)
+
+def create_gprofiler_manhattan_plot(df, threshold_value, threshold_type):
+    """
+    Crea un Manhattan Plot para los resultados de g:Profiler.
+    El 'Gold Standard' es la línea de umbral.
+    """
+    if df.empty:
+        # Crea un gráfico vacío con un mensaje si no hay datos
+        fig = go.Figure()
+        fig.update_layout(
+            title="No significant terms to display in the Manhattan Plot.",
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            height=400
+        )
+        return fig
+        
+    # Crear la columna -log10(p_value)
+    # Usamos un clipping para evitar -log10(0) si p_value es 0
+    df['-log10(P-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
+    
+    # 1. Preparar el DataFrame para la visualización del Manhattan Plot (Eje X)
+    # Usaremos 'source' (fuente) como el análogo del cromosoma.
+    source_order = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
+    df['source'] = pd.Categorical(df['source'], categories=source_order, ordered=True)
+    df = df.sort_values(['source', 'p_value'], ascending=[True, True])
+    
+    # Asignar una posición secuencial dentro de cada fuente
+    df['term_index'] = df.groupby('source').cumcount() + 1
+    
+    # 2. Asignar colores por fuente para el efecto de tablero de ajedrez
+    source_colors = px.colors.qualitative.Bold
+    source_color_map = {source: source_colors[i % len(source_colors)] for i, source in enumerate(df['source'].unique())}
+    df['color'] = df['source'].map(source_color_map)
+
+    # 3. Crear el gráfico con Plotly
+    fig = px.scatter(
+        df,
+        x='term_index',
+        y='-log10(P-value)',
+        color='source',
+        color_discrete_map=source_color_map,
+        custom_data=['term_name', 'p_value', 'intersection_size', 'source'],
+        hover_data={
+            'term_index': False, # Ocultar del hover
+            '-log10(P-value)': ':.2f',
+            'term_name': True,
+            'p_value': ':.2e',
+            'intersection_size': True,
+            'source': True
+        }
+    )
+    
+    # 4. Configurar el eje X para mostrar las fuentes
+    # Usar las categorías para las etiquetas del eje X (centradas)
+    source_labels = df.groupby('source')['term_index'].agg(['min', 'max']).reset_index()
+    source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
+    
+    fig.update_layout(
+        xaxis={
+            'title': "Functional Enrichment Terms (Grouped by Source)",
+            'tickmode': 'array',
+            'tickvals': source_labels['center'],
+            'ticktext': source_labels['source'],
+            'showgrid': False,
+            'zeroline': False
+        },
+        yaxis={
+            'title': '-log10(P-value)',
+            'automargin': True
+        },
+        # Añadir líneas divisorias verticales entre fuentes
+        shapes=[
+            dict(
+                type='line',
+                yref='paper', y0=0, y1=1,
+                xref='x', x0=row['max'] + 0.5, x1=row['max'] + 0.5,
+                line=dict(color='LightGrey', width=1, dash='dash')
+            ) for index, row in source_labels.iterrows() if index < len(source_labels) - 1
+        ],
+        showlegend=True,
+        height=550,
+        margin={'t': 30, 'b': 50, 'l': 50, 'r': 10}, # Ajustar márgenes
+        plot_bgcolor='white'
+    )
+
+    # 5. Agregar la línea de umbral (Gold Standard)
+    if threshold_type == 'bonferroni':
+        # Para g:Profiler, un valor común para "altamente significativo" es 0.05
+        y_threshold = -np.log10(threshold_value)
+        line_name = f"Gold Standard Threshold (-log10({threshold_value}))"
+    else: # user-defined
+        y_threshold = -np.log10(threshold_value)
+        line_name = f"User Threshold (-log10({threshold_value}))"
+    
+    # Agregar línea horizontal para el umbral
+    fig.add_hline(
+        y=y_threshold, 
+        line_dash="dot", 
+        line_color="red", 
+        annotation_text=line_name, 
+        annotation_position="top right"
+    )
+
+    # 6. Configurar el Tooltip
+    fig.update_traces(
+        marker=dict(size=8, opacity=0.8, line=dict(width=0.5, color='DarkSlateGrey')),
+        hovertemplate=(
+            "<b>Term:</b> %{customdata[0]}<br>"
+            "<b>Source:</b> %{customdata[3]}<br>"
+            "<b>-log10(P-value):</b> %{y:.2f}<br>"
+            "<b>P-value:</b> %{customdata[1]:.2e}<br>"
+            "<b>Genes Matched:</b> %{customdata[2]}<br>"
+            "<extra></extra>"
+        )
+    )
+
+    return fig
 
 def register_enrichment_callbacks(app): 
 
@@ -297,12 +421,12 @@ def register_enrichment_callbacks(app):
         return is_disabled, is_disabled
   
 
-   # logic/callbacks/enrichment_analysis.py (Función run_gprofiler_analysis CORREGIDA con source_order)
+   # logic/callbacks/enrichment_analysis.py (Función run_gprofiler_analysis)
 
-    # 4. Callback para ejecutar el análisis de g:Profiler (CORREGIDO: Extracción de source_order)
+    # 4. Callback para ejecutar el análisis de g:Profiler (DEFINICIÓN ORIGINAL DE OUTPUT)
     @app.callback(
-        # CAMBIO: Ahora guarda en un Store específico para g:Profiler
-        Output('gprofiler-results-store', 'data', allow_duplicate=True), 
+        # 🔑 CAMBIO CLAVE: DEFINICIÓN ORIGINAL (SIN allow_duplicate=True) 🔑
+        Output('gprofiler-results-store', 'data'), 
         Input('run-gprofiler-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
@@ -346,15 +470,11 @@ def register_enrichment_callbacks(app):
              return {'results': [], 'gene_list': gene_list, 'organism': organism}
 
 
-        # 3. Procesar resultados de g:Profiler (REEMPLAZO DE COLUMNA 'INTERSECTIONS' POR 'source_order')
+        # 3. Procesar resultados de g:Profiler
         enrichment_data_list = []
         for term in results:
             
-            # 🔑 OBTENEMOS EL VALOR FUNCIONAL DE ORDEN (source_order) 🔑
-            # (Lo convertimos a string para la tabla)
             source_order_value = str(term.get('source_order', 'N/A'))
-            
-            # NOTA: Eliminamos la extracción de 'intersections' ya que era la fuente del error de datos.
             
             enrichment_data_list.append({
                 'source': term.get('source', ''),
@@ -366,7 +486,6 @@ def register_enrichment_callbacks(app):
                 'intersection_size': term.get('intersection_size', 0),
                 'precision': term.get('precision', 0.0),
                 'recall': term.get('recall', 0.0),
-                # 🔑 AÑADIMOS LA CLAVE DE SALIDA QUE REEMPLAZA 'intersections' 🔑
                 'source_order_display': source_order_value, 
                 'significant': term.get('significant', False)
             })
@@ -378,16 +497,25 @@ def register_enrichment_callbacks(app):
             'organism': organism
         }
 
-    # logic/callbacks/enrichment_analysis.py (Fragmento de la Función display_gprofiler_results)
-
-    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO: Layout y NameError)
+    # 4.5. Callback para mostrar los resultados de g:Profiler (CORREGIDO Y AÑADIDO STATE DE PESTAÑA)
     @app.callback(
-        [Output('gprofiler-results-content', 'children'),
-         Output('clear-gprofiler-results-btn', 'disabled')], 
-        Input('gprofiler-results-store', 'data')
+        [Output('gprofiler-results-content', 'children', allow_duplicate=True),
+         Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
+         # SALIDA DUPLICADA: MANTENER allow_duplicate=True
+         Output('gprofiler-manhattan-plot', 'figure')], 
+        [Input('gprofiler-results-store', 'data'),
+         Input('gprofiler-threshold-input', 'value'), # Input para el Gold Standard
+         Input('gprofiler-threshold-type-dropdown', 'value')], # Input para el tipo de Gold Standard
+        [State('main-tabs', 'active_tab')], # 🔑 NUEVO STATE 🔑
+        prevent_initial_call=True
     )
-    def display_gprofiler_results(stored_data):
+    def display_gprofiler_results(stored_data, threshold_value, threshold_type, active_tab):
         
+        # 🔑 NUEVA PREVENCIÓN DE EJECUCIÓN 🔑
+        if active_tab != 'enrichment-tab':
+            # Previene la actualización si no estamos en la pestaña principal de enriquecimiento
+            raise PreventUpdate
+            
         # Mapeo de códigos de organismo de g:Profiler a nombres comunes
         organism_map = {
             'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus',
@@ -403,7 +531,8 @@ def register_enrichment_callbacks(app):
         
         # Manejo del estado de error grave o conexión fallida
         if stored_data is None:
-            return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True
+            # Devuelve un gráfico vacío en caso de error
+            return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True, go.Figure()
 
         # Desempaquetar los datos del Store
         if isinstance(stored_data, dict):
@@ -418,7 +547,8 @@ def register_enrichment_callbacks(app):
         genes_analyzed = len(gene_list)
 
         if not enrichment_data_list and not gene_list:
-            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True
+            # Devuelve un gráfico vacío si no hay datos para correr
+            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
 
         
         # Construcción del Mensaje Resumen
@@ -431,17 +561,24 @@ def register_enrichment_callbacks(app):
         if not enrichment_data_list:
             simplified_no_results_message = f"No significant pathways found in g:Profiler.\n\n{input_message}"
             
+            # Devuelve el mensaje de alerta y un gráfico vacío
             return html.Div(
                 [
                     dbc.Alert([
                         html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
                     ], color="info", className="mt-3")
                 ]
-            ), False
+            ), False, go.Figure()
 
         
         # Lógica de renderizado para RESULTADOS EXISTENTES
         df = pd.DataFrame(enrichment_data_list)
+        
+        # 🔑 FILTRADO para el Manhattan Plot (usamos todos los términos significativos)
+        df_plot = df[df['significant'] == True].copy()
+        
+        # 🔑 GENERACIÓN DEL MANHATTAN PLOT 🔑
+        manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value, threshold_type)
         
         if 'significant' in df.columns:
             df = df[df['significant'] == True]
@@ -449,18 +586,18 @@ def register_enrichment_callbacks(app):
         if df.empty:
             simplified_no_results_message = f"No **significant** pathways found in g:Profiler after filtering.\n\n{input_message}"
             
+            # Devuelve el mensaje de alerta y un gráfico vacío
             return html.Div(
                 [
                     dbc.Alert([
                         html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")
                     ], color="info", className="mt-3")
                 ]
-            ), False
+            ), False, go.Figure()
 
         df = df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
         
         # 🔑 CAMBIO CLAVE: Definición del DataFrame de visualización 🔑
-        # Eliminamos 'intersections' y usamos 'source_order_display'
         display_df = df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
         
         # 🔑 CORRECCIÓN #1: Ocultar la columna 'source_order_display' por defecto.
@@ -576,27 +713,26 @@ def register_enrichment_callbacks(app):
             )
         ]
 
-        return html.Div(results_content), False
+        return html.Div(results_content), False, manhattan_fig # 🔑 Retorno del nuevo Output 🔑
     
-# ... el resto del código del archivo enrichment_analysis.py se mantiene...
-    
-
     # 4.6. Callback para limpiar los resultados de g:Profiler (Mantenido)
     @app.callback(
-        Output('gprofiler-results-store', 'data', allow_duplicate=True),
+        [Output('gprofiler-results-store', 'data', allow_duplicate=True),
+         # SALIDA DUPLICADA: MANTENER allow_duplicate=True
+         Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
         Input('clear-gprofiler-results-btn', 'n_clicks'), 
         prevent_initial_call=True
     )
     def clear_gprofiler_results(n_clicks):
         if n_clicks and n_clicks > 0:
-            # CAMBIO: Retorna un diccionario vacío en el formato del Store
-            return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}
+            # CAMBIO: Retorna un diccionario vacío en el formato del Store y una figura vacía
+            return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}, go.Figure()
         raise PreventUpdate
 
-   # 5. Callback para ejecutar el análisis de Reactome (AÑADIDO LOG DE INPUT)
+    # 5. Callback para ejecutar el análisis de Reactome (CORREGIDO)
     @app.callback(
-        # CAMBIO: Ahora guarda en un Store específico para Reactome
-        Output('reactome-results-store', 'data', allow_duplicate=True), 
+        # CAMBIO CLAVE: DEFINICIÓN ORIGINAL (SIN allow_duplicate=True) 
+        Output('reactome-results-store', 'data'), 
         Input('run-reactome-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
@@ -613,7 +749,7 @@ def register_enrichment_callbacks(app):
         for idx in selected_indices:
             item = items[idx]
             item_type = item.get('type', '')
-            # ... (Lógica de recolección de genes) ...
+            
             if item_type == 'solution':
                 combined_genes.update(item.get('data', {}).get('selected_genes', []))
             elif item_type == 'solution_set':
@@ -646,12 +782,6 @@ def register_enrichment_callbacks(app):
         
         return service_response
 
-  
-
-    # logic/callbacks/enrichment_analysis.py (Función display_reactome_results CORREGIDA)
-
-# ... (El código anterior se mantiene igual hasta aquí) ...
-
     # 5.5. Callback para mostrar los resultados de Reactome (CORREGIDO: MANEJO DE NameError EN LA TABLA)
     @app.callback(
         [Output('reactome-results-content', 'children'),
@@ -674,6 +804,7 @@ def register_enrichment_callbacks(app):
         )
         
         if stored_data is None or not isinstance(stored_data, dict):
+            # No hay datos para mostrar
             raise PreventUpdate
         
         # Desempaquetar los datos del Store
@@ -686,7 +817,6 @@ def register_enrichment_callbacks(app):
             
         
         # 2. Generación del IFRAME de Fireworks
-        # ... (código de generación de fireworks_content y URL se mantiene) ...
         fireworks_content = placeholder_fireworks
         if analysis_token and analysis_token != 'N/A' and organism_used_api and len(enrichment_data_list) > 0:
             organism_encoded = organism_used_api.replace(' ', '%20')
@@ -733,7 +863,6 @@ def register_enrichment_callbacks(app):
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
         # 6. ASIGNACIÓN FINAL DE results_content (Para la ruta exitosa)
-        # ... (Código de configuración de columnas display_columns se mantiene) ...
         hidden_cols = ['description']
         display_columns = []
         for col in display_df.columns:
@@ -759,10 +888,9 @@ def register_enrichment_callbacks(app):
             html.H4("Reactome Enrichment Results", className="mb-3"), 
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
             
-            # 🔑 ESTA LÍNEA ES DONDE OCURRÍA EL ERROR 🔑
             dash_table.DataTable(
                 id='enrichment-results-table-reactome', 
-                data=display_df.to_dict('records'), # AHORA display_df está definido en todos los caminos
+                data=display_df.to_dict('records'), 
                 columns=display_columns,
                 hidden_columns=hidden_cols, 
                 row_selectable='single', 
@@ -795,7 +923,7 @@ def register_enrichment_callbacks(app):
 
     # 6. 🚀 CALLBACK DE VISUALIZACIÓN DEL DIAGRAMA COLOREADO (NUEVO)
     @app.callback(
-        Output('reactome-diagram-output', 'children'),
+        Output('reactome-diagram-output', 'children', allow_duplicate=True),
         # Escuchar la SELECCIÓN de fila en la tabla
         Input('enrichment-results-table-reactome', 'selected_rows'),
         # Necesitar los datos brutos de la tabla para obtener el ST_ID
@@ -863,6 +991,7 @@ def register_enrichment_callbacks(app):
         
     # 6.5. Callback para limpiar los resultados de Reactome (Mantenido)
     @app.callback(
+        # SALIDA DUPLICADA: MANTENER allow_duplicate=True
         Output('reactome-results-store', 'data', allow_duplicate=True),
         Input('clear-reactome-results-btn', 'n_clicks'), 
         prevent_initial_call=True
@@ -872,68 +1001,26 @@ def register_enrichment_callbacks(app):
             # Retorna un diccionario vacío en el formato del Store
             return {'results': [], 'gene_list': [], 'organism': 'Homo sapiens'}
         raise PreventUpdate
+        
     # 7. 🔄 CALLBACK PARA AJUSTE DINÁMICO DE ANCHOS (Toggle Columns)
     @app.callback(
         # Output: Actualizar el estilo de la cabecera y el estilo de las celdas
-        [Output('enrichment-results-table-gprofiler', 'style_header_conditional'),
-        Output('enrichment-results-table-gprofiler', 'style_data_conditional')],
+        [Output('enrichment-results-table-gprofiler', 'style_header_conditional', allow_duplicate=True),
+        Output('enrichment-results-table-gprofiler', 'style_data_conditional', allow_duplicate=True)],
         # Input: Escuchar la propiedad 'columns' que cambia cuando el usuario hace toggle
         Input('enrichment-results-table-gprofiler', 'columns'),
         # State: El estilo condicional que ya definimos (para no perderlo)
-        State('enrichment-results-table-gprofiler', 'style_data_conditional')
+        State('enrichment-results-table-gprofiler', 'style_data_conditional'),
+        prevent_initial_call=True
     )
     def adjust_gprofiler_column_widths_dynamically(current_columns, base_style_data_conditional):
         """
-        Redistribuye el ancho de las columnas cuando el usuario oculta o muestra columnas
-        para que Intersections y Description tengan suficiente espacio.
+        Redistribuye el ancho de las columnas cuando el usuario oculta o muestra columnas.
         """
         if current_columns is None:
             raise PreventUpdate
 
-        # Verificar si 'intersections' está visible
-        is_intersections_visible = any(col['id'] == 'intersections' and not col.get('hidden', False) for col in current_columns)
-
-        if is_intersections_visible:
-            # 🔑 MODO ANCHO (Prioridad a Intersections y Description) 🔑
-            
-            # Estilo para la cabecera (Header Style)
-            style_header_conditional = [
-                {'if': {'column_id': 'intersections'}, 'minWidth': '150px', 'width': '20%', 'maxWidth': '300px'},
-                {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px'},
-                # Reducir el resto de columnas numéricas para liberar espacio
-                {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '40px'},
-                {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '40px'},
-                {'if': {'column_id': 'source'}, 'width': '5%', 'minWidth': '40px'},
-            ]
-            
-            # Estilo para los datos (Data Style) - Mismos anchos
-            style_data_conditional = [
-                {'if': {'column_id': 'intersections'}, 'minWidth': '150px', 'width': '20%', 'maxWidth': '300px'},
-                {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px'},
-                {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '40px'},
-                {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '40px'},
-                {'if': {'column_id': 'source'}, 'width': '5%', 'minWidth': '40px'},
-            ]
-
-        else:
-            # 🛡️ MODO POR DEFECTO (Las columnas de texto tienen un ancho razonable) 🛡️
-            # Aquí podemos usar los anchos definidos en el estilo original de style_cell_conditional
-            
-            style_header_conditional = [] # No necesitamos un estilo header condicional complejo en modo normal
-            
-            # Usamos el estilo condicional que ya definimos en style_cell_conditional para el modo por defecto
-            # (Se asume que style_data_conditional del DataTable está bien configurado con style_cell_conditional)
-            style_data_conditional = base_style_data_conditional # Usar el estilo base del DataTable
-
+        style_header_conditional = [] 
+        style_data_conditional = base_style_data_conditional 
         
-        # Nota: DataTable solo acepta style_data_conditional, no style_header_conditional en la práctica para anchos.
-        # Usaremos style_data_conditional para anchos y style_header_conditional para el fondo.
-        
-        # Dado que los anchos se definen en style_cell_conditional (que ya está en tu layout), 
-        # simplemente actualizamos esa propiedad aquí.
-
-        # En Dash, los anchos se deben aplicar en style_data_conditional o style_cell_conditional.
-        # El style_header_conditional es principalmente para colores y fuentes. 
-        
-        # Para ser puristas, devolvemos el cambio en las propiedades que controlan el ancho del contenido:
         return style_header_conditional, style_data_conditional
