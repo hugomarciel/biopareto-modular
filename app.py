@@ -71,6 +71,8 @@ from logic.callbacks.export_callbacks import register_export_callbacks
 app = dash.Dash(__name__,
                 external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
                 suppress_callback_exceptions=True)
+                
+server = app.server # <-- ¡AÑADIR ESTO!
 
 app.title = "BioPareto Analyzer"
 
@@ -1038,10 +1040,26 @@ def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, 
     raise PreventUpdate
 
 
+#🔑 REGISTRO DE CALLBACKS MODULARIZADOS PARA AMBOS MODOS 🔑
+# -------------------------------------------------------------
+register_data_management_callbacks(app)
+register_pareto_plot_callbacks(app)
+register_pareto_selection_callbacks(app)
+register_consolidation_callbacks(app)
+register_genes_analysis_callbacks(app)
+register_gene_groups_callbacks(app)
+
+# Registros de la Fase 4
+from logic.callbacks.enrichment_analysis import register_enrichment_callbacks
+register_enrichment_callbacks(app)
+from logic.callbacks.export_callbacks import register_export_callbacks
+register_export_callbacks(app)
+
 if __name__ == '__main__':
+    """
     print("🚀 Iniciando BioPareto Analyzer...")
     print("--------------------------------------------------")
-
+    
     # 🔑 REGISTRO DE CALLBACKS MODULARIZADOS 🔑
     register_data_management_callbacks(app)
     register_pareto_plot_callbacks(app)
@@ -1055,7 +1073,7 @@ if __name__ == '__main__':
     register_enrichment_callbacks(app) 
     from logic.callbacks.export_callbacks import register_export_callbacks
     register_export_callbacks(app)
-
+    """
     print("✅ Módulos de Load Data (upload-tab) registrados.")
     print("✅ Módulos de Pareto Front (pareto-tab) registrados.")
     print("✅ Módulos de Genes y Grupos (genes-tab) registrados.")

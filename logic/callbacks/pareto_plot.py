@@ -515,8 +515,8 @@ def register_pareto_plot_callbacks(app):
                             ])
                         ], className="d-flex align-items-center justify-content-between"),
                         html.Small([
-                            f"{x_axis}: {int(sol['x']) if isinstance(sol['x'], (int, float)) and sol['x'] == int(sol['x']) else f'{sol['x']:.3f}' if isinstance(sol['x'], float) else sol['x']}, ",
-                            f"{y_axis}: {int(sol['y']) if isinstance(sol['y'], (int, float)) and sol['y'] == int(sol['y']) else f'{sol['y']:.3f}' if isinstance(sol['y'], float) else sol['y']}"
+                            f"{x_axis}: {int(sol['x']) if isinstance(sol['x'], (int, float)) and sol['x'] == int(sol['x']) else '{:.3f}'.format(sol['x']) if isinstance(sol['x'], float) else sol['x']}, "
+                            f"{y_axis}: {int(sol['y']) if isinstance(sol['y'], (int, float)) and sol['y'] == int(sol['y']) else '{:.3f}'.format(sol['y']) if isinstance(sol['y'], float) else sol['y']}"
                         ], className="text-muted d-block mt-1"),
                         html.Details([
                             html.Summary(

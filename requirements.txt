@@ -9,3 +9,4 @@ matplotlib>=3.7.0
 reportlab>=4.0.0
 matplotlib-venn
 reactome2py
+gunicorn
