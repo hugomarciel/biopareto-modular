@@ -1,4 +1,4 @@
-# ui/layouts/enrichment_tab.py (REEMPLAZAR TODO)
+# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON CORRECCIÓN)
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc
@@ -40,15 +40,16 @@ def create_gprofiler_layout(organism_options):
                             value=0.05, # Valor por defecto
                             min=0.0,
                             max=1.0,
-                            step=0.001,
+                            # step='any', # Removido para permitir alta precisión
                             className="form-control mb-3"
                         )
-                    ], width=12), # 🔑 CAMBIO CLAVE: Aumentar el ancho a 12 para que ocupe todo el espacio 🔑
+                    ], width=3), 
                     # ❌ REMOVIDO: Threshold Display Type Dropdown
                 ]),
                 # COMPONENTE DEL GRÁFICO
                 dcc.Loading(
-                    dcc.Graph(id='gprofiler-manhattan-plot', config={'displayModeBar': False}),
+                    # 🔑 CAMBIO CLAVE: Eliminar config={'displayModeBar': False} para activar herramientas 🔑
+                    dcc.Graph(id='gprofiler-manhattan-plot'), 
                     type="default"
                 )
             ])
@@ -62,13 +63,6 @@ def create_gprofiler_layout(organism_options):
         )
     ], className="mt-3")
 
-
-# (El resto del contenido del archivo enrichment_tab.py se mantiene igual)
-
-
-# ui/layouts/enrichment_tab.py (Función create_reactome_layout CORREGIDA Y ACTUALIZADA)
-
-# ... (Las funciones create_gprofiler_layout y create_enrichment_tab_layout se mantienen)
 
 # --- Componente de Layout de Reactome (CORREGIDO para layout vertical con Fireworks) ---
 def create_reactome_layout(organism_options):

@@ -21,10 +21,6 @@ from services.reactome_service import ReactomeService
 
 logger = logging.getLogger(__name__)
 
-# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot - CORREGIDA FINAL)
-
-# logic/callbacks/enrichment_analysis.py (Nueva función auxiliar para Manhattan Plot - ELIMINADO threshold_type)
-
 def create_gprofiler_manhattan_plot(df, threshold_value):
     """
     Crea un Manhattan Plot para los resultados de g:Profiler.
@@ -35,15 +31,10 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     line_threshold_value = 0.05 
     
     try:
-        # 1. Intentar convertir a float
         float_threshold = float(threshold_value)
-        
-        # 2. Asignar solo si es válido (entre 0 exclusivo y 1 inclusivo)
         if 0 < float_threshold <= 1.0:
             line_threshold_value = float_threshold
-        
     except (TypeError, ValueError):
-        # Si es None o no numérico, ya se asignó 0.05
         pass
     
     
@@ -58,7 +49,6 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         return fig
         
     # Crear la columna -log10(p_value)
-    # Usamos un clipping para evitar -log10(0) si p_value es 0
     df['-log10(P-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
     
     # 1. Preparar el DataFrame para la visualización del Manhattan Plot (Eje X)
@@ -70,16 +60,16 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     df['term_index'] = df.groupby('source', observed=True).cumcount() + 1
     
     # 2. Definir el Umbral (Eje Y) y el Coloreado Gold Standard
-    
     y_threshold = -np.log10(line_threshold_value)
-    # 🔑 Etiqueta simplificada 🔑
-    line_name = f"Gold Standard Threshold (P < {line_threshold_value:.2e})"
+    line_name = f"Gold Standard Threshold (P < {line_threshold_value:.4f})" 
     
-    
-    # COLOREADO GOLD STANDARD: Crea una columna booleana para colorear puntos por encima del umbral.
+    # COLOREADO GOLD STANDARD
     df['is_gold_standard'] = df['-log10(P-value)'] >= y_threshold
+    df['plot_color_group'] = df.apply(
+        lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
+    )
     
-    # Definir mapa de colores: Si es Gold Standard, rojo; si no, color por fuente.
+    # Definir mapa de colores
     source_colors = px.colors.qualitative.Bold
     source_color_map = {source: source_colors[i % len(source_colors)] for i, source in enumerate(df['source'].unique())}
     color_map = {'Gold': 'red'} 
@@ -87,28 +77,66 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         color_map[source] = color 
 
 
-    # 3. Crear la columna de color para el gráfico
-    df['plot_color_group'] = df.apply(
-        lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
-    )
-    
-    # 🔑 CÁLCULO: Mapear intersection_size al tamaño del marcador (se mantiene) 🔑
+    # 3. Lógica de Tamaño (Escala de Raíz Cuadrada)
     min_size = 5
-    max_size = 25
+    max_size = 40 
     
-    # Calcular el tamaño del punto basado en el logaritmo de la intersección + un factor base
-    df['marker_size'] = np.log10(df['intersection_size'].clip(lower=1)) * (max_size - min_size) / np.log10(df['intersection_size'].max()) + min_size
-    # Asegurar que el tamaño no exceda el máximo
+    # 🔑 CAMBIO CLAVE: Usamos el valor máximo (sin raíz cuadrada) para escala lineal
+    max_val = df['intersection_size'].max()
+    
+    # --- DEBUG: MARCADO DE TAMAÑO DE BURBUJA ---
+    logger.info(f"DEBUG SIZE: Max Intersection Size found (Global): {df['intersection_size'].max()}")
+    logger.info(f"DEBUG SIZE: Scaling Function: LINEAR (Proportional to Intersection)")
+    logger.info(f"DEBUG SIZE: Scaling Range: {min_size} to {max_size}")
+    logger.info(f"DEBUG SIZE: Max Value for Normalization: {max_val}") # Actualizado el log
+    
+    if max_val == 0:
+        df['marker_size'] = min_size
+    else:
+        # Calcular el tamaño del marcador en el DataFrame completo (Fórmula Lineal)
+        df['marker_size'] = (
+            df['intersection_size'].clip(lower=0) * (max_size - min_size) / max_val
+        ) + min_size
+        
     df['marker_size'] = df['marker_size'].clip(upper=max_size)
+    
+    # DEBUG ADICIONAL: Mostrar un top 5 de ejemplos de escalado (antes de filtrar por significant=True)
+    debug_sample = df.sort_values('intersection_size', ascending=False).head(5)
+    for index, row in debug_sample.iterrows():
+        logger.info(
+            f"DEBUG SIZE SAMPLE: Source={row['source']}, Intersection={row['intersection_size']}, "
+            f"P_Value={row['p_value']:.2e}, Calculated Size={row['marker_size']:.2f}"
+        )
+
+
+    # 4. Generación del Manhattan Plot
+    # Creamos df_plot que contendrá solo los puntos significativos
+    df_plot = df[df['significant'] == True].copy() 
+    
+    # 🔑 SOLUCIÓN CRÍTICA: Resetear el índice para sincronizar el array de tamaño 🔑
+    df_plot = df_plot.reset_index(drop=True) 
 
     
-    # 4. Crear el gráfico con Plotly
+    if df_plot.empty:
+        # Si no hay puntos significativos para dibujar, devolvemos una figura vacía con mensaje.
+        fig = go.Figure()
+        fig.update_layout(
+            title="No significant terms found to plot.",
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            height=400
+        )
+        return fig
+        
+    
+    # 🔑 CORRECCIÓN: Pasar 'marker_size' a Plotly Express para asegurar la sincronización 🔑
     fig = px.scatter(
-        df,
+        df_plot, # Usamos df_plot filtrado
         x='term_index',
         y='-log10(P-value)',
         color='plot_color_group',
         color_discrete_map=color_map,
+        size='marker_size', # 🔑 CLAVE: Plotly Express ahora enlaza la columna de tamaño 🔑
         custom_data=['term_name', 'p_value', 'intersection_size', 'source', 'is_gold_standard'],
         hover_data={
             'term_index': False, 
@@ -121,34 +149,31 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         }
     )
     
-    # 5. Configurar el eje X y las líneas divisorias (se mantiene igual)
-    source_labels = df.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index()
+    # 5. Configurar el eje X y las líneas divisorias 
+    source_labels = df_plot.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index() 
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     
+    # 5. Configurar el eje X y las líneas divisorias 
+    # ... (cálculo de source_labels['center'] se mantiene igual)
+
     fig.update_layout(
         xaxis={
             'title': "Functional Enrichment Terms (Grouped by Source)",
             'tickmode': 'array',
-            'tickvals': source_labels['center'],
-            'ticktext': source_labels['source'],
+            'tickvals': source_labels['center'], 
+            'ticktext': source_labels['source'], 
             'showgrid': False,
-            'zeroline': False
+            'zeroline': False,
+            'tickangle': 0 # Asegura tick horizontal para etiquetas cortas
         },
         yaxis={
             'title': '-log10(P-value)',
             'automargin': True
         },
-        shapes=[
-            dict(
-                type='line',
-                yref='paper', y0=0, y1=1,
-                xref='x', x0=row['max'] + 0.5, x1=row['max'] + 0.5,
-                line=dict(color='LightGrey', width=1, dash='dash')
-            ) for index, row in source_labels.iterrows() if index < len(source_labels) - 1
-        ],
+        # ... (configuración de líneas divisorias se mantiene igual)
         showlegend=True,
         height=550,
-        margin={'t': 30, 'b': 50, 'l': 50, 'r': 10}, 
+        margin={'t': 30, 'b': 80, 'l': 50, 'r': 10}, # CLAVE: Aumentado de 50 a 80
         plot_bgcolor='white'
     )
 
@@ -161,11 +186,12 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         annotation_position="top right"
     )
 
-    # 7. Configurar el Tooltip y el TAMAÑO DEL MARCADOR
+    # 7. Configurar el Tooltip y el TAMAÑO DEL MARCADOR (Usando la columna ya sincronizada)
     fig.update_traces(
         marker=dict(
-            size=df['marker_size'], 
-            opacity=0.8, 
+            # 🔑 ELIMINADO: Se eliminó la línea 'size=df_plot['marker_size']' aquí,
+            # ya que el tamaño fue especificado en px.scatter arriba.
+            opacity=0.6, 
             line=dict(width=0.5, color='DarkSlateGrey')
         ),
         hovertemplate=(

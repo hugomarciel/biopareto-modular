@@ -5,6 +5,7 @@ services:
   # 1. SERVICIO DE LA APLICACIÓN (DASH/GUNICORN)
   app:
     # Usando la imagen que subiste a Docker Hub (hugomarciel/pareto-app:v2.0-ssl)
+    #image: hugomarciel/biopareto:V1.0
     image: hugomarciel/pareto-app:v2.0-ssl
     container_name: biopareto_app
     restart: unless-stopped
