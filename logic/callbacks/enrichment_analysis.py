@@ -1054,46 +1054,55 @@ def register_enrichment_callbacks(app):
             return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}, go.Figure()
         raise PreventUpdate
 
-    # --- CALLBACKS DE REACTOME (SE MANTIENEN IGUAL) ---
+    # logic/callbacks/enrichment_analysis.py (Reemplazar la función run_reactome_analysis)
+
+    # 5. Callback para ejecutar el análisis de Reactome
     @app.callback(
+        # CAMBIO CLAVE: DEFINICIÓN ORIGINAL (SIN allow_duplicate=True) 
         Output('reactome-results-store', 'data'), 
         Input('run-reactome-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
-         State('interest-panel-store', 'data'),
-         State('reactome-organism-input', 'value')], 
+        State('interest-panel-store', 'data'),
+        State('reactome-organism-input', 'value')], 
         prevent_initial_call=True
     )
     def run_reactome_analysis(n_clicks, selected_indices, items, organism_name):
+        """Executes Reactome enrichment analysis and stores results."""
         if not n_clicks or not selected_indices:
             raise PreventUpdate
-        
+
+        # 1. Recolectar lista final de genes (Misma lógica que antes)
         combined_genes = set()
         for idx in selected_indices:
-            if idx < len(items):
-                item = items[idx]
-                item_type = item.get('type', '')
-                
-                if item_type == 'solution':
-                    combined_genes.update(item.get('data', {}).get('selected_genes', []))
-                elif item_type == 'solution_set':
-                    solutions = item.get('data', {}).get('solutions', [])
-                    for sol in solutions:
-                        combined_genes.update(sol.get('selected_genes', []))
-                elif item_type in ['gene_set', 'combined_gene_group']:
-                    combined_genes.update(item.get('data', {}).get('genes', []))
-                elif item_type == 'individual_gene':
-                    combined_genes.add(item.get('data', {}).get('gene', ''))
+            item = items[idx]
+            item_type = item.get('type', '')
+            
+            if item_type == 'solution':
+                combined_genes.update(item.get('data', {}).get('selected_genes', []))
+            elif item_type == 'solution_set':
+                solutions = item.get('data', {}).get('solutions', [])
+                for sol in solutions:
+                    combined_genes.update(sol.get('selected_genes', []))
+            elif item_type in ['gene_set', 'combined_gene_group']:
+                combined_genes.update(item.get('data', {}).get('genes', []))
+            elif item_type == 'individual_gene':
+                combined_genes.add(item.get('data', {}).get('gene', ''))
         
         gene_list = [g for g in combined_genes if g and isinstance(g, str)]
 
         if not gene_list:
+            # Retornar diccionario con lista de resultados vacía
             return {'results': [], 'token': 'N/A', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': 0}
 
+        # 2. Ejecutar servicio de Reactome
         service_response = ReactomeService.get_enrichment(gene_list, organism_name)
 
         if service_response is None:
-            return None
+            # Si hay error en API, devuelve un diccionario de error para que el store no sea None
+            return {'results': [], 'token': 'ERROR', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': len(gene_list)}
         
+        # 🔑 CLAVE: El service_response DEBE contener {token, results, organism_used_api, ...}
+        # Aseguramos que la lista de genes analizados se adjunte.
         service_response['gene_list'] = gene_list
         
         return service_response
@@ -1218,6 +1227,75 @@ def register_enrichment_callbacks(app):
 
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
+    # logic/callbacks/enrichment_analysis.py (Añadir/Reemplazar el Callback 6)
+
+    # 6. 🚀 CALLBACK DE VISUALIZACIÓN DEL DIAGRAMA COLOREADO
+    @app.callback(
+        Output('reactome-diagram-output', 'children', allow_duplicate=True),
+        # Escuchar la SELECCIÓN de fila en la tabla
+        Input('enrichment-results-table-reactome', 'selected_rows'),
+        # Necesitar los datos brutos de la tabla para obtener el ST_ID
+        State('enrichment-results-table-reactome', 'data'),
+        # Necesitar el token para generar la URL coloreada
+        State('reactome-results-store', 'data'),
+        prevent_initial_call=True
+    )
+    def visualize_reactome_diagram(selected_rows, table_data, stored_results):
+        """Genera y muestra la imagen de la vía de Reactome con el overlay de genes."""
+
+        if not selected_rows or not table_data:
+            # Si no hay selección, o si la tabla aún no se carga
+            raise PreventUpdate
+        
+        # 1. Extraer datos del Store de Resultados (Token)
+        # Verificamos si el token existe y si no es un placeholder de error.
+        if not stored_results or stored_results.get('token') in [None, 'N/A', 'ERROR'] or stored_results.get('token').startswith('REF_'):
+            return html.Div(dbc.Alert("Analysis Token not available or invalid. Run the Reactome Analysis first.", color="warning"), className="p-3")
+
+        analysis_token = stored_results['token']
+        
+        # 2. Obtener el Stable ID (ST_ID) de la vía seleccionada
+        # selected_rows es una lista de índices de fila (page_current * page_size + index)
+        selected_index = selected_rows[0]
+        selected_pathway_data = table_data[selected_index]
+        
+        # El ST_ID (Stable ID) está en la columna 'description'
+        pathway_st_id = selected_pathway_data.get('description')
+        pathway_name = selected_pathway_data.get('term_name')
+
+        if not pathway_st_id:
+            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3")
+
+        # 3. Generar la URL de la Imagen Coloreada
+        diagram_url = ReactomeService.get_diagram_url(
+            pathway_st_id=pathway_st_id, 
+            analysis_token=analysis_token,
+            file_format="png" 
+        )
+        
+        if diagram_url == "/assets/reactome_placeholder.png":
+            return html.Div(dbc.Alert("Could not generate diagram URL (Token issue).", color="warning"), className="p-3")
+
+        # 4. Renderizar la Imagen en Dash
+        return html.Div([
+            html.H5(f"Pathway Visualization: {pathway_name}", className="mt-3"),
+            html.P(f"Stable ID: {pathway_st_id}", className="text-muted small"),
+            html.A(
+                html.Img(
+                    src=diagram_url, 
+                    alt=f"Reactome Diagram for {pathway_name} with gene overlay.",
+                    style={'maxWidth': '100%', 'height': 'auto', 'border': '1px solid #ddd', 'borderRadius': '5px'}
+                ),
+                # Enlace para abrir el diagrama interactivo de Reactome en una nueva pestaña
+                href=f"https://reactome.org/content/detail/{pathway_st_id}?analysis={analysis_token}",
+                target="_blank",
+                className="d-block mt-3"
+            ),
+            html.P(
+                html.Strong("Click the image to view the interactive diagram on Reactome.org"), 
+                className="text-center text-info small mt-2"
+            )
+        ], className="mt-4 p-3 border rounded shadow-sm")
 
     @app.callback(
         Output('reactome-results-store', 'data', allow_duplicate=True),
