@@ -1,4 +1,4 @@
-# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON CORRECCIÓN)
+# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON CORRECCIÓN DE ORDEN DE MANHATTAN Y NUEVO CONTENEDOR DE HEATMAP)
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc
@@ -6,7 +6,7 @@ from dash import html, dcc
 from services.gprofiler_service import get_organisms_from_api 
 from services.reactome_service import ReactomeService
 
-# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot - ELIMINADO Threshold Display Type)
+# ui/layouts/enrichment_tab.py (Fragmento con Manhattan Plot - ORDEN INVERTIDO)
 
 # --- Componente de Layout de g:Profiler ---
 def create_gprofiler_layout(organism_options):
@@ -27,7 +27,15 @@ def create_gprofiler_layout(organism_options):
         
         html.Hr(),
 
-        # CONTENEDOR PARA EL MANHATTAN PLOT Y CONTROLES
+        # 1. Área de resultados específica para g:Profiler (Tabla) - AHORA ARRIBA
+        dcc.Loading(
+            html.Div(id="gprofiler-results-content"), 
+            type="default"
+        ),
+        
+        html.Hr(), # Separador entre la tabla y el gráfico
+
+        # 2. CONTENEDOR PARA EL MANHATTAN PLOT Y CONTROLES - AHORA ABAJO
         dbc.Card([
             dbc.CardHeader(html.H4("Manhattan Plot: Functional Enrichment (Gold Standard Filter)", className="mb-0")),
             dbc.CardBody([
@@ -53,14 +61,21 @@ def create_gprofiler_layout(organism_options):
                     type="default"
                 )
             ])
-        ], className="mt-3 mb-4"),
+        ], id="gprofiler-manhattan-card", className="mt-3 mb-4"), # Se añade ID al Card para un futuro control
+
+        html.Hr(), # Separador entre Manhattan y Heatmap
+
+        # 3. 🔑 NUEVO CONTENEDOR PARA EL CLUSTERGRAM/HEATMAP 🔑
+        dbc.Card([
+            dbc.CardHeader(html.H4("Functional Clustergram (Gene-Term Heatmap)", className="mb-0")),
+            dbc.CardBody([
+                dcc.Loading(
+                    html.Div(id='gprofiler-clustergram-output'), # 🔑 ID CLAVE DEL OUTPUT 🔑
+                    type="default"
+                )
+            ])
+        ], id="gprofiler-clustergram-card", className="mt-3 mb-4"),
         
-        html.Hr(),
-        # Área de resultados específica para g:Profiler (Tabla)
-        dcc.Loading(
-            html.Div(id="gprofiler-results-content"), 
-            type="default"
-        )
     ], className="mt-3")
 
 
