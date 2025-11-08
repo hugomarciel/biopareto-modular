@@ -314,7 +314,7 @@ def create_gene_term_heatmap(heatmap_matrix):
         fig.update_layout(title="No significant gene-term associations remain after filtering.", height=400)
         return fig
     
-    # --- 1. VALIDACIÓN DE TAMAÑO PARA CLUSTERING ---
+    # --- 1. VALIDACIÓN Y CLUSTERING (Se mantiene igual) ---
     perform_row_clustering = heatmap_matrix.shape[0] >= 2
     perform_col_clustering = heatmap_matrix.shape[1] >= 2
     
@@ -324,13 +324,11 @@ def create_gene_term_heatmap(heatmap_matrix):
     # --- 2. CLUSTERING JERÁRQUICO (CONDICIONAL) ---
     
     try:
-        # Intento de clustering de filas (Términos)
         if perform_row_clustering:
             row_linkage = sch.linkage(pdist(clustered_matrix, metric='correlation'), method='average')
             row_order_indices = sch.dendrogram(row_linkage, orientation='right', no_plot=True)['leaves']
             clustered_matrix = clustered_matrix.iloc[row_order_indices, :]
         
-        # Intento de clustering de columnas (Genes)
         if perform_col_clustering:
             col_linkage = sch.linkage(pdist(clustered_matrix.T, metric='correlation'), method='average')
             col_order_indices = sch.dendrogram(col_linkage, orientation='top', no_plot=True)['leaves']
@@ -349,6 +347,10 @@ def create_gene_term_heatmap(heatmap_matrix):
     
     colormap = px.colors.sequential.Plasma
     
+    # --- 🔑 SOLUCIÓN CLAVE: GENERAR MATRIZ DE TEXTO BINARIO PARA HOVER 🔑 ---
+    # Si Z > 0, es miembro ("Sí"); si Z = 0, no es miembro ("No").
+    member_matrix = np.where(clustered_matrix.values > 0, "Sí", "No")
+    
     # --- 4. CREACIÓN DE LA FIGURA ---
     fig = go.Figure(data=go.Heatmap(
         z=clustered_matrix.values,
@@ -360,17 +362,18 @@ def create_gene_term_heatmap(heatmap_matrix):
         showscale=True,
         colorbar=dict(
             title=dict(
-                text='-log10(p-value)',
+                text='-log10(q-value)',
                 side='right'
             ),
             thickness=15,
             len=0.7
         ),
+        customdata=member_matrix, # 🔑 PASAMOS LA MATRIZ DE TEXTO 'Sí/No'
         hovertemplate=(
             "<b>Term:</b> %{y}<br>"
             "<b>Gene:</b> %{x}<br>"
             "<b>-log10(p-value):</b> %{z:.2f}<br>"
-            "<b>Membresía:</b> %{z} > 0 (Sí)<br>"
+            "<b>Membresía:</b> %{customdata} <br>" # 🔑 REFERENCIAMOS EL VALOR TEXTUAL
             "<extra></extra>"
         )
     ))
