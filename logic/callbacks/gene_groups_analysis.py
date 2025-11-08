@@ -444,29 +444,24 @@ def register_gene_groups_callbacks(app):
                 # *** MODIFICACIÓN AQUÍ ***
                 # Se mantiene la estructura original de venn_section (un dbc.Row con dos columnas)
                 venn_section = dbc.Row([
+                    # Columna 1: El diagrama de Venn
                     dbc.Col([
                         html.H5("Venn Diagram", className="mb-3"),
                         legend_card,
                         html.Img(src=f"data:image/png;base64,{img_base64}",
                                 style={'maxWidth': '100%', 'height': 'auto'})
-                    ], width=12, lg=6), # Responsive: full width en pequeño, 6 en grande
+                    ], width=12, lg=6), # Responsive: 6 columnas en pantallas grandes
+                    
+                    # Columna 2: La lista de intersecciones (CORREGIDA)
                     dbc.Col([
                         html.Div([
                             html.H5("Gene Intersections", className="mb-0 d-inline-block"),
-                            # Botón Add All Intersections
-                            dbc.Button(
-                                "Add All Intersections 📌",
-                                id="add-all-intersections-btn",
-                                color="success",
-                                size="sm",
-                                className="ms-3",
-                                style={'fontSize': '0.8rem'},
-                                disabled=not intersection_data_list
-                            )
+                            # Botón Add All Intersections (ELIMINADO)
                         ], className="d-flex align-items-center mb-3"),
                         html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'})
-                    ], width=12, lg=6) # Responsive: full width en pequeño, 6 en grande
-                ], className="mb-4")
+                    ], width=12, lg=6, className="mb-4") # Responsive: 6 columnas en pantallas grandes
+
+                ]) # Cierre del dbc.Row
 
             except Exception as e:
                 # Fallback si matplotlib_venn falla
@@ -672,55 +667,29 @@ def register_gene_groups_callbacks(app):
 
         raise PreventUpdate
 
-    # 5. Callback para abrir el modal de intersección (individual o Add All)
+   # (Este es el NUEVO callback modificado)
     @app.callback(
         [Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True),
          Output('gene-groups-analysis-tab-modal-info', 'children', allow_duplicate=True),
          Output('gene-groups-analysis-tab-name-input', 'value', allow_duplicate=True),
          Output('gene-groups-analysis-tab-comment-input', 'value', allow_duplicate=True),
          Output('gene-groups-analysis-tab-temp-store', 'data', allow_duplicate=True)],
-        [Input({'type': 'add-intersection-btn', 'index': ALL}, 'n_clicks'),
-         Input('add-all-intersections-btn', 'n_clicks')],
+        [Input({'type': 'add-intersection-btn', 'index': ALL}, 'n_clicks')], # <-- Input ELIMINADO
         [State('intersection-data-temp-store', 'data'),
          State({'type': 'add-intersection-btn', 'index': ALL}, 'id')],
         prevent_initial_call=True
     )
-    def open_intersection_modal_or_add_all(single_n_clicks, all_n_clicks, intersection_data, single_btn_ids):
-        """Open modal to save an individual intersection or setup for 'Add All'."""
+    def open_intersection_modal_or_add_all(single_n_clicks, intersection_data, single_btn_ids): # <-- Arg 'all_n_clicks' ELIMINADO
+        """Open modal to save an individual intersection.""" # <-- Docstring actualizado
         ctx = dash.callback_context
         if not intersection_data:
             raise PreventUpdate
 
-        triggered_input = ctx.triggered[0]['prop_id']
-        trigger_id = triggered_input.split('.')[0]
-        
-        # 1. Manejo de la lógica 'Add All' (Botón Fijo)
-        if trigger_id == 'add-all-intersections-btn' and all_n_clicks and all_n_clicks > 0:
-            
-            all_genes = set()
-            for intersection in intersection_data:
-                all_genes.update(intersection['genes'])
-                
-            group_data = {
-                'genes': list(all_genes),
-                'sources': [item['name'] for item in intersection_data],
-                'meta_type': 'all_intersections_set',
-                'name': f"Combined Intersections Set ({len(intersection_data)})"
-            }
-            
-            modal_info = html.Div([
-                html.P([html.Strong("Adding Gene Group (Combined Intersections): ")]),
-                html.P([html.Strong("Total Unique Genes: "), html.Span(f"{len(all_genes)}")]),
-                html.P([html.Strong("Sources: "), html.Span(f"{len(intersection_data)} Intersections")])
-            ])
-            
-            tentative_name = f"All Intersections Set - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            tentative_comment = f"Union of {len(intersection_data)} Venn diagram intersections. Total unique genes: {len(all_genes)}."
-
-            return True, modal_info, tentative_name, tentative_comment, group_data
+        # 1. Lógica 'Add All' (ELIMINADA)
 
         # 2. Manejo de la lógica de intersección individual (Botones Dinámicos)
-        if 'add-intersection-btn' in trigger_id and any(c is not None and c > 0 for c in single_n_clicks):
+        # Se simplifica la condición ya que es la única entrada
+        if any(c is not None and c > 0 for c in single_n_clicks):
             
             triggered_dict = ctx.triggered_id 
             
