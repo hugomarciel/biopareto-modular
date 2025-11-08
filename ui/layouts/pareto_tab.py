@@ -64,7 +64,6 @@ def create_pareto_tab():
                                 html.H4(id="pareto-plot-title", className="text-primary mb-0")
                             ]),
                             dbc.CardBody([
-                                # Añadido relayoutData para capturar zoom/pan
                                 dcc.Graph(id='pareto-plot', style={'height': '500px'}, config={'responsive': True}),
                                 html.Hr(),
                                 html.Div([
@@ -119,5 +118,25 @@ def create_pareto_tab():
                     ], width=12)
                 ], className="mb-3"),
             ], width=12),
-        ])
+        ]),
+        
+        # --- AÑADIDO: Store y Modal para puntos múltiples ---
+        dcc.Store(id='multi-solution-modal-store'),
+        
+        dbc.Modal(
+            [
+                dbc.ModalHeader(id="multi-solution-modal-header"),
+                dbc.ModalBody(id="multi-solution-modal-body"),
+                dbc.ModalFooter(
+                    dbc.Button("Close", id="multi-solution-modal-close-btn", className="ms-auto")
+                ),
+            ],
+            id="multi-solution-modal",
+            size="xl", # Extra Large para más espacio
+            is_open=False,
+            scrollable=True, # Para listas largas
+            centered=True,
+        )
+        # --- FIN DE LO AÑADIDO ---
+
     ], fluid=True)
