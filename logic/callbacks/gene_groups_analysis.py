@@ -670,30 +670,4 @@ def register_gene_groups_callbacks(app):
                     return True, modal_info, tentative_name, tentative_comment, group_data
 
         raise PreventUpdate
-
-    # 6. Callback para resetear n_clicks de los botones de apertura cuando el modal se cierra
-    @app.callback(
-        [Output('save-combined-group-btn-top', 'n_clicks', allow_duplicate=True),
-         Output('add-all-intersections-btn', 'n_clicks', allow_duplicate=True),
-         Output({'type': 'add-intersection-btn', 'index': ALL}, 'n_clicks', allow_duplicate=True)],
-        Input('gene-groups-analysis-tab-modal', 'is_open'),
-        [State('save-combined-group-btn-top', 'n_clicks'),
-         State('add-all-intersections-btn', 'n_clicks'),
-         State({'type': 'add-intersection-btn', 'index': ALL}, 'id')],
-        prevent_initial_call=True
-    )
-    def reset_group_modal_buttons(is_open, current_save_clicks, current_all_clicks, dynamic_ids):
-        """Resetea los n_clicks de los botones de apertura cuando el modal se cierra (is_open es False)."""
-        
-        if not is_open:
-            reset_save_clicks = 0 if current_save_clicks is not None else dash.no_update
-            reset_all_clicks = 0 if current_all_clicks is not None else dash.no_update
-            
-            if dynamic_ids:
-                 reset_dynamic_clicks = [0] * len(dynamic_ids)
-            else:
-                 reset_dynamic_clicks = dash.no_update
-            
-            return reset_save_clicks, reset_all_clicks, reset_dynamic_clicks
-        
-        raise PreventUpdate
+    
