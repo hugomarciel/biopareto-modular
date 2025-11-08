@@ -266,7 +266,7 @@ def register_gene_groups_callbacks(app):
         
         # --- Generar Componentes de Resultados ---
         
-        # A. Summary Stats (No modificado, utiliza unique_genes y item_gene_sets)
+        # A. Summary Stats
         summary_stats = dbc.Card([
             dbc.CardHeader(html.H5("Summary Statistics", className="mb-0")),
             dbc.CardBody([
@@ -441,14 +441,15 @@ def register_gene_groups_callbacks(app):
                     ], className="mb-2")
                     intersection_cards.append(card)
 
-
+                # *** MODIFICACIÓN AQUÍ ***
+                # Se mantiene la estructura original de venn_section (un dbc.Row con dos columnas)
                 venn_section = dbc.Row([
                     dbc.Col([
                         html.H5("Venn Diagram", className="mb-3"),
                         legend_card,
                         html.Img(src=f"data:image/png;base64,{img_base64}",
                                 style={'maxWidth': '100%', 'height': 'auto'})
-                    ], width=6),
+                    ], width=12, lg=6), # Responsive: full width en pequeño, 6 en grande
                     dbc.Col([
                         html.Div([
                             html.H5("Gene Intersections", className="mb-0 d-inline-block"),
@@ -464,7 +465,7 @@ def register_gene_groups_callbacks(app):
                             )
                         ], className="d-flex align-items-center mb-3"),
                         html.Div(intersection_cards, style={'maxHeight': '450px', 'overflowY': 'auto'})
-                    ], width=6)
+                    ], width=12, lg=6) # Responsive: full width en pequeño, 6 en grande
                 ], className="mb-4")
 
             except Exception as e:
@@ -480,7 +481,7 @@ def register_gene_groups_callbacks(app):
                       className="text-muted fst-italic")
             ])
         
-        # C. Gene Frequency Table/Chart (No modificado)
+        # C. Gene Frequency Table/Chart
         gene_frequency = []
         for gene, sources in gene_sources.items():
             gene_frequency.append({
@@ -492,16 +493,59 @@ def register_gene_groups_callbacks(app):
         gene_freq_df = pd.DataFrame(gene_frequency).sort_values('Frequency', ascending=False)
         gene_freq_df.insert(0, 'N°', range(1, 1 + len(gene_freq_df)))
         
+        # (Este es el NUEVO bloque, reemplaza al anterior)
+
+        # Determinar el número de genes a mostrar por defecto
+        default_items_to_show = 50
+        
+        # 1. Crear el gráfico usando el DataFrame COMPLETO
         fig_bar = px.bar(
-            gene_freq_df.head(20),
+            gene_freq_df,  # <--- Usar el DF completo, no .head(20)
             x='Gene',
             y='Frequency',
-            title='Top 20 Genes by Frequency Across Selected Items',
+            title=f'Gene Frequency (Top {default_items_to_show} shown by default)', # Título actualizado
             labels={'Frequency': 'Number of Sources'},
             color='Frequency',
             color_continuous_scale='Blues'
         )
-        fig_bar.update_layout(xaxis_tickangle=-45, height=400)
+        
+        # 2. Establecer el rango inicial del eje X para mostrar solo los primeros N items
+        # (Usamos -0.5 y N-0.5 para incluir bien los N primeros Ticks, de 0 a N-1)
+        
+        # Asegurarse de que el rango no sea más grande que el total de genes.
+        max_range_index = min(default_items_to_show, len(gene_freq_df))
+        
+        fig_bar.update_layout(
+            xaxis_tickangle=-45, 
+            height=450, 
+            xaxis_range=[-0.5, max_range_index - 0.5], 
+            
+            # --- SECCIÓN CORREGIDA ---
+            xaxis_rangeslider=dict(
+                visible=True,
+                
+                # 'bgcolor' establece el color de fondo del slider (área no seleccionada)
+                bgcolor="lightgray", 
+                
+                # 'bordercolor' establece el color del borde de los "handles" (lo que marcaste en rojo)
+                bordercolor="gold",  # Un color oscuro (azul marino) para alta visibilidad
+                
+                # 'borderwidth' hace que ese borde sea más grueso
+                borderwidth=2,       
+                
+                thickness=0.15
+                # La propiedad 'rangecolor' ha sido eliminada.
+            )
+            # -------------------------
+        )
+        
+        
+       
+        
+        gene_freq_chart_component = html.Div([
+            html.H5("Gene Frequency Chart", className="mt-4 mb-3"),
+            dcc.Graph(figure=fig_bar)
+        ])
         
         table = dbc.Table.from_dataframe(
             gene_freq_df,
@@ -513,6 +557,13 @@ def register_gene_groups_callbacks(app):
             style={'fontSize': '0.85rem'} 
         )
         
+        gene_freq_table_component = html.Div([
+            html.H5("Gene Frequency Table", className="mt-4 mb-3"),
+            table
+        ])
+        
+        # (Este es el NUEVO bloque, reemplaza el anterior)
+
         buttons_row = dbc.Row([
             dbc.Col([
                 dbc.Button(
@@ -530,19 +581,46 @@ def register_gene_groups_callbacks(app):
             ], className="mb-3")
         ])
 
+        # --- INICIO DE LÓGICA DE LAYOUT MODIFICADA ---
+        
+        num_items = len(item_gene_sets)
+        
+        # Comprobar si, después de procesar, se encontró algún ítem válido.
+        if num_items == 0:
+             # Esto maneja el caso donde se seleccionaron ítems, pero ninguno era válido.
+             return html.Div("No valid gene groups to compare.", className="alert alert-info mt-4"), None, [], selected_indices
+
+        final_layout = [buttons_row]
+
+        if num_items == 1:
+            # Requisito 2: Si hay 1 item, mostrar solo la tabla de genes.
+            final_layout.append(html.H5("Gene Frequency Table", className="mt-4 mb-3"))
+            final_layout.append(table)
+        
+        elif num_items >= 2:
+            # Requisito 1: Si hay 2+ items, mostrar todo: summary, venn, chart y table.
+            
+            # Añadir estadísticas resumen
+            final_layout.append(summary_stats)
+            
+            # venn_section ya es el componente correcto (diagrama, mensaje, o None)
+            if venn_section:
+                final_layout.append(venn_section)
+            
+            # Añadir el gráfico de frecuencia (junto con el venn, si aplica)
+            final_layout.append(html.H5("Gene Frequency Chart", className="mt-4 mb-3"))
+            final_layout.append(dcc.Graph(figure=fig_bar))
+
+            # Añadir la tabla de frecuencia
+            final_layout.append(html.H5("Gene Frequency Table", className="mt-4 mb-3"))
+            final_layout.append(table)
+
+        # --- FIN DE LÓGICA DE LAYOUT MODIFICADA ---
 
         # Store data for genes and sources (Asegurando que las claves sean las nuevas)
         store_data = {'genes': list(unique_genes), 'sources': list(item_gene_sets.keys())}
         
-        return html.Div([
-            buttons_row,
-            summary_stats,
-            venn_section if venn_section else None,
-            html.H5("Gene Frequency Chart", className="mt-4 mb-3"),
-            dcc.Graph(figure=fig_bar),
-            html.H5("Gene Frequency Table", className="mt-4 mb-3"),
-            table
-        ]), store_data, intersection_data_list, selected_indices
+        return html.Div(final_layout), store_data, intersection_data_list, selected_indices
 
     # 3. Callback para limpiar la selección de Gene Groups (Checkboxes)
     @app.callback(
@@ -670,4 +748,3 @@ def register_gene_groups_callbacks(app):
                     return True, modal_info, tentative_name, tentative_comment, group_data
 
         raise PreventUpdate
-    
