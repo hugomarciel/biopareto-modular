@@ -79,7 +79,9 @@ def create_gprofiler_layout(organism_options):
     ], className="mt-3")
 
 
-# --- Componente de Layout de Reactome (CORREGIDO para layout vertical con Fireworks) ---
+# ui/layouts/enrichment_tab.py (Fragmento con la función create_reactome_layout)
+
+# --- Componente de Layout de Reactome (CORREGIDO para layout vertical con nuevo orden y foco) ---
 def create_reactome_layout(organism_options):
     return html.Div([
         dbc.Row([
@@ -103,22 +105,7 @@ def create_reactome_layout(organism_options):
         
         html.Hr(),
         
-        # 1. CONTENEDOR DE VISUALIZACIÓN GLOBAL (FIREWORKS)
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader(html.H4("Global Pathway Overview (Fireworks)", className="mb-0")),
-                    dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), # Eliminamos padding excesivo
-                        # 🔑 NUEVO CONTENEDOR PARA EL IFRAME DE FIREWORKS 🔑
-                        html.Div(id='reactome-fireworks-output', children=[
-                            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info")
-                        ], className="p-1 border rounded")
-                    
-                ], className="h-100"),
-            ], width=12) # Ocupa todo el ancho en la parte superior
-        ], className="g-4 mb-4"), 
-        
-        # 2. CONTENEDOR DE RESULTADOS TABULARES
+        # 1. 🔑 CONTENEDOR DE RESULTADOS TABULARES (AHORA EL PRIMERO) 🔑
         dbc.Row([
             dbc.Col([
                 dcc.Loading(
@@ -128,7 +115,7 @@ def create_reactome_layout(organism_options):
             ], width=12),
         ], className="g-4 mb-4"),
         
-        # 3. CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA (Abajo de la tabla)
+        # 2. 🔑 CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA (AHORA EL SEGUNDO) 🔑
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -141,22 +128,53 @@ def create_reactome_layout(organism_options):
                     
                 ], className="h-100"),
             ], width=12) 
-        ], className="g-4")
+        ], className="g-4 mb-4"),
+        
+        # 3. 🔑 CONTENEDOR DE VISUALIZACIÓN GLOBAL (FIREWORKS - AHORA EL TERCERO) 🔑
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader(html.H4("Global Pathway Overview (Fireworks)", className="mb-0")),
+                    dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), 
+                        # CONTENEDOR PARA EL IFRAME DE FIREWORKS
+                        html.Div(id='reactome-fireworks-output', children=[
+                            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info")
+                        ], className="p-1 border rounded")
+                    
+                ], className="h-100"),
+            ], width=12) 
+        ], className="g-4"),
+        dcc.Store(id='reactome-scroll-fix-dummy', data=0)
         
     ], className="mt-3")
+# El resto del archivo create_enrichment_tab_modified() se mantiene igual
 
+# ui/layouts/enrichment_tab.py (Función create_enrichment_tab_modified COMPLETAMENTE MODIFICADA)
+
+import dash_bootstrap_components as dbc
+from dash import html, dcc
+from services.gprofiler_service import get_organisms_from_api 
+from services.reactome_service import ReactomeService
+
+# --- Se mantienen create_gprofiler_layout y create_reactome_layout ---
+
+# ui/layouts/enrichment_tab.py (Función create_enrichment_tab_modified COMPLETAMENTE MODIFICADA)
+
+import dash_bootstrap_components as dbc
+from dash import html, dcc
+from services.gprofiler_service import get_organisms_from_api 
+from services.reactome_service import ReactomeService
+
+# --- Se mantienen create_gprofiler_layout y create_reactome_layout ---
 
 def create_enrichment_tab_modified(): 
     """Create biological analysis tab with internal tabs for Multi-API support."""
     
-    # Manejar importación para gprofiler por si get_organisms_from_api no existe o falla
     try:
         organism_options_gprofiler = get_organisms_from_api() 
     except Exception:
-        # Fallback si el servicio gprofiler no está disponible
         organism_options_gprofiler = [{'label': 'Homo sapiens', 'value': 'hsapiens'}]
         
-    # NUEVA LLAMADA
     organism_options_reactome = ReactomeService.get_reactome_organisms()
     
     return dbc.Container([
@@ -172,42 +190,50 @@ def create_enrichment_tab_modified():
 
                         html.Hr(),
 
-                        # Selector de Items
+                        # 1. Selector de Items (Selector de tarjetas)
                         html.Div([
                             html.H5("Select Items for Gene Aggregation:", className="mb-3"),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.P("Genes from all selected items will be combined for the enrichment analysis.",
-                                        className="text-muted small mb-3"),
-                                ], width=9),
-                                dbc.Col([
-                                    # NUEVO: Botón para limpiar la selección
-                                    dbc.Button("🗑️ Clear Selection", 
-                                        id="clear-enrichment-selection-btn", 
-                                        color="danger", 
-                                        size="sm", 
-                                        className="w-100 mb-3"),
-                                ], width=3)
-                            ]),
+
+                            html.P("Genes from all selected items will be combined for the enrichment analysis.",
+                                className="text-muted small mb-3"),
+
                             html.Div(id='enrichment-visual-selector', children=[
                                 html.P("Loading items...", className="text-muted text-center py-4")
                             ])
                         ], className="mb-4"),
 
-                        # Panel de Resumen de Selección
-                        html.Div(id='enrichment-selection-panel'), 
-
+                        # 2. 🔑 BARRA DE BOTONES DE ACCIÓN (INSERCIÓN DIRECTA) 🔑
+                        # Inserción directa en una fila de 12 para que ocupe el espacio deseado
+                        dbc.Row([
+                            dbc.Col([
+                                # 🔑 CONTENEDOR DEL BOTÓN DE LIMPIEZA (Ubicación de la marca roja) 🔑
+                                html.Div(
+                                    dbc.Button("Clear Selection", 
+                                        id="clear-enrichment-selection-btn", 
+                                        color="secondary", 
+                                        outline=True, 
+                                        size="md", # Tamaño medio para coincidir
+                                        className="me-2" # Margen derecho
+                                    ),
+                                    id="clear-enrichment-btn-container",
+                                    # INICIALMENTE OCULTO
+                                    style={'display': 'none', 'width': 'auto'} # Ajuste de ancho a contenido
+                                ),
+                            ], width=12, className="mb-4"), # Espacio debajo del selector de tarjetas
+                        ]),
+                        
+                        # 3. PANEL DE RESUMEN DE SELECCIÓN (Justo debajo de la barra de acción)
+                        html.Div(id='enrichment-selection-panel'),
+                        
                         html.Hr(),
 
-                        # PESTAÑAS INTERNAS DE SERVICIOS
+                        # 4. PESTAÑAS INTERNAS DE SERVICIOS (Se mantiene)
                         html.H5("Select Enrichment Service:", className="mb-3"),
                         dbc.Tabs([
                             dbc.Tab(label="g:Profiler (GO, KEGG, REAC)", tab_id="gprofiler-tab", children=[
-                                # CAMBIO: Pasar el listado de g:Profiler
                                 create_gprofiler_layout(organism_options_gprofiler)
                             ]),
                             dbc.Tab(label="Reactome Pathways", tab_id="reactome-tab", children=[
-                                # CAMBIO: Pasar el listado de Reactome
                                 create_reactome_layout(organism_options_reactome)
                             ]),
                         ], id="enrichment-service-tabs", active_tab="gprofiler-tab"),

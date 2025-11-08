@@ -445,9 +445,35 @@ def create_gene_term_heatmap(heatmap_matrix):
                 
     # return heatmap_matrix, debug_counters
 
-# --- INICIO DE REGISTERCALLBACKS ---
-def register_enrichment_callbacks(app): 
+    # logic/callbacks/enrichment_analysis.py (Añadir un nuevo callback dentro de register_enrichment_callbacks)
+# logic/callbacks/enrichment_analysis.py (CALLBACK 2.6 - Se mantiene igual)
 
+    # logic/callbacks/enrichment_analysis.py (Callback 2.6)
+
+  # logic/callbacks/enrichment_analysis.py (Callback 2.6)
+
+# logic/callbacks/enrichment_analysis.py (Callback 2.6)
+
+    # logic/callbacks/enrichment_analysis.py (Callback 2.6)
+
+    # 2.6. CALLBACK PARA CONTROLAR LA VISIBILIDAD DEL BOTÓN CLEAR SELECTION 
+    @app.callback(
+        Output('clear-enrichment-btn-container', 'style'),
+        Input('enrichment-selected-indices-store', 'data')
+    )
+    def toggle_clear_selection_button(selected_indices):
+        """
+        Muestra el botón 'Clear Selection' solo si hay ítems seleccionados.
+        """
+        if selected_indices and len(selected_indices) > 0:
+            # Si hay selección, mostrar el botón.
+            return {'display': 'block', 'width': 'auto'}
+        # Si no hay selección, ocultar el botón
+        return {'display': 'none', 'width': 'auto'}
+
+
+def register_enrichment_callbacks(app): 
+    
     # 1. Callback de Actualización de IDs y Trigger
     @app.callback(
         [Output('enrichment-selected-item-ids-store', 'data', allow_duplicate=True),
@@ -529,7 +555,7 @@ def register_enrichment_callbacks(app):
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
 
-            # Lógica de creación de tarjeta (se mantiene igual)
+            # Lógica de creación de tarjeta (Se mantiene igual)
             
             if item_type == 'solution':
                 badge_color = "primary"
@@ -625,6 +651,12 @@ def register_enrichment_callbacks(app):
         return dbc.Row(cards, className="g-3")
 
 
+    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
+
+    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
+
+    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
+
     # 2. Callback para manejar la selección de los checkboxes, actualizar el Store y el panel de resumen
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data'),
@@ -651,7 +683,12 @@ def register_enrichment_callbacks(app):
         selected_indices_list = sorted(list(selected_indices))
         
         if not selected_indices_list:
-            return selected_indices_list, html.Div("No items selected. Select items above to view the combined gene list.", className="text-muted p-3")
+            # 🔑 CORRECCIÓN SOLICITADA: Usar el estilo "alert alert-info mt-4" (o mt-3 para consistencia de margen)
+            return selected_indices_list, html.Div([
+                dbc.Alert("No items selected. Select items above to view the combined gene list.", 
+                          color="info", # Color de fondo azul claro (info)
+                          className="mt-3") # Usamos mt-3 en lugar de mt-4 para que coincida con el espacio alrededor
+            ])
 
         combined_genes = set()
         for idx in selected_indices_list:
@@ -688,7 +725,7 @@ def register_enrichment_callbacks(app):
         
         return selected_indices_list, summary_panel
     
-    # 2.5. Callback de limpiar la selección de tarjetas (NUEVO)
+    # 2.5. Callback de limpiar la selección de tarjetas
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
          Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
@@ -697,8 +734,29 @@ def register_enrichment_callbacks(app):
     )
     def clear_enrichment_selection(n_clicks):
         if n_clicks and n_clicks > 0:
-            return [], html.Div("No items selected. Select items above to view the combined gene list.", className="text-muted p-3")
+            # 🔑 CORRECCIÓN SOLICITADA: Usar el estilo "alert alert-info mt-4" (o mt-3 para consistencia de margen)
+            return [], html.Div([
+                dbc.Alert("No items selected. Select items above to view the combined gene list.", 
+                          color="info", # Color de fondo azul claro (info)
+                          className="mt-3") # Usamos mt-3 para consistencia con el otro callback
+            ])
         raise PreventUpdate
+
+    # 2.6. CALLBACK PARA CONTROLAR LA VISIBILIDAD DEL BOTÓN CLEAR SELECTION 
+    @app.callback(
+        Output('clear-enrichment-btn-container', 'style'),
+        Input('enrichment-selected-indices-store', 'data')
+    )
+    def toggle_clear_selection_button(selected_indices):
+        """
+        Muestra el botón 'Clear Selection' solo si hay ítems seleccionados.
+        """
+        if selected_indices and len(selected_indices) > 0:
+            # Si hay selección, mostrar el botón
+            return {'display': 'block', 'height': '100%'}
+        # Si no hay selección, ocultar el botón
+        return {'display': 'none', 'height': '100%'}
+
 
     # 3. Callback para habilitar el botón de enriquecimiento (MODIFICADO para ambos botones)
     @app.callback(
@@ -1071,19 +1129,20 @@ def register_enrichment_callbacks(app):
         service_response['gene_list'] = gene_list
         
         return service_response
+# logic/callbacks/enrichment_analysis.py (Reemplazar la función display_reactome_results)
 
     @app.callback(
         [Output('reactome-results-content', 'children'),
-         Output('clear-reactome-results-btn', 'disabled'),
-         Output('reactome-diagram-output', 'children', allow_duplicate=True),
-         Output('reactome-fireworks-output', 'children', allow_duplicate=True)], 
+        Output('clear-reactome-results-btn', 'disabled'),
+        Output('reactome-diagram-output', 'children', allow_duplicate=True),
+        Output('reactome-fireworks-output', 'children', allow_duplicate=True)], 
         Input('reactome-results-store', 'data'),
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
         
         placeholder_diagram = html.Div(
-            dbc.Alert("Select a pathway from the table below to visualize the gene overlay.", color="secondary"), 
+            dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="secondary"), 
             className="p-3"
         )
         placeholder_fireworks = html.Div(
@@ -1113,7 +1172,8 @@ def register_enrichment_callbacks(app):
             fireworks_content = html.Iframe(
                 src=fireworks_url,
                 style={"width": "100%", "height": "500px", "border": "none"},
-                title=f"Reactome Pathway Browser/Fireworks visualization for {organism_used_api}"
+                title=f"Reactome Pathway Browser/Fireworks visualization for {organism_used_api}",
+                tabIndex="-1" # 🔑 CORRECCIÓN CLAVE: Esto previene el foco automático del navegador
             )
 
         
@@ -1142,7 +1202,7 @@ def register_enrichment_callbacks(app):
         display_columns = []
         for col in display_df.columns:
             if col == 'fdr_value':
-                 column_config = {'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
+                column_config = {'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
             elif col == 'p_value':
                 column_config = {'name': 'P-Value', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
             elif col == 'entities_found':
@@ -1152,7 +1212,7 @@ def register_enrichment_callbacks(app):
             elif col == 'term_name':
                 column_config = {'name': 'Pathway Name', 'id': col, 'type': 'text', 'hideable': True}
             elif col == 'description': 
-                 column_config = {'name': 'ST_ID', 'id': col, 'type': 'text'}
+                column_config = {'name': 'ST_ID', 'id': col, 'type': 'text'}
             else:
                 column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': True}
             
@@ -1340,3 +1400,35 @@ def register_enrichment_callbacks(app):
             figure=heatmap_fig, 
             config={'displayModeBar': True}
         )
+ 
+
+    # 🚫 8. CALLBACK CLIENT-SIDE FINAL PARA NEUTRALIZAR EL SCROLL DEL IFRAME 🚫
+    # Se activa cuando se actualiza el contenido de los 'Fireworks' y corrige el foco/scroll.
+    app.clientside_callback(
+        """
+        function(children) {
+            // El children contiene el HTML/Iframe. Verificamos que sea un array con contenido.
+            if (children && children.length > 0 && children[0] && children[0].type === 'iframe') {
+                
+                // Usamos un timeout más largo (800ms) para asegurarnos de que el Iframe haya 
+                // terminado de procesar su script interno que causa el foco/scroll.
+                setTimeout(function() {
+                    // Forzar el scroll a la parte superior de la página (0, 0)
+                    // Usamos 'smooth' o 'auto' para evitar un salto visual brusco, pero si 'smooth' falla,
+                    // es mejor usar 'auto'. Usaremos 'auto' para la mayor compatibilidad.
+                    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                    
+                    // Opcional: Si sabemos el ID del componente (ej. 'main-content-area'), 
+                    // también podemos hacer scroll a ese elemento. Aquí usaremos el documento.
+
+                }, 800); 
+            }
+            return 1;
+        }
+        """,
+        # Output: El dummy store que creamos
+        Output('reactome-scroll-fix-dummy', 'data'),
+        # Input: Escucha la actualización del contenido de los 'Fireworks'
+        Input('reactome-fireworks-output', 'children'),
+        prevent_initial_call=True
+    )
