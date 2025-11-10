@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO FINAL PARA ETAPA 2 CORREGIDA)
+# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO CON TODAS LAS CORRECCIONES)
 
 import dash
 from dash import Output, Input, State, dcc, html, ALL, dash_table
@@ -15,7 +15,6 @@ import math
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Importamos AMBOS servicios
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
 
@@ -24,15 +23,9 @@ from scipy.spatial.distance import pdist, squareform
 
 logger = logging.getLogger(__name__)
 
-# --- FUNCIÓN DE MANHATTAN PLOT (SE MANTIENE IGUAL) ---
+# --- FUNCIÓN DE MANHATTAN PLOT (Sin Cambios) ---
 def create_gprofiler_manhattan_plot(df, threshold_value):
-    """
-    Crea un Manhattan Plot para los resultados de g:Profiler.
-    El 'Gold Standard' es la línea de umbral.
-    """
-    
     line_threshold_value = 0.05 
-    
     try:
         float_threshold = float(threshold_value)
         if 0 < float_threshold <= 1.0:
@@ -40,32 +33,22 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     except (TypeError, ValueError):
         pass
     
-    
     if df.empty:
         fig = go.Figure()
-        fig.update_layout(
-            title="No significant terms to display in the Manhattan Plot.",
-            xaxis={'visible': False},
-            yaxis={'visible': False},
-            height=400
-        )
+        fig.update_layout(title="No significant terms to display in the Manhattan Plot.", xaxis={'visible': False}, yaxis={'visible': False}, height=400)
         return fig
         
     df['-log10(P-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
-    
     source_order = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
     df['source'] = pd.Categorical(df['source'], categories=source_order, ordered=True)
     df = df.sort_values(['source', 'p_value'], ascending=True)
-    
     df['term_index'] = df.groupby('source', observed=True).cumcount() + 1
     
     y_threshold = -np.log10(line_threshold_value)
     line_name = f"Gold Standard Threshold (P < {line_threshold_value:.4f})" 
     
     df['is_gold_standard'] = df['-log10(P-value)'] >= y_threshold
-    df['plot_color_group'] = df.apply(
-        lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1
-    )
+    df['plot_color_group'] = df.apply(lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1)
     
     source_colors = px.colors.qualitative.Bold
     source_color_map = {source: source_colors[i % len(source_colors)] for i, source in enumerate(df['source'].unique())}
@@ -73,36 +56,24 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     for source, color in source_color_map.items():
         color_map[source] = color 
 
-
     min_size = 5
     max_size = 40 
-    
     max_val = df['intersection_size'].max()
     
     if max_val == 0:
         df['marker_size'] = min_size
     else:
-        df['marker_size'] = (
-            df['intersection_size'].clip(lower=0) * (max_size - min_size) / max_val
-        ) + min_size
+        df['marker_size'] = (df['intersection_size'].clip(lower=0) * (max_size - min_size) / max_val) + min_size
         
     df['marker_size'] = df['marker_size'].clip(upper=max_size)
     
-    df_plot = df[df['significant'] == True].copy() 
-    df_plot = df_plot.reset_index(drop=True) 
+    df_plot = df[df['significant'] == True].copy().reset_index(drop=True) 
 
-    
     if df_plot.empty:
         fig = go.Figure()
-        fig.update_layout(
-            title="No significant terms found to plot.",
-            xaxis={'visible': False},
-            yaxis={'visible': False},
-            height=400
-        )
+        fig.update_layout(title="No significant terms found to plot.", xaxis={'visible': False}, yaxis={'visible': False}, height=400)
         return fig
         
-    
     fig = px.scatter(
         df_plot, 
         x='term_index',
@@ -111,217 +82,89 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         color_discrete_map=color_map,
         size='marker_size', 
         custom_data=['term_name', 'p_value', 'intersection_size', 'source', 'is_gold_standard'],
-        hover_data={
-            'term_index': False, 
-            '-log10(P-value)': ':.2f',
-            'term_name': True,
-            'p_value': ':.2e',
-            'intersection_size': True,
-            'source': True,
-            'is_gold_standard': True
-        }
+        hover_data={'term_index': False, '-log10(P-value)': ':.2f', 'term_name': True, 'p_value': ':.2e', 'intersection_size': True, 'source': True, 'is_gold_standard': True}
     )
     
     source_labels = df_plot.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index() 
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     
     fig.update_layout(
-        xaxis={
-            'title': "Functional Enrichment Terms (Grouped by Source)",
-            'tickmode': 'array',
-            'tickvals': source_labels['center'], 
-            'ticktext': source_labels['source'], 
-            'showgrid': False,
-            'zeroline': False,
-            'tickangle': 0 
-        },
-        yaxis={
-            'title': '-log10(P-value)',
-            'automargin': True
-        },
+        xaxis={'title': "Functional Enrichment Terms (Grouped by Source)", 'tickmode': 'array', 'tickvals': source_labels['center'], 'ticktext': source_labels['source'], 'showgrid': False, 'zeroline': False, 'tickangle': 0},
+        yaxis={'title': '-log10(P-value)', 'automargin': True},
         showlegend=True,
         height=550,
         margin={'t': 30, 'b': 80, 'l': 50, 'r': 10}, 
         plot_bgcolor='white'
     )
 
-    fig.add_hline(
-        y=y_threshold, 
-        line_dash="dot", 
-        line_color="red", 
-        annotation_text=line_name, 
-        annotation_position="top right"
-    )
+    fig.add_hline(y=y_threshold, line_dash="dot", line_color="red", annotation_text=line_name, annotation_position="top right")
 
     fig.update_traces(
-        marker=dict(
-            opacity=0.6, 
-            line=dict(width=0.5, color='DarkSlateGrey')
-        ),
-        hovertemplate=(
-            "<b>Term:</b> %{customdata[0]}<br>"
-            "<b>Source:</b> %{customdata[3]}<br>"
-            "<b>-log10(P-value):</b> %{y:.2f}<br>"
-            "<b>P-value:</b> %{customdata[1]:.2e}<br>"
-            "<b>Genes Matched:</b> %{customdata[2]}<br>"
-            "<b>Gold Standard:</b> %{customdata[4]}<br>"
-            "<extra></extra>"
-        )
+        marker=dict(opacity=0.6, line=dict(width=0.5, color='DarkSlateGrey')),
+        hovertemplate="<b>Term:</b> %{customdata[0]}<br><b>Source:</b> %{customdata[3]}<br><b>-log10(P-value):</b> %{y:.2f}<br><b>P-value:</b> %{customdata[1]:.2e}<br><b>Genes Matched:</b> %{customdata[2]}<br><b>Gold Standard:</b> %{customdata[4]}<br><extra></extra>"
     )
-
     return fig
 
-# logic/callbacks/enrichment_analysis.py (Reemplazar la función process_data_for_gene_term_heatmap)
-
+# --- FUNCIÓN DE PROCESAMIENTO DE HEATMAP (Sin Cambios) ---
 def process_data_for_gene_term_heatmap(stored_data, threshold=0.05, max_terms=50):
-    """
-    Procesa los resultados de g:Profiler para crear la matriz Term vs. Gen para el Heatmap.
-    
-    Args:
-        stored_data (dict): Resultados de g:Profiler del store.
-        threshold (float): P-Value (corregido) umbral para el filtrado inicial.
-        max_terms (int): Número máximo de términos más significativos a incluir.
-        
-    Returns:
-        pd.DataFrame: Matriz (Índice=Término, Columnas=Gen) con -log10(q-value) o 0.0.
-        dict: Contadores de debug.
-    """
     results = stored_data.get('results', [])
     gene_list_upper = stored_data.get('gene_list', []) 
     
-    # 🔑 CORRECCIÓN CLAVE: Inicializar debug_counters aquí, antes de cualquier retorno.
     debug_counters = {
-        'timestamp_start': datetime.now().strftime("%H:%M:%S.%f"), 
-        'initial_terms': len(results),
-        'initial_genes': len(gene_list_upper),
-        'terms_after_pvalue_filter': 0,
-        'terms_before_zerovariance_clean': 0, 
-        'genes_before_zerovariance_clean': 0, 
-        'terms_removed_by_zerovariance': 0,
-        'genes_removed_by_zerovariance': 0,
-        'timestamp_end': None
+        'timestamp_start': datetime.now().strftime("%H:%M:%S.%f"), 'initial_terms': len(results), 'initial_genes': len(gene_list_upper), 'terms_after_pvalue_filter': 0,
+        'terms_before_zerovariance_clean': 0, 'genes_before_zerovariance_clean': 0, 'terms_removed_by_zerovariance': 0, 'genes_removed_by_zerovariance': 0, 'timestamp_end': None
     }
     
     if not results or not gene_list_upper:
-        # Si no hay datos iniciales, retorna el diccionario de debug inicializado
         return pd.DataFrame(), debug_counters
 
     df = pd.DataFrame(results)
-    
-    # 1. Calcular -log10(q-value) y Filtrar
     df['-log10(q-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
-    
-    # VINCULACIÓN CRÍTICA: Usamos el umbral del Manhattan para el filtrado inicial
-    df_significant = df[df['p_value'] < threshold].sort_values(
-        by='p_value', 
-        ascending=True
-    ).head(max_terms) 
-
+    df_significant = df[df['p_value'] < threshold].sort_values(by='p_value', ascending=True).head(max_terms) 
     
     debug_counters['terms_after_pvalue_filter'] = len(df_significant)
     
     if df_significant.empty:
-        # Si el filtrado deja la tabla vacía, actualiza y retorna el debug_counters.
         debug_counters['timestamp_end'] = datetime.now().strftime("%H:%M:%S.%f")
         return pd.DataFrame(), debug_counters
 
     term_list = df_significant['term_name'].tolist()
-    
-    # 2. Inicializar la Matriz Term x Gen con 0.0
     heatmap_matrix = pd.DataFrame(0.0, index=term_list, columns=gene_list_upper)
     
-    # 3. Llenar la Matriz con -log10(q-value)
     for _, row in df_significant.iterrows():
         term_name = row['term_name']
         log_q_value = row['-log10(q-value)'] 
-        
         raw_intersecting_genes = row.get('intersection_genes', [])
-        
-        # CRÍTICO: Convertimos la lista de intersección DE g:PROFILER a MAYÚSCULAS para cruzar.
         intersecting_genes_upper = [g.upper() for g in raw_intersecting_genes if g and isinstance(g, str)]
         
         for gene_upper in intersecting_genes_upper:
             if gene_upper in gene_list_upper:
-                # El cruce ahora es robusto
                 heatmap_matrix.loc[term_name, gene_upper] = log_q_value
                 
-    
-    # --- 4. ELIMINAR FILAS Y COLUMNAS CON VARIANZA CERO ---
-    
     debug_counters['terms_before_zerovariance_clean'] = heatmap_matrix.shape[0]
     debug_counters['genes_before_zerovariance_clean'] = heatmap_matrix.shape[1]
 
-    # Eliminación por cero-varianza
     heatmap_matrix = heatmap_matrix.loc[(heatmap_matrix != 0).any(axis=1)]
     heatmap_matrix = heatmap_matrix.loc[:, (heatmap_matrix != 0).any(axis=0)]
     
-    # 5. Actualizar Contadores de Debug
     debug_counters['terms_removed_by_zerovariance'] = debug_counters['terms_before_zerovariance_clean'] - heatmap_matrix.shape[0]
     debug_counters['genes_removed_by_zerovariance'] = debug_counters['genes_before_zerovariance_clean'] - heatmap_matrix.shape[1]
-    
     debug_counters['timestamp_end'] = datetime.now().strftime("%H:%M:%S.%f")
                 
     return heatmap_matrix, debug_counters
 
-    # term_list = df_significant['term_name'].tolist()
-    
-    # # 2. Inicializar la Matriz Term x Gen con 0.0
-    # # Usamos los genes en mayúsculas como columnas (ya están en gene_list_upper)
-    # heatmap_matrix = pd.DataFrame(0.0, index=term_list, columns=gene_list_upper)
-    
-    # # 3. Llenar la Matriz con -log10(q_value)
-    # for _, row in df_significant.iterrows():
-    #     term_name = row['term_name']
-    #     log_q_value = row['-log10(q_value)']
-        
-    #     raw_intersecting_genes = row.get('intersection_genes', [])
-        
-    #     # 🔑 CRUCE SIMPLIFICADO: Convertimos SOLO los genes de intersección a MAYÚSCULAS
-    #     # para cruzar con la lista de columnas (gene_list_upper)
-    #     intersecting_genes_upper = [g.upper() for g in raw_intersecting_genes if g and isinstance(g, str)]
-        
-    #     for gene_upper in intersecting_genes_upper:
-    #         if gene_upper in gene_list_upper:
-    #             # El cruce ahora es robusto: Mayúsculas vs. Mayúsculas
-    #             heatmap_matrix.loc[term_name, gene_upper] = log_q_value
-                
-    
-    # # --- 4. SOLUCIÓN AL ERROR: ELIMINAR FILAS Y COLUMNAS CON VARIANZA CERO ---
-    
-    # debug_counters['terms_before_zerovariance_clean'] = heatmap_matrix.shape[0]
-    # debug_counters['genes_before_zerovariance_clean'] = heatmap_matrix.shape[1]
-
-    # # Eliminación por cero-varianza
-    # heatmap_matrix = heatmap_matrix.loc[(heatmap_matrix != 0).any(axis=1)]
-    # heatmap_matrix = heatmap_matrix.loc[:, (heatmap_matrix != 0).any(axis=0)]
-    
-    # # 5. Actualizar Contadores de Debug
-    # debug_counters['terms_removed_by_zerovariance'] = debug_counters['terms_before_zerovariance_clean'] - heatmap_matrix.shape[0]
-    # debug_counters['genes_removed_by_zerovariance'] = debug_counters['genes_before_zerovariance_clean'] - heatmap_matrix.shape[1]
-    
-    # debug_counters['timestamp_end'] = datetime.now().strftime("%H:%M:%S.%f")
-                
-    # return heatmap_matrix, debug_counters
-
-# logic/callbacks/enrichment_analysis.py (Reemplazar la función create_gene_term_heatmap)
-
+# --- FUNCIÓN DE CREACIÓN DE HEATMAP (Sin Cambios) ---
 def create_gene_term_heatmap(heatmap_matrix):
-    """
-    Genera el Heatmap (Clustergram) con clustering jerárquico.
-    """
     if heatmap_matrix.empty:
         fig = go.Figure()
         fig.update_layout(title="No significant gene-term associations remain after filtering.", height=400)
         return fig
     
-    # --- 1. VALIDACIÓN Y CLUSTERING (Se mantiene igual) ---
     perform_row_clustering = heatmap_matrix.shape[0] >= 2
     perform_col_clustering = heatmap_matrix.shape[1] >= 2
     
     clustered_matrix = heatmap_matrix.copy()
     clustering_successful = True
-    
-    # --- 2. CLUSTERING JERÁRQUICO (CONDICIONAL) ---
     
     try:
         if perform_row_clustering:
@@ -335,23 +178,15 @@ def create_gene_term_heatmap(heatmap_matrix):
             clustered_matrix = clustered_matrix.iloc[:, col_order_indices]
             
     except ValueError as e:
-        logger.error(f"Clustering failed due to singular matrix (non-finite values in distance matrix): {e}. Plotting without clustering.")
+        logger.error(f"Clustering failed: {e}. Plotting without clustering.")
         clustered_matrix = heatmap_matrix.copy()
         clustering_successful = False
 
-
-    # --- 3. MAPA DE COLOR Y VALORES ---
-    
     z_max = clustered_matrix.values.max()
     z_min = 0.0 
-    
     colormap = px.colors.sequential.Plasma
-    
-    # --- 🔑 SOLUCIÓN CLAVE: GENERAR MATRIZ DE TEXTO BINARIO PARA HOVER 🔑 ---
-    # Si Z > 0, es miembro ("Sí"); si Z = 0, no es miembro ("No").
     member_matrix = np.where(clustered_matrix.values > 0, "Sí", "No")
     
-    # --- 4. CREACIÓN DE LA FIGURA ---
     fig = go.Figure(data=go.Heatmap(
         z=clustered_matrix.values,
         x=clustered_matrix.columns,
@@ -360,28 +195,12 @@ def create_gene_term_heatmap(heatmap_matrix):
         zmin=z_min,
         zmax=z_max,
         showscale=True,
-        colorbar=dict(
-            title=dict(
-                text='-log10(q-value)',
-                side='right'
-            ),
-            thickness=15,
-            len=0.7
-        ),
-        customdata=member_matrix, # 🔑 PASAMOS LA MATRIZ DE TEXTO 'Sí/No'
-        hovertemplate=(
-            "<b>Term:</b> %{y}<br>"
-            "<b>Gene:</b> %{x}<br>"
-            "<b>-log10(p-value):</b> %{z:.2f}<br>"
-            "<b>Membresía:</b> %{customdata} <br>" # 🔑 REFERENCIAMOS EL VALOR TEXTUAL
-            "<extra></extra>"
-        )
+        colorbar=dict(title=dict(text='-log10(q-value)', side='right'), thickness=15, len=0.7),
+        customdata=member_matrix, 
+        hovertemplate="<b>Term:</b> %{y}<br><b>Gene:</b> %{x}<br><b>-log10(p-value):</b> %{z:.2f}<br><b>Membresía:</b> %{customdata} <br><extra></extra>"
     ))
 
-    # --- 5. LAYOUT FINAL ---
-    
     status_parts = []
-    
     if clustering_successful and perform_row_clustering and perform_col_clustering:
         status_parts.append("Clustered Successfully")
     else:
@@ -392,89 +211,22 @@ def create_gene_term_heatmap(heatmap_matrix):
          
     clustering_status = " ".join(status_parts)
 
-
     fig.update_layout(
         title=f"Functional Clustergram (Term vs. Gene Membership) - {clustering_status}",
         xaxis_title="Genes de Entrada",
         yaxis_title="Términos Enriquecidos",
         xaxis={'tickangle': 90, 'showgrid': False, 'zeroline': False},
         yaxis={'showgrid': False, 'zeroline': False, 'automargin': True},
-        height=min(max(50 * clustered_matrix.shape[0], 500), 1000), # Altura dinámica
+        height=min(max(50 * clustered_matrix.shape[0], 500), 1000),
         margin=dict(l=250, r=20, t=50, b=100)
     )
-
     return fig
 
-    # term_list = df_significant['term_name'].tolist()
-    
-    # # 2. Inicializar la Matriz Term x Gen con 0.0
-    # # Usamos los genes en mayúsculas como columnas (ya están en gene_list_upper)
-    # heatmap_matrix = pd.DataFrame(0.0, index=term_list, columns=gene_list_upper)
-    
-    # # 3. Llenar la Matriz con -log10(q_value)
-    # for _, row in df_significant.iterrows():
-    #     term_name = row['term_name']
-    #     log_q_value = row['-log10(q_value)']
-        
-    #     raw_intersecting_genes = row.get('intersection_genes', [])
-        
-    #     # 🔑 CRUCE SIMPLIFICADO: Convertimos SOLO los genes de intersección a MAYÚSCULAS
-    #     # para cruzar con la lista de columnas (gene_list_upper)
-    #     intersecting_genes_upper = [g.upper() for g in raw_intersecting_genes if g and isinstance(g, str)]
-        
-    #     for gene_upper in intersecting_genes_upper:
-    #         if gene_upper in gene_list_upper:
-    #             # El cruce ahora es robusto: Mayúsculas vs. Mayúsculas
-    #             heatmap_matrix.loc[term_name, gene_upper] = log_q_value
-                
-    
-    # # --- 4. SOLUCIÓN AL ERROR: ELIMINAR FILAS Y COLUMNAS CON VARIANZA CERO ---
-    
-    # debug_counters['terms_before_zerovariance_clean'] = heatmap_matrix.shape[0]
-    # debug_counters['genes_before_zerovariance_clean'] = heatmap_matrix.shape[1]
 
-    # # Eliminación por cero-varianza
-    # heatmap_matrix = heatmap_matrix.loc[(heatmap_matrix != 0).any(axis=1)]
-    # heatmap_matrix = heatmap_matrix.loc[:, (heatmap_matrix != 0).any(axis=0)]
-    
-    # # 5. Actualizar Contadores de Debug
-    # debug_counters['terms_removed_by_zerovariance'] = debug_counters['terms_before_zerovariance_clean'] - heatmap_matrix.shape[0]
-    # debug_counters['genes_removed_by_zerovariance'] = debug_counters['genes_before_zerovariance_clean'] - heatmap_matrix.shape[1]
-    
-    # debug_counters['timestamp_end'] = datetime.now().strftime("%H:%M:%S.%f")
-                
-    # return heatmap_matrix, debug_counters
-
-    # logic/callbacks/enrichment_analysis.py (Añadir un nuevo callback dentro de register_enrichment_callbacks)
-# logic/callbacks/enrichment_analysis.py (CALLBACK 2.6 - Se mantiene igual)
-
-    # logic/callbacks/enrichment_analysis.py (Callback 2.6)
-
-  # logic/callbacks/enrichment_analysis.py (Callback 2.6)
-
-# logic/callbacks/enrichment_analysis.py (Callback 2.6)
-
-    # logic/callbacks/enrichment_analysis.py (Callback 2.6)
-
-    # 2.6. CALLBACK PARA CONTROLAR LA VISIBILIDAD DEL BOTÓN CLEAR SELECTION 
-    @app.callback(
-        Output('clear-enrichment-btn-container', 'style'),
-        Input('enrichment-selected-indices-store', 'data')
-    )
-    def toggle_clear_selection_button(selected_indices):
-        """
-        Muestra el botón 'Clear Selection' solo si hay ítems seleccionados.
-        """
-        if selected_indices and len(selected_indices) > 0:
-            # Si hay selección, mostrar el botón.
-            return {'display': 'block', 'width': 'auto'}
-        # Si no hay selección, ocultar el botón
-        return {'display': 'none', 'width': 'auto'}
-
-
+# --- REGISTRO DE CALLBACKS ---
 def register_enrichment_callbacks(app): 
     
-    # 1. Callback de Actualización de IDs y Trigger
+    # 1. Callback de Actualización de IDs y Trigger (Sin Cambios)
     @app.callback(
         [Output('enrichment-selected-item-ids-store', 'data', allow_duplicate=True),
          Output('enrichment-render-trigger-store', 'data', allow_duplicate=True)],
@@ -484,33 +236,12 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True 
     )
     def update_selected_items_and_render_trigger(items, selected_indices_list, active_tab):
-        """
-        Actualiza el Store de IDs seleccionadas y dispara el renderizado si la pestaña es activa.
-        """
         ctx = dash.callback_context
-        
         if not ctx.triggered:
             raise PreventUpdate
-            
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
         
-        if trigger_id == 'interest-panel-store':
-            selected_item_ids = []
-            if items:
-                for idx, item in enumerate(items):
-                    if idx in selected_indices_list and item.get('type') in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
-                        selected_item_ids.append(item.get('id', str(idx)))
-            return selected_item_ids, datetime.now().timestamp()
-        
-        if trigger_id == 'main-tabs' and active_tab == 'enrichment-tab':
-            selected_item_ids = []
-            if items:
-                for idx, item in enumerate(items):
-                    if idx in selected_indices_list and item.get('type') in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
-                        selected_item_ids.append(item.get('id', str(idx)))
-            return selected_item_ids, datetime.now().timestamp()
-        
-        if trigger_id == 'enrichment-selected-indices-store' and active_tab == 'enrichment-tab':
+        if trigger_id in ['interest-panel-store', 'enrichment-selected-indices-store'] or (trigger_id == 'main-tabs' and active_tab == 'enrichment-tab'):
             selected_item_ids = []
             if items:
                 for idx, item in enumerate(items):
@@ -521,7 +252,7 @@ def register_enrichment_callbacks(app):
         raise PreventUpdate
 
 
-    # 1.5. Callback de Renderizado Real (Activado por el Trigger Store)
+    # 1.5. Callback de Renderizado Real (Sin Cambios)
     @app.callback(
         Output('enrichment-visual-selector', 'children'),
         Input('enrichment-render-trigger-store', 'data'),
@@ -531,8 +262,6 @@ def register_enrichment_callbacks(app):
          State('data-store', 'data')]
     )
     def render_visual_enrichment_selector(trigger_data, items, selected_indices_list, active_tab, data_store):
-        """Render visual card-based selector for enrichment analysis, ensuring late execution."""
-        
         if active_tab != 'enrichment-tab':
              raise PreventUpdate 
 
@@ -554,13 +283,9 @@ def register_enrichment_callbacks(app):
 
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
-
-            # Lógica de creación de tarjeta (Se mantiene igual)
             
             if item_type == 'solution':
-                badge_color = "primary"
-                badge_text = "Solution"
-                icon = "🔵"
+                badge_color, badge_text, icon = "primary", "Solution", "🔵"
                 sol_data = item.get('data', {})
                 sol_id = sol_data.get('id', 'Unknown')
                 genes = sol_data.get('selected_genes', [])
@@ -569,11 +294,8 @@ def register_enrichment_callbacks(app):
                 gene_count = len(genes)
                 front_name = sol_data.get('front_name', 'Unknown')
                 description = f"{gene_count} genes | {front_name}"
-
             elif item_type == 'solution_set':
-                badge_color = "info"
-                badge_text = "Solution Set"
-                icon = "📦"
+                badge_color, badge_text, icon = "info", "Solution Set", "📦"
                 solutions = item.get('data', {}).get('solutions', [])
                 unique_genes = set()
                 for sol in solutions:
@@ -584,26 +306,17 @@ def register_enrichment_callbacks(app):
                     unique_genes.update(genes)
                 gene_count = len(unique_genes)
                 description = f"{len(solutions)} solutions | {gene_count} unique genes"
-
             elif item_type == 'gene_set':
-                badge_color = "success"
-                badge_text = "Gene Group"
-                icon = "🧬"
+                badge_color, badge_text, icon = "success", "Gene Group", "🧬"
                 genes = item.get('data', {}).get('genes', [])
                 frequency = item.get('data', {}).get('frequency', 'N/A')
                 description = f"{len(genes)} genes | Freq: {frequency}%"
-
             elif item_type == 'individual_gene':
-                badge_color = "warning"
-                badge_text = "Gene"
-                icon = "🔬"
+                badge_color, badge_text, icon = "warning", "Gene", "🔬"
                 gene = item.get('data', {}).get('gene', 'Unknown')
                 description = f"Gene: {gene}"
-
             elif item_type == 'combined_gene_group':
-                badge_color = "success"
-                badge_text = "Combined Group"
-                icon = "🎯"
+                badge_color, badge_text, icon = "success", "Combined Group", "🎯"
                 gene_count = item.get('data', {}).get('gene_count', 0)
                 source_count = len(item.get('data', {}).get('source_items', []))
                 description = f"{gene_count} genes | {source_count} sources"
@@ -612,83 +325,49 @@ def register_enrichment_callbacks(app):
 
             is_selected = [idx] if idx in selected_indices_list else []
             
-            card = dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.Div([
-                            dbc.Checklist(
-                                options=[{"label": "", "value": idx}],
-                                value=is_selected, 
-                                id={'type': 'enrichment-card-checkbox', 'index': idx}, 
-                                switch=True,
-                                style={'transform': 'scale(1.3)'}
-                            )
-                        ], style={
-                            'position': 'absolute',
-                            'top': '10px',
-                            'right': '10px',
-                            'zIndex': '10'
-                        }),
-                        html.Div([
-                            html.Div([
-                                html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
-                                dbc.Badge(badge_text, color=badge_color, className="ms-1", style={'fontSize': '0.7rem'})
-                            ], className="d-flex align-items-center mb-1"),
-                            html.Strong(item_name, className="d-block mb-1", style={'fontSize': '0.9rem'}),
-                            html.P(description, className="text-muted small mb-1", style={'fontSize': '0.75rem'}),
-                            html.P(item_comment, className="text-muted small fst-italic mb-0", style={'fontSize': '0.7rem'}) if item_comment else None
-                        ], style={'paddingRight': '40px'})
-                    ], className="p-2", style={'minHeight': '120px', 'position': 'relative'})
-                ], className="h-100 shadow-sm hover-shadow", style={'transition': 'all 0.2s'})
-            ], width=12, md=6, lg=3, className="mb-3")
-
+            card = dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div(dbc.Checklist(
+                    options=[{"label": "", "value": idx}],
+                    value=is_selected, 
+                    id={'type': 'enrichment-card-checkbox', 'index': idx}, 
+                    switch=True,
+                    style={'transform': 'scale(1.3)'}
+                ), style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
+                html.Div([
+                    html.Div([
+                        html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
+                        dbc.Badge(badge_text, color=badge_color, className="ms-1", style={'fontSize': '0.7rem'})
+                    ], className="d-flex align-items-center mb-1"),
+                    html.Strong(item_name, className="d-block mb-1", style={'fontSize': '0.9rem'}),
+                    html.P(description, className="text-muted small mb-1", style={'fontSize': '0.75rem'}),
+                    html.P(item_comment, className="text-muted small fst-italic mb-0", style={'fontSize': '0.7rem'}) if item_comment else None
+                ], style={'paddingRight': '40px'})
+            ], className="p-2", style={'minHeight': '120px', 'position': 'relative'}), className="h-100 shadow-sm hover-shadow"), width=12, md=6, lg=3, className="mb-3")
             cards.append(card)
 
-
         if not cards:
-            return html.P("No compatible items found. Add solutions, genes, or gene groups to your Interest Panel first.", className="text-muted text-center py-4")
-
+            return html.P("No compatible items found.", className="text-muted text-center py-4")
         return dbc.Row(cards, className="g-3")
 
 
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
-
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
-
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función update_enrichment_selection)
-
-    # 2. Callback para manejar la selección de los checkboxes, actualizar el Store y el panel de resumen
+    # 2. Callback de selección (CORREGIDO con allow_duplicate)
     @app.callback(
-        [Output('enrichment-selected-indices-store', 'data'),
-         Output('enrichment-selection-panel', 'children')],
+        [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
+         Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
         Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'),
         State('interest-panel-store', 'data'),
         prevent_initial_call=True
     )
     def update_enrichment_selection(list_of_checkbox_values, items):
-        """
-        Escucha los checkboxes de las tarjetas, actualiza el Store de índices seleccionados 
-        y renderiza el panel de resumen de genes combinados.
-        """
         ctx = dash.callback_context
-        
         if not ctx.triggered or not items:
             raise PreventUpdate
         
-        selected_indices = set()
-        for values in list_of_checkbox_values:
-            if values:
-                selected_indices.add(values[0])
-        
+        selected_indices = {values[0] for values in list_of_checkbox_values if values}
         selected_indices_list = sorted(list(selected_indices))
         
         if not selected_indices_list:
-            # 🔑 CORRECCIÓN SOLICITADA: Usar el estilo "alert alert-info mt-4" (o mt-3 para consistencia de margen)
-            return selected_indices_list, html.Div([
-                dbc.Alert("No items selected. Select items above to view the combined gene list.", 
-                          color="info", # Color de fondo azul claro (info)
-                          className="mt-3") # Usamos mt-3 en lugar de mt-4 para que coincida con el espacio alrededor
-            ])
+            return selected_indices_list, html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
 
         combined_genes = set()
         for idx in selected_indices_list:
@@ -709,23 +388,19 @@ def register_enrichment_callbacks(app):
 
         gene_count = len(combined_genes)
         
-        summary_panel = dbc.Alert(
-            [
-                html.H6("Combined Genes for Enrichment (Input Set)", className="alert-heading"),
-                html.P(f"Total Unique Genes: {gene_count}", className="mb-1"),
-                html.P(f"Source Items: {len(selected_indices_list)}", className="mb-0"),
-                html.Details([
-                    html.Summary("View Gene List", style={'cursor': 'pointer', 'color': 'inherit', 'fontWeight': 'bold'}),
-                    html.P(', '.join(sorted(list(combined_genes))), className="mt-2 small")
-                ]) if gene_count > 0 else None,
-            ],
-            color="primary",
-            className="mt-3"
-        )
+        summary_panel = dbc.Alert([
+            html.H6("Combined Genes for Enrichment (Input Set)", className="alert-heading"),
+            html.P(f"Total Unique Genes: {gene_count}", className="mb-1"),
+            html.P(f"Source Items: {len(selected_indices_list)}", className="mb-0"),
+            html.Details([
+                html.Summary("View Gene List", style={'cursor': 'pointer', 'color': 'inherit', 'fontWeight': 'bold'}),
+                html.P(', '.join(sorted(list(combined_genes))), className="mt-2 small")
+            ]) if gene_count > 0 else None,
+        ], color="primary", className="mt-3")
         
         return selected_indices_list, summary_panel
     
-    # 2.5. Callback de limpiar la selección de tarjetas
+    # 2.5. Callback de limpiar selección (CORREGIDO con allow_duplicate)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
          Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
@@ -734,47 +409,34 @@ def register_enrichment_callbacks(app):
     )
     def clear_enrichment_selection(n_clicks):
         if n_clicks and n_clicks > 0:
-            # 🔑 CORRECCIÓN SOLICITADA: Usar el estilo "alert alert-info mt-4" (o mt-3 para consistencia de margen)
-            return [], html.Div([
-                dbc.Alert("No items selected. Select items above to view the combined gene list.", 
-                          color="info", # Color de fondo azul claro (info)
-                          className="mt-3") # Usamos mt-3 para consistencia con el otro callback
-            ])
+            return [], html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
         raise PreventUpdate
 
-    # 2.6. CALLBACK PARA CONTROLAR LA VISIBILIDAD DEL BOTÓN CLEAR SELECTION 
+    # 2.6. Visibilidad del botón Clear (Sin Cambios)
     @app.callback(
         Output('clear-enrichment-btn-container', 'style'),
         Input('enrichment-selected-indices-store', 'data')
     )
     def toggle_clear_selection_button(selected_indices):
-        """
-        Muestra el botón 'Clear Selection' solo si hay ítems seleccionados.
-        """
         if selected_indices and len(selected_indices) > 0:
-            # Si hay selección, mostrar el botón
             return {'display': 'block', 'height': '100%'}
-        # Si no hay selección, ocultar el botón
         return {'display': 'none', 'height': '100%'}
 
 
-    # 3. Callback para habilitar el botón de enriquecimiento (MODIFICADO para ambos botones)
+    # 3. Habilitar botones de análisis (Sin Cambios)
     @app.callback(
         [Output('run-gprofiler-btn', 'disabled'),
          Output('run-reactome-btn', 'disabled')], 
         Input('enrichment-selected-indices-store', 'data')
     )
     def toggle_enrichment_button(selected_indices):
-        """Habilitar/deshabilitar ambos botones de enriquecimiento si hay genes seleccionados."""
         is_disabled = not (selected_indices and len(selected_indices) > 0)
         return is_disabled, is_disabled
   
-
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función run_gprofiler_analysis)
-
-    # 4. Callback para ejecutar el análisis de g:Profiler (MODIFICADO CRÍTICAMENTE)
+    # 4. Ejecutar g:Profiler (CORREGIDO con Spinner y allow_duplicate)
     @app.callback(
-        Output('gprofiler-results-store', 'data'), 
+        [Output('gprofiler-results-store', 'data', allow_duplicate=True),
+         Output('gprofiler-spinner-output', 'children')], 
         Input('run-gprofiler-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
         State('interest-panel-store', 'data'),
@@ -782,11 +444,9 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def run_gprofiler_analysis(n_clicks, selected_indices, items, organism):
-        """Executes g:Profiler enrichment analysis and stores results, including intersection genes."""
         if not n_clicks or not selected_indices:
             raise PreventUpdate
         
-        # 1. Recolectar lista final de genes
         combined_genes = set()
         for idx in selected_indices:
             if idx < len(items):
@@ -804,41 +464,28 @@ def register_enrichment_callbacks(app):
                 elif item_type == 'individual_gene':
                     combined_genes.add(item.get('data', {}).get('gene', ''))
         
-        # 🔑 CRÍTICO: UNIFICAR EL CASO DE LOS GENES DE ENTRADA A MAYÚSCULAS 🔑
         gene_list_raw = [g for g in combined_genes if g and isinstance(g, str)]
         gene_list_upper = sorted([g.upper() for g in gene_list_raw])
 
         if not gene_list_upper:
-            return {'results': [], 'gene_list': [], 'organism': organism}
+            return {'results': [], 'gene_list': [], 'organism': organism}, None
 
-        # 2. Ejecutar servicio de g:Profiler con la lista en mayúsculas
         results = GProfilerService.get_enrichment(gene_list_upper, organism)
 
         if results is None:
-            return None 
+            return None, None 
         
         if not results:
-            return {'results': [], 'gene_list': gene_list_upper, 'organism': organism}
+            return {'results': [], 'gene_list': gene_list_upper, 'organism': organism}, None
 
-
-        # 3. Procesar resultados de g:Profiler
         enrichment_data_list = []
         for term in results:
-            
             source_order_value = str(term.get('source_order', 'N/A'))
-            
             intersections_flags = term.get('intersections', [])
-            
-            # Extraer los genes que están en el pathway (donde intersections[i] no está vacío)
             intersection_genes = []
             for i, flag in enumerate(intersections_flags):
-                if i < len(gene_list_upper) and flag:  # Si flag no está vacío, el gen está en el pathway
+                if i < len(gene_list_upper) and flag:
                     intersection_genes.append(gene_list_upper[i])
-            
-            print(f"[DEBUG MAPEO] Term: {term.get('name', 'Unknown')[:50]}")
-            print(f"[DEBUG MAPEO] Intersections flags length: {len(intersections_flags)}")
-            print(f"[DEBUG MAPEO] Gene list length: {len(gene_list_upper)}")
-            print(f"[DEBUG MAPEO] Extracted genes: {len(intersection_genes)} - First 5: {intersection_genes[:5]}")
             
             enrichment_data_list.append({
                 'source': term.get('source', ''),
@@ -852,16 +499,16 @@ def register_enrichment_callbacks(app):
                 'recall': term.get('recall', 0.0),
                 'source_order_display': source_order_value, 
                 'significant': term.get('significant', False),
-                'intersection_genes': intersection_genes  # Ahora contiene los genes reales
+                'intersection_genes': intersection_genes
             })
 
-        # Retorna la lista de genes de entrada en MAYÚSCULAS
         return {
             'results': enrichment_data_list, 
             'gene_list': gene_list_upper, 
             'organism': organism
-        }
-    # 4.5. Callback para mostrar los resultados de g:Profiler (MANTENIDO)
+        }, None
+    
+    # 4.5. Mostrar resultados g:Profiler (Sin Cambios)
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
@@ -873,160 +520,69 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_gprofiler_results(stored_data, threshold_value, main_active_tab, service_active_tab):
-        
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
         
-        organism_map = {
-            'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus',
-            'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans',
-        }
-
-        enrichment_data_list = []
-        gene_list = []
-        organism_code = 'N/A'
-        organism_selected_name = 'N/A'
-        organism_validated_name = 'N/A'
+        organism_map = {'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus', 'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans'}
         
         if stored_data is None:
-            return dbc.Alert("Error connecting to g:Profiler API or receiving response.", color="danger"), True, go.Figure()
+            return dbc.Alert("Error connecting to g:Profiler API.", color="danger"), True, go.Figure()
 
-        if isinstance(stored_data, dict):
-            enrichment_data_list = stored_data.get('results', [])
-            gene_list = stored_data.get('gene_list', [])
-            organism_code = stored_data.get('organism', 'hsapiens')
-            
-            organism_selected_name = organism_map.get(organism_code, organism_code)
-            organism_validated_name = organism_map.get(organism_code, organism_code)
-        
-        
+        enrichment_data_list = stored_data.get('results', [])
+        gene_list = stored_data.get('gene_list', [])
+        organism_code = stored_data.get('organism', 'hsapiens')
+        organism_selected_name = organism_map.get(organism_code, organism_code)
+        organism_validated_name = organism_map.get(organism_code, organism_code)
         genes_analyzed = len(gene_list)
 
         if not enrichment_data_list and not gene_list:
             return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
-
         
         df = pd.DataFrame(enrichment_data_list)
         
-        try:
-            val_threshold = float(threshold_value)
-        except (TypeError, ValueError):
-            val_threshold = 0.05
+        try: val_threshold = float(threshold_value)
+        except (TypeError, ValueError): val_threshold = 0.05
+        if not (0 < val_threshold <= 1.0): val_threshold = 0.05
         
-        if not (0 < val_threshold <= 1.0):
-            val_threshold = 0.05
-        
-        
-        filtered_df = df.copy()
-
-        filtered_df = filtered_df[filtered_df['p_value'] < val_threshold]
+        filtered_df = df[df['p_value'] < val_threshold].copy()
         filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
-        
-        
         df_plot = df[df['significant'] == True].copy() 
-        
         manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value)
         
+        display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False]) if not filtered_df.empty else pd.DataFrame()
         
-        if not filtered_df.empty:
-            display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False])
-        else:
-            display_df = pd.DataFrame() # Ensure display_df is always defined
-        
-        # Asegurarse de no mostrar 'intersection_genes' en la tabla
         if not display_df.empty:
              display_df = display_df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
         
-        
-        # Construcción del Mensaje Resumen
         input_message = f"**Sent (Input)::** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected_name}**"
         output_message = f"**Analized (Output):** Validated Organism: **{organism_validated_name}**"
-        
-        if not display_df.empty:
-            pathways_message = f"Displaying **{len(display_df)}** terms. {filter_message}"
-        else:
-            pathways_message = f"No significant pathways found after applying the Gold Standard filter ({val_threshold})."
-            
+        pathways_message = f"Displaying **{len(display_df)}** terms. {filter_message}" if not display_df.empty else f"No significant pathways found after applying the filter ({val_threshold})."
         summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
         hidden_cols = ['source_order_display'] 
-
-        display_columns = []
-        for col in display_df.columns:
-            is_hideable = True
-            
-            if col == 'p_value':
-                column_config = {
-                    'name': 'P-Value', 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.2e'}, 'hideable': is_hideable
-                }
-            elif col == 'intersection_size':
-                column_config = {
-                    'name': 'Genes\nMatched', 'id': col, 'type': 'numeric',
-                    'hideable': is_hideable
-                }
-            elif col == 'term_size':
-                column_config = {
-                    'name': 'Term\nSize', 'id': col, 'type': 'numeric',
-                    'hideable': is_hideable
-                }
-            elif col in ['precision', 'recall']:
-                column_config = {
-                    'name': col.capitalize(), 'id': col, 'type': 'numeric',
-                    'format': {'specifier': '.3f'},
-                    'hideable': is_hideable
-                }
-            elif col == 'term_name':
-                column_config = {
-                    'name': 'Term Name', 'id': col, 'type': 'text',
-                    'hideable': is_hideable
-                }
-            elif col == 'description':
-                column_config = {
-                    'name': 'Description', 'id': col, 'type': 'text',
-                    'hideable': is_hideable
-                }
-            elif col == 'source':
-                 column_config = {
-                    'name': 'Source', 'id': col, 'type': 'text',
-                    'hideable': is_hideable
-                }
-            elif col == 'source_order_display':
-                column_config = {
-                    'name': 'Source\nOrder', 
-                    'id': col, 
-                    'type': 'text',
-                    'hideable': is_hideable
-                }
-            else:
-                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': is_hideable}
-            
-            display_columns.append(column_config)
+        column_map = {
+            'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'intersection_size': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'term_size': {'name': 'Term\nSize', 'type': 'numeric'},
+            'precision': {'name': 'Precision', 'type': 'numeric', 'format': {'specifier': '.3f'}},
+            'recall': {'name': 'Recall', 'type': 'numeric', 'format': {'specifier': '.3f'}},
+            'term_name': {'name': 'Term Name', 'type': 'text'},
+            'description': {'name': 'Description', 'type': 'text'},
+            'source': {'name': 'Source', 'type': 'text'},
+            'source_order_display': {'name': 'Source\nOrder', 'type': 'text'},
+        }
+        display_columns = [{'name': column_map.get(col, {}).get('name', col.capitalize()), 'id': col, 'type': column_map.get(col, {}).get('type', 'text'), 'format': column_map.get(col, {}).get('format'), 'hideable': True} for col in display_df.columns]
         
         results_content = [
             html.H4("g:Profiler Enrichment Results", className="mb-3"),
-            
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
-            
             dash_table.DataTable(
-                id='enrichment-results-table-gprofiler', 
-                data=display_df.to_dict('records'),
-                columns=display_columns,
-                
-                hidden_columns=hidden_cols, 
-                
-                sort_action="native",
-                filter_action="native",
-                page_action="native",
-                page_current=0,
-                page_size=15,
-                
+                id='enrichment-results-table-gprofiler', data=display_df.to_dict('records'), columns=display_columns,
+                hidden_columns=hidden_cols, sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
                 style_table={'overflowX': 'auto', 'minWidth': '100%'},
-                
                 style_cell_conditional=[
                     {'if': {'column_id': 'term_name'}, 'width': '15%', 'minWidth': '100px', 'textAlign': 'left'}, 
                     {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px', 'maxWidth': '350px', 'textAlign': 'left'},
-                    {'if': {'column_id': 'source_order_display'}, 'width': '10%', 'minWidth': '60px', 'maxWidth': '80px', 'textAlign': 'center'}, 
                     {'if': {'column_id': 'p_value'}, 'width': '8%', 'minWidth': '70px', 'maxWidth': '80px', 'textAlign': 'center'},
                     {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
                     {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
@@ -1034,21 +590,9 @@ def register_enrichment_callbacks(app):
                     {'if': {'column_id': 'recall'}, 'width': '7%', 'minWidth': '50px', 'maxWidth': '65px', 'textAlign': 'center'},
                     {'if': {'column_id': 'source'}, 'width': '7%', 'minWidth': '60px', 'maxWidth': '60px', 'textAlign': 'center'},
                 ],
-                
                 style_cell={'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'normal'},
-                style_header={
-                    'backgroundColor': 'rgb(230, 230, 230)',
-                    'fontWeight': 'bold',
-                    'whiteSpace': 'normal', 
-                    'height': 'auto',
-                    'padding': '10px 8px'
-                },
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': 'rgb(248, 248, 248)'
-                    }
-                ],
+                style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}],
                 tooltip_duration=None,
             )
         ]
@@ -1056,16 +600,9 @@ def register_enrichment_callbacks(app):
         if not display_df.empty:
             return html.Div(results_content), False, manhattan_fig
         else:
-            # Si display_df está vacía, mostrar el mensaje específico
-            return html.Div(
-                [
-                    dbc.Alert([
-                        html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="mb-0")
-                    ], color="info", className="mt-3")
-                ]
-            ), False, manhattan_fig
+            return html.Div(dbc.Alert(html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="mb-0"), color="info", className="mt-3")), False, manhattan_fig
         
-    # 4.6. Callback para limpiar los resultados de g:Profiler (Mantenido)
+    # 4.6. Limpiar g:Profiler (CORREGIDO con allow_duplicate)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
@@ -1077,12 +614,10 @@ def register_enrichment_callbacks(app):
             return {'results': [], 'gene_list': [], 'organism': 'hsapiens'}, go.Figure()
         raise PreventUpdate
 
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función run_reactome_analysis)
-
-    # 5. Callback para ejecutar el análisis de Reactome
+    # 5. Ejecutar Reactome (CORREGIDO con Spinner, allow_duplicate, check de seguridad y try...except)
     @app.callback(
-        # CAMBIO CLAVE: DEFINICIÓN ORIGINAL (SIN allow_duplicate=True) 
-        Output('reactome-results-store', 'data'), 
+        [Output('reactome-results-store', 'data', allow_duplicate=True), 
+         Output('reactome-spinner-output', 'children')], 
         Input('run-reactome-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
         State('interest-panel-store', 'data'),
@@ -1090,47 +625,56 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def run_reactome_analysis(n_clicks, selected_indices, items, organism_name):
-        """Executes Reactome enrichment analysis and stores results."""
         if not n_clicks or not selected_indices:
             raise PreventUpdate
 
-        # 1. Recolectar lista final de genes (Misma lógica que antes)
         combined_genes = set()
         for idx in selected_indices:
-            item = items[idx]
-            item_type = item.get('type', '')
-            
-            if item_type == 'solution':
-                combined_genes.update(item.get('data', {}).get('selected_genes', []))
-            elif item_type == 'solution_set':
-                solutions = item.get('data', {}).get('solutions', [])
-                for sol in solutions:
-                    combined_genes.update(sol.get('selected_genes', []))
-            elif item_type in ['gene_set', 'combined_gene_group']:
-                combined_genes.update(item.get('data', {}).get('genes', []))
-            elif item_type == 'individual_gene':
-                combined_genes.add(item.get('data', {}).get('gene', ''))
+            if idx < len(items): # <-- Check de seguridad
+                item = items[idx]
+                item_type = item.get('type', '')
+                
+                if item_type == 'solution':
+                    combined_genes.update(item.get('data', {}).get('selected_genes', []))
+                elif item_type == 'solution_set':
+                    solutions = item.get('data', {}).get('solutions', [])
+                    for sol in solutions:
+                        combined_genes.update(sol.get('selected_genes', []))
+                elif item_type in ['gene_set', 'combined_gene_group']:
+                    combined_genes.update(item.get('data', {}).get('genes', []))
+                elif item_type == 'individual_gene':
+                    combined_genes.add(item.get('data', {}).get('gene', ''))
         
         gene_list = [g for g in combined_genes if g and isinstance(g, str)]
+        genes_analyzed_count = len(gene_list)
+
+        error_data = {
+            'results': [], 'token': 'ERROR', 'organism_used_api': 'N/A', 
+            'organism_selected': organism_name, 'genes_analyzed': genes_analyzed_count, 'gene_list': []
+        }
 
         if not gene_list:
-            # Retornar diccionario con lista de resultados vacía
-            return {'results': [], 'token': 'N/A', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': 0}
+            error_data['token'] = 'N/A'
+            return error_data, None
 
-        # 2. Ejecutar servicio de Reactome
-        service_response = ReactomeService.get_enrichment(gene_list, organism_name)
+        try:
+            service_response = ReactomeService.get_enrichment(gene_list, organism_name)
+
+        except Exception as e:
+            logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
+            return error_data, None
 
         if service_response is None:
-            # Si hay error en API, devuelve un diccionario de error para que el store no sea None
-            return {'results': [], 'token': 'ERROR', 'organism_used_api': 'N/A', 'organism_selected': organism_name, 'genes_analyzed': len(gene_list)}
+            logger.warning("ReactomeService returned None (handled error).")
+            return error_data, None
         
-        # 🔑 CLAVE: El service_response DEBE contener {token, results, organism_used_api, ...}
-        # Aseguramos que la lista de genes analizados se adjunte.
         service_response['gene_list'] = gene_list
         
-        return service_response
-# logic/callbacks/enrichment_analysis.py (Reemplazar la función display_reactome_results)
+        return service_response, None
 
+    # logic/callbacks/enrichment_analysis.py (Reemplazar el Callback 5.5)
+
+    # 5.5 Mostrar resultados Reactome (MODIFICADO para el scroll)
     @app.callback(
         [Output('reactome-results-content', 'children'),
         Output('clear-reactome-results-btn', 'disabled'),
@@ -1140,15 +684,8 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
-        
-        placeholder_diagram = html.Div(
-            dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="secondary"), 
-            className="p-3"
-        )
-        placeholder_fireworks = html.Div(
-            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info"), 
-            className="p-3"
-        )
+        placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="secondary"), className="p-3")
+        placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info"), className="p-3")
         
         if stored_data is None or not isinstance(stored_data, dict):
             raise PreventUpdate
@@ -1159,81 +696,61 @@ def register_enrichment_callbacks(app):
         organism_selected = stored_data.get('organism_selected', 'N/A')
         gene_list = stored_data.get('gene_list', [])
         genes_analyzed = len(gene_list)
-            
         
         fireworks_content = placeholder_fireworks
-        if analysis_token and analysis_token != 'N/A' and organism_used_api and len(enrichment_data_list) > 0:
+        if analysis_token and analysis_token not in ['N/A', 'ERROR'] and organism_used_api and len(enrichment_data_list) > 0:
             organism_encoded = organism_used_api.replace(' ', '%20')
-            fireworks_url = (
-                f"https://reactome.org/PathwayBrowser/?species={organism_encoded}"
-                f"#DTAB=AN&ANALYSIS={analysis_token}"
-            )
-
+            fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={analysis_token}"
+            
+            # 🔑 CORRECCIÓN DE SCROLL: Añadir tabIndex="-1" previene que el Iframe
+            # robe el foco del navegador y cause un scroll automático.
             fireworks_content = html.Iframe(
-                src=fireworks_url,
-                style={"width": "100%", "height": "500px", "border": "none"},
-                title=f"Reactome Pathway Browser/Fireworks visualization for {organism_used_api}",
-                tabIndex="-1" # 🔑 CORRECCIÓN CLAVE: Esto previene el foco automático del navegador
+                src=fireworks_url, 
+                style={"width": "100%", "height": "500px", "border": "none"}, 
+                title=f"Reactome Fireworks for {organism_used_api}", 
+                tabIndex="-1" 
             )
 
+        # ... (El resto de la función para generar la tabla es idéntica) ...
         
         input_message = f"**Sent (Input)::** Analized Genes: **{genes_analyzed}** | Selected Organism: **{organism_selected}**"
         output_message = f"**Analized (Output):** Validated Organism: **{organism_used_api}** | Analysis Token: **{analysis_token}**"
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
-        summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
+        
+        if analysis_token == 'ERROR':
+            summary_message_md = f"An error occurred connecting to the Reactome service.\n\n{input_message}"
+        else:
+            summary_message_md = f"{pathways_message}\n\n{input_message}\n\n{output_message}"
         
         if not enrichment_data_list:
             simplified_no_results_message = f"No significant pathways found in Reactome.\n\n{input_message}"
-            results_content = html.Div(
-                [dbc.Alert([html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0")], color="info", className="mt-3")]
-            )
+            if analysis_token == 'ERROR':
+                 simplified_no_results_message = f"Error connecting to Reactome API.\n\n{input_message}"
             
-            df = pd.DataFrame()
-            display_df = pd.DataFrame() 
-            
+            results_content = html.Div(dbc.Alert(html.P(dcc.Markdown(simplified_no_results_message, dangerously_allow_html=True), className="mb-0"), color="info", className="mt-3"))
             return results_content, False, placeholder_diagram, fireworks_content
 
-
-        df = pd.DataFrame(enrichment_data_list)
-        df = df.sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
+        df = pd.DataFrame(enrichment_data_list).sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
         hidden_cols = ['description']
-        display_columns = []
-        for col in display_df.columns:
-            if col == 'fdr_value':
-                column_config = {'name': 'FDR\n(Corrected P-Value)', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
-            elif col == 'p_value':
-                column_config = {'name': 'P-Value', 'id': col, 'type': 'numeric', 'format': {'specifier': '.2e'}, 'hideable': True}
-            elif col == 'entities_found':
-                column_config = {'name': 'Genes\nMatched', 'id': col, 'type': 'numeric', 'hideable': True}
-            elif col == 'entities_total':
-                column_config = {'name': 'Pathway\nSize', 'id': col, 'type': 'numeric', 'hideable': True}
-            elif col == 'term_name':
-                column_config = {'name': 'Pathway Name', 'id': col, 'type': 'text', 'hideable': True}
-            elif col == 'description': 
-                column_config = {'name': 'ST_ID', 'id': col, 'type': 'text'}
-            else:
-                column_config = {'name': col.capitalize(), 'id': col, 'type': 'text', 'hideable': True}
-            
-            display_columns.append(column_config)
+        column_map = {
+            'fdr_value': {'name': 'FDR\n(Corrected P-Value)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'entities_found': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'entities_total': {'name': 'Pathway\nSize', 'type': 'numeric'},
+            'term_name': {'name': 'Pathway Name', 'type': 'text'},
+            'description': {'name': 'ST_ID', 'type': 'text'},
+        }
+        display_columns = [{'name': column_map.get(col, {}).get('name', col.capitalize()), 'id': col, 'type': column_map.get(col, {}).get('type', 'text'), 'format': column_map.get(col, {}).get('format'), 'hideable': True} for col in display_df.columns]
 
         results_content = [
             html.H4("Reactome Enrichment Results", className="mb-3"), 
             html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="text-muted", style={'whiteSpace': 'pre-line'}),
-            
             dash_table.DataTable(
-                id='enrichment-results-table-reactome', 
-                data=display_df.to_dict('records'), 
-                columns=display_columns,
-                hidden_columns=hidden_cols, 
-                row_selectable='single', 
-                selected_rows=[],
-                sort_action="native",
-                filter_action="native",
-                page_action="native",
-                page_current=0,
-                page_size=10,
+                id='enrichment-results-table-reactome', data=display_df.to_dict('records'), columns=display_columns,
+                hidden_columns=hidden_cols, row_selectable='single', selected_rows=[],
+                sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=10,
                 style_table={'overflowX': 'auto', 'minWidth': '100%'}, 
                 style_cell_conditional=[
                     {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
@@ -1249,79 +766,77 @@ def register_enrichment_callbacks(app):
                 tooltip_duration=None,
             )
         ]
-
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
-    # logic/callbacks/enrichment_analysis.py (Añadir/Reemplazar el Callback 6)
+   # logic/callbacks/enrichment_analysis.py (Reemplazar el Callback 6)
 
-    # 6. 🚀 CALLBACK DE VISUALIZACIÓN DEL DIAGRAMA COLOREADO
+    # logic/callbacks/enrichment_analysis.py (Reemplazar el Callback 6)
+
+    # 6. Visualizar Diagrama Reactome (MODIFICADO para carga de imagen en servidor)
     @app.callback(
-        Output('reactome-diagram-output', 'children', allow_duplicate=True),
-        # Escuchar la SELECCIÓN de fila en la tabla
+        [Output('reactome-diagram-output', 'children', allow_duplicate=True),
+         Output('reactome-diagram-spinner-output', 'children')], 
         Input('enrichment-results-table-reactome', 'selected_rows'),
-        # Necesitar los datos brutos de la tabla para obtener el ST_ID
         State('enrichment-results-table-reactome', 'data'),
-        # Necesitar el token para generar la URL coloreada
         State('reactome-results-store', 'data'),
         prevent_initial_call=True
     )
     def visualize_reactome_diagram(selected_rows, table_data, stored_results):
-        """Genera y muestra la imagen de la vía de Reactome con el overlay de genes."""
-
         if not selected_rows or not table_data:
-            # Si no hay selección, o si la tabla aún no se carga
             raise PreventUpdate
         
-        # 1. Extraer datos del Store de Resultados (Token)
-        # Verificamos si el token existe y si no es un placeholder de error.
+        # Placeholder por si el usuario des-selecciona
+        placeholder_alert = html.Div(dbc.Alert("Select a pathway from the table to visualize gene overlap.", color="secondary"), className="p-3")
+
         if not stored_results or stored_results.get('token') in [None, 'N/A', 'ERROR'] or stored_results.get('token').startswith('REF_'):
-            return html.Div(dbc.Alert("Analysis Token not available or invalid. Run the Reactome Analysis first.", color="warning"), className="p-3")
+            return placeholder_alert, None
 
         analysis_token = stored_results['token']
-        
-        # 2. Obtener el Stable ID (ST_ID) de la vía seleccionada
-        # selected_rows es una lista de índices de fila (page_current * page_size + index)
         selected_index = selected_rows[0]
         selected_pathway_data = table_data[selected_index]
-        
-        # El ST_ID (Stable ID) está en la columna 'description'
         pathway_st_id = selected_pathway_data.get('description')
         pathway_name = selected_pathway_data.get('term_name')
 
         if not pathway_st_id:
-            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3")
+            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3"), None
 
-        # 3. Generar la URL de la Imagen Coloreada
-        diagram_url = ReactomeService.get_diagram_url(
+        # 🔑 CAMBIO CLAVE:
+        # Ya no generamos una URL. Ahora llamamos a la función LENTA que
+        # descarga la imagen y la devuelve como texto base64.
+        # El spinner del header permanecerá activo mientras esta función se ejecuta.
+        
+        image_base64_string = ReactomeService.get_diagram_image_base64(
             pathway_st_id=pathway_st_id, 
-            analysis_token=analysis_token,
-            file_format="png" 
+            analysis_token=analysis_token
         )
         
-        if diagram_url == "/assets/reactome_placeholder.png":
-            return html.Div(dbc.Alert("Could not generate diagram URL (Token issue).", color="warning"), className="p-3")
+        # Si la descarga falla, mostramos un error y apagamos el spinner.
+        if image_base64_string is None:
+            return html.Div(dbc.Alert("Error: Could not download the pathway diagram from Reactome.", color="danger"), className="p-3"), None
 
-        # 4. Renderizar la Imagen en Dash
-        return html.Div([
+        # 🔑 CAMBIO CLAVE:
+        # El 'src' del html.Img ahora es la cadena de datos base64.
+        # El navegador no necesita hacer una nueva descarga; la imagen se carga al instante.
+        diagram_content = html.Div([
             html.H5(f"Pathway Visualization: {pathway_name}", className="mt-3"),
             html.P(f"Stable ID: {pathway_st_id}", className="text-muted small"),
             html.A(
                 html.Img(
-                    src=diagram_url, 
-                    alt=f"Reactome Diagram for {pathway_name} with gene overlay.",
+                    src=image_base64_string,  # <--- Usamos la cadena base64
+                    alt=f"Reactome Diagram for {pathway_name}", 
                     style={'maxWidth': '100%', 'height': 'auto', 'border': '1px solid #ddd', 'borderRadius': '5px'}
                 ),
-                # Enlace para abrir el diagrama interactivo de Reactome en una nueva pestaña
                 href=f"https://reactome.org/content/detail/{pathway_st_id}?analysis={analysis_token}",
                 target="_blank",
                 className="d-block mt-3"
             ),
-            html.P(
-                html.Strong("Click the image to view the interactive diagram on Reactome.org"), 
-                className="text-center text-info small mt-2"
-            )
+            html.P(html.Strong("Click the image to view the interactive diagram on Reactome.org"), className="text-center text-info small mt-2")
         ], className="mt-4 p-3 border rounded shadow-sm")
+        
+        # Retornamos el contenido y 'None' para apagar el spinner.
+        return diagram_content, None
 
+    # 7. Limpiar Reactome (CORREGIDO)
     @app.callback(
         Output('reactome-results-store', 'data', allow_duplicate=True),
         Input('clear-reactome-results-btn', 'n_clicks'), 
@@ -1329,9 +844,16 @@ def register_enrichment_callbacks(app):
     )
     def clear_reactome_results(n_clicks):
         if n_clicks and n_clicks > 0:
+            
+            # 🔑 CORRECCIÓN: Este callback solo tiene UN Output ('reactome-results-store'),
+            # por lo tanto, debe retornar UN solo valor (el diccionario).
+            # Se eliminó el ", None" que estaba causando el error.
+            
             return {'results': [], 'gene_list': [], 'organism': 'Homo sapiens'}
+        
         raise PreventUpdate
             
+    # 7.5. Ajuste de tabla (Sin Cambios)
     @app.callback(
         [Output('enrichment-results-table-gprofiler', 'style_header_conditional', allow_duplicate=True),
         Output('enrichment-results-table-gprofiler', 'style_data_conditional', allow_duplicate=True)],
@@ -1342,93 +864,42 @@ def register_enrichment_callbacks(app):
     def adjust_gprofiler_column_widths_dynamically(current_columns, base_style_data_conditional):
         if current_columns is None:
             raise PreventUpdate
-
-        style_header_conditional = [] 
-        style_data_conditional = base_style_data_conditional 
-        
-        return style_header_conditional, style_data_conditional
+        return [], base_style_data_conditional
             
             
-    # logic/callbacks/enrichment_analysis.py (Reemplazar la función display_gprofiler_clustergram)
-
-    # 8. CALLBACK PARA EL HEATMAP/CLUSTERGRAM - VINCULADO AL THRESHOLD
+    # 8. Callback para Heatmap (Sin Cambios)
     @app.callback(
         Output('gprofiler-clustergram-output', 'children'),
         [Input('gprofiler-results-store', 'data'),
-        Input('gprofiler-threshold-input', 'value')], # 🔑 NUEVO INPUT
+        Input('gprofiler-threshold-input', 'value')],
         [State('enrichment-selected-indices-store', 'data'),
         State('interest-panel-store', 'data')],
         prevent_initial_call=True
     )
     def display_gprofiler_clustergram(stored_data, threshold_value, selected_indices, items):
-        """
-        Genera y muestra el Heatmap/Clustergram de Membresía Gen-Término, 
-        vinculado al Threshold del Manhattan Plot.
-        """
-        
-        # ... (Lógica de verificación de stored_data y recolección de genes se mantiene igual) ...
-
-        # Convertir threshold_value a float para pasarlo al procesamiento
         try:
             val_threshold = float(threshold_value)
         except (TypeError, ValueError):
-            val_threshold = 0.05 # Fallback
+            val_threshold = 0.05 
 
-        # 2. Procesar datos (Obtiene la matriz Term x Gen y los contadores)
-        # 🔑 PASAR EL THRESHOLD A LA FUNCIÓN DE PROCESAMIENTO 🔑
         heatmap_matrix, debug_counters = process_data_for_gene_term_heatmap(stored_data, threshold=val_threshold, max_terms=50) 
         
-        # ... (El resto de la lógica de manejo de errores y retorno se mantiene igual) ...
-        
         if heatmap_matrix.empty:
-            # ... (Mensaje de error detallado se mantiene igual) ...
-            # Aquí se debería incluir el threshold usado en el mensaje de error.
+            if not stored_data or not stored_data.get('results'):
+                 detail_message = "No analysis data found. Run g:Profiler analysis first."
+            elif debug_counters['terms_after_pvalue_filter'] == 0:
+                detail_message = f"No terms passed the P-value filter (< {val_threshold})."
+            elif debug_counters['terms_removed_by_zerovariance'] > 0 or debug_counters['genes_removed_by_zerovariance'] > 0:
+                 detail_message = "All terms/genes were removed during zero-variance cleaning."
+            else:
+                 detail_message = "No significant gene-term associations found to plot."
             
-            detail_message = (
-                f"**Filter Flow Debug (HEATMAP FAIL):**\n"
-                f"... (Debugging info)\n"
-                f"**Filter Used:** P-value < **{val_threshold}** (from Manhattan Plot input).\n"
-                f"... (Resto de la lógica del mensaje de error) ..."
-            )
-            return dbc.Alert(...) # Retorno del mensaje de error
+            return dbc.Alert([
+                html.H6("Clustergram could not be generated.", className="alert-heading"),
+                html.P(detail_message)
+            ], color="info")
 
-        # 4. Generar la figura del Heatmap
         heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
 
-        # 5. Retornar el dcc.Graph
-        return dcc.Graph(
-            figure=heatmap_fig, 
-            config={'displayModeBar': True}
-        )
+        return dcc.Graph(figure=heatmap_fig, config={'displayModeBar': True})
  
-
-    # 🚫 8. CALLBACK CLIENT-SIDE FINAL PARA NEUTRALIZAR EL SCROLL DEL IFRAME 🚫
-    # Se activa cuando se actualiza el contenido de los 'Fireworks' y corrige el foco/scroll.
-    app.clientside_callback(
-        """
-        function(children) {
-            // El children contiene el HTML/Iframe. Verificamos que sea un array con contenido.
-            if (children && children.length > 0 && children[0] && children[0].type === 'iframe') {
-                
-                // Usamos un timeout más largo (800ms) para asegurarnos de que el Iframe haya 
-                // terminado de procesar su script interno que causa el foco/scroll.
-                setTimeout(function() {
-                    // Forzar el scroll a la parte superior de la página (0, 0)
-                    // Usamos 'smooth' o 'auto' para evitar un salto visual brusco, pero si 'smooth' falla,
-                    // es mejor usar 'auto'. Usaremos 'auto' para la mayor compatibilidad.
-                    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-                    
-                    // Opcional: Si sabemos el ID del componente (ej. 'main-content-area'), 
-                    // también podemos hacer scroll a ese elemento. Aquí usaremos el documento.
-
-                }, 800); 
-            }
-            return 1;
-        }
-        """,
-        # Output: El dummy store que creamos
-        Output('reactome-scroll-fix-dummy', 'data'),
-        # Input: Escucha la actualización del contenido de los 'Fireworks'
-        Input('reactome-fireworks-output', 'children'),
-        prevent_initial_call=True
-    )
