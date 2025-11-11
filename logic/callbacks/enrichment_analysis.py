@@ -23,7 +23,9 @@ from scipy.spatial.distance import pdist, squareform
 
 logger = logging.getLogger(__name__)
 
-# --- FUNCIÓN DE MANHATTAN PLOT (Sin Cambios) ---
+# logic/callbacks/enrichment_analysis.py
+
+# --- FUNCIÓN DE MANHATTAN PLOT (MODIFICADA) ---
 def create_gprofiler_manhattan_plot(df, threshold_value):
     line_threshold_value = 0.05 
     try:
@@ -39,7 +41,19 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         return fig
         
     df['-log10(P-value)'] = -1 * np.log10(df['p_value'].clip(lower=1e-300))
-    source_order = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
+    
+    # --- 🔑 CAMBIO AQUÍ ---
+    # Ya no usamos una lista fija.
+    # 1. Obtenemos dinámicamente TODAS las fuentes de datos del dataframe de resultados.
+    all_sources = df['source'].unique()
+    
+    # 2. Creamos un orden personalizado: GO primero, luego el resto alfabéticamente
+    #    para que el gráfico se mantenga ordenado.
+    go_sources = sorted([s for s in all_sources if s.startswith('GO:')])
+    other_sources = sorted([s for s in all_sources if not s.startswith('GO:')])
+    source_order = go_sources + other_sources
+    # --- FIN DEL CAMBIO ---
+
     df['source'] = pd.Categorical(df['source'], categories=source_order, ordered=True)
     df = df.sort_values(['source', 'p_value'], ascending=True)
     df['term_index'] = df.groupby('source', observed=True).cumcount() + 1
@@ -50,6 +64,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     df['is_gold_standard'] = df['-log10(P-value)'] >= y_threshold
     df['plot_color_group'] = df.apply(lambda row: 'Gold' if row['is_gold_standard'] else row['source'], axis=1)
     
+    # El mapa de colores ya era dinámico, así que no necesita cambios.
     source_colors = px.colors.qualitative.Bold
     source_color_map = {source: source_colors[i % len(source_colors)] for i, source in enumerate(df['source'].unique())}
     color_map = {'Gold': 'red'} 
@@ -67,7 +82,6 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         
     df['marker_size'] = df['marker_size'].clip(upper=max_size)
     
-    # Cambio
     df_plot = df.copy().reset_index(drop=True)
 
     if df_plot.empty:
@@ -86,6 +100,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         hover_data={'term_index': False, '-log10(P-value)': ':.2f', 'term_name': True, 'p_value': ':.2e', 'intersection_size': True, 'source': True, 'is_gold_standard': True}
     )
     
+    # Las etiquetas del eje X ya eran dinámicas, así que no necesitan cambios.
     source_labels = df_plot.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index() 
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     

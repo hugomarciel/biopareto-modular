@@ -87,7 +87,7 @@ def create_gprofiler_layout(organism_options):
                 dbc.Row([
                     dbc.Col([
                         dbc.Label("P-Value Threshold (Gold Standard):"),
-                        dcc.Input(id='gprofiler-threshold-input', type='number', value=0.05, min=0.0, max=1.0, className="form-control mb-3")
+                        dcc.Input(id='gprofiler-threshold-input', type='number', value=0.05, min=0.0, max=1.0, step=0.01, className="form-control mb-3")
                     ], width=3), 
                 ]),
                 dcc.Loading(dcc.Graph(id='gprofiler-manhattan-plot'), type="default")
