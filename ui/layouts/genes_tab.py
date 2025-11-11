@@ -1,7 +1,7 @@
 # ui/layouts/genes_tab.py
 
 import dash_bootstrap_components as dbc
-from dash import html
+from dash import html, dcc # <-- Asegúrate de que dcc esté importado
 
 
 def create_genes_tab():
@@ -18,9 +18,15 @@ def create_genes_tab():
                             html.Div(id="common-genes-analysis") # Contiene el gráfico y los botones 100%
                         ]),
                         html.Hr(),
-                        html.Div(id="genes-table-container") # Contiene la tabla detallada
+                        html.Div(id="genes-table-container") # Contiene el Filtro Global, el Gráfico y la Tabla
                     ])
                 ])
             ], width=12),
-        ])
+        ]),
+        
+        # --- 🔑 CAMBIO AQUÍ ---
+        # Añadimos un Store para guardar el dataframe maestro
+        dcc.Store(id='genes-analysis-internal-store')
+        # --- FIN DEL CAMBIO ---
+        
     ], fluid=True)

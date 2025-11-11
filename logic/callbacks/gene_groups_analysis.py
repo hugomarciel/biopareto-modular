@@ -520,10 +520,10 @@ def register_gene_groups_callbacks(app):
                 visible=True,
                 
                 # 'bgcolor' establece el color de fondo del slider (área no seleccionada)
-                bgcolor="lightgray", 
+                #bgcolor="lightgray", 
                 
                 # 'bordercolor' establece el color del borde de los "handles" (lo que marcaste en rojo)
-                bordercolor="gold",  # Un color oscuro (azul marino) para alta visibilidad
+                bordercolor="#444",  # Un color oscuro (azul marino) para alta visibilidad
                 
                 # 'borderwidth' hace que ese borde sea más grueso
                 borderwidth=2,       
