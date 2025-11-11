@@ -5,8 +5,6 @@ from dash import html, dcc
 from services.gprofiler_service import get_organisms_from_api 
 from services.reactome_service import ReactomeService
 
-# ui/layouts/enrichment_tab.py
-# (Asegúrate de tener 'import dash_bootstrap_components as dbc', 'from dash import html, dcc' al inicio del archivo)
 
 # --- Componente de Layout de g:Profiler (MODIFICADO) ---
 def create_gprofiler_layout(organism_options):
@@ -60,19 +58,34 @@ def create_gprofiler_layout(organism_options):
             ], width=2)
         ], className="mb-3 align-items-end"),
         
-        # 6. 🔑 NUEVO: Fila para el selector de fuentes de datos
+        # 6. 🔑 FILA DE SELECTOR DE FUENTES (MODIFICADA)
         dbc.Row([
             dbc.Col([
                 dbc.Label("Select Data Sources:", className="fw-bold"),
+                
+                # --- 🔑 INICIO DEL CAMBIO ---
                 dbc.Checklist(
                     id='gprofiler-sources-checklist',
                     options=gprofiler_source_options,
                     value=default_sources,
-                    inline=True, # Muestra las opciones en línea
+                    
+                    # 1. Eliminamos 'inline=True' para que la lista sea vertical
+                    # inline=True, 
+                    
                     className="mb-3",
-                    labelClassName="me-3", # Espacio entre checkboxes
-                    inputClassName="me-1" # Espacio entre el check y el label
+                    
+                    # 2. Eliminamos las clases de espaciado para 'inline'
+                    # labelClassName="me-3", 
+                    # inputClassName="me-1"
+                    
+                    # 3. Añadimos CSS para un layout de columnas responsivo
+                    style={
+                        'column-width': '240px', # Cada columna tendrá ~240px
+                        'padding-left': '20px'  # Para alinear con el label
+                    }
                 )
+                # --- 🔑 FIN DEL CAMBIO ---
+                
             ], width=12)
         ], className="mb-3"),
         
@@ -102,7 +115,6 @@ def create_gprofiler_layout(organism_options):
         ], id="gprofiler-clustergram-card", className="mt-3 mb-4"),
         
     ], className="mt-3")
-
 
 # --- Componente de Layout de Reactome (MODIFICADO) ---
 def create_reactome_layout(organism_options):
