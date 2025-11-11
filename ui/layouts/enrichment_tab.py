@@ -5,15 +5,39 @@ from dash import html, dcc
 from services.gprofiler_service import get_organisms_from_api 
 from services.reactome_service import ReactomeService
 
-# --- Componente de Layout de g:Profiler (Sin cambios) ---
+# ui/layouts/enrichment_tab.py
+# (Asegúrate de tener 'import dash_bootstrap_components as dbc', 'from dash import html, dcc' al inicio del archivo)
+
+# --- Componente de Layout de g:Profiler (MODIFICADO) ---
 def create_gprofiler_layout(organism_options):
+    
+    # 1. Definimos las fuentes de datos que podrá seleccionar el usuario
+    gprofiler_source_options = [
+        {'label': 'GO:BP (Biological Process)', 'value': 'GO:BP'},
+        {'label': 'GO:MF (Molecular Function)', 'value': 'GO:MF'},
+        {'label': 'GO:CC (Cellular Component)', 'value': 'GO:CC'},
+        {'label': 'KEGG', 'value': 'KEGG'},
+        {'label': 'Reactome (REAC)', 'value': 'REAC'},
+        {'label': 'WikiPathways (WP)', 'value': 'WP'},
+        {'label': 'Transfac (TF)', 'value': 'TF'},
+        {'label': 'miRTarBase (MIRNA)', 'value': 'MIRNA'},
+        {'label': 'Human Protein Atlas (HPA)', 'value': 'HPA'},
+        {'label': 'CORUM', 'value': 'CORUM'},
+        {'label': 'Human Phenotype Ontology (HP)', 'value': 'HP'},
+    ]
+    
+    # 2. Definimos cuáles estarán seleccionadas por defecto
+    default_sources = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
+
     return html.Div([
         dbc.Row([
+            # 3. Columna del Organismo (sin cambios)
             dbc.Col([
                 dbc.Label("Select Organism:", className="fw-bold"),
                 dcc.Dropdown(id='gprofiler-organism-dropdown', options=organism_options, value='hsapiens', placeholder="Select organism for g:Profiler analysis", className="mb-3")
             ], width=5),
             
+            # 4. Columna de Botones (sin cambios)
             dbc.Col([
                 html.Div(className="d-flex align-items-center mb-3", style={'height': '38px'}, children=[
                     dbc.Button("🚀 Run g:Profiler Analysis", id="run-gprofiler-btn", color="success", disabled=True, className="me-2"),
@@ -30,13 +54,31 @@ def create_gprofiler_layout(organism_options):
                 ])
             ], width=5),
             
+            # 5. Columna de Clear (sin cambios)
             dbc.Col([
                 dbc.Button("🗑️ Clear Results", id="clear-gprofiler-results-btn", color="light", disabled=True, className="mb-3 w-100"),
             ], width=2)
         ], className="mb-3 align-items-end"),
         
+        # 6. 🔑 NUEVO: Fila para el selector de fuentes de datos
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Select Data Sources:", className="fw-bold"),
+                dbc.Checklist(
+                    id='gprofiler-sources-checklist',
+                    options=gprofiler_source_options,
+                    value=default_sources,
+                    inline=True, # Muestra las opciones en línea
+                    className="mb-3",
+                    labelClassName="me-3", # Espacio entre checkboxes
+                    inputClassName="me-1" # Espacio entre el check y el label
+                )
+            ], width=12)
+        ], className="mb-3"),
+        
         html.Hr(),
         
+        # 7. Resto del layout (sin cambios)
         dcc.Loading(html.Div(id="gprofiler-results-content"), type="default"),
         html.Hr(), 
         dbc.Card([

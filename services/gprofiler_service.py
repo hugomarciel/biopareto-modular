@@ -16,21 +16,28 @@ class GProfilerService:
     BASE_URL = "https://biit.cs.ut.ee/gprofiler/api/gost/profile/"
     ORGANISMS_URL = "https://biit.cs.ut.ee/gprofiler/api/util/organisms_list"
 
-    @staticmethod
-    def get_enrichment(gene_list, organism='hsapiens'):
+    # services/gprofiler_service.py
+# (Asegúrate de tener 'import requests' y 'import logging' al inicio)
+
+    @staticmethod  # <--- ¡ESTA LÍNEA ES CRUCIAL!
+    def get_enrichment(gene_list, organism='hsapiens', sources=None):
         """
         Get biological enrichment for a gene list
         """
         try:
+            # Definimos las fuentes por defecto si no se proporcionan
+            if not sources:
+                sources = ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"]
+
             print(f"\n[DEBUG GPROFILER SERVICE] Requesting enrichment for {len(gene_list)} genes")
             print(f"[DEBUG GPROFILER SERVICE] Organism: {organism}")
-            print(f"[DEBUG GPROFILER SERVICE] First 5 genes: {gene_list[:5]}")
+            print(f"[DEBUG GPROFILER SERVICE] Sources: {sources}") 
             
             payload = {
                 "organism": organism,
                 "query": gene_list,
-                "sources": ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"],
-                "all_results": True
+                "sources": sources,     
+                "all_results": True     
             }
 
             response = requests.post(GProfilerService.BASE_URL, json=payload, timeout=30)
@@ -39,23 +46,9 @@ class GProfilerService:
                 data = response.json()
                 
                 print(f"[DEBUG GPROFILER SERVICE] Response received successfully")
-                print(f"[DEBUG GPROFILER SERVICE] Response keys: {list(data.keys())}")
                 
                 if 'result' in data and data['result']:
                     print(f"[DEBUG GPROFILER SERVICE] Number of results: {len(data['result'])}")
-                    
-                    if data['result']:
-                        first_result = data['result'][0]
-                        print(f"[DEBUG GPROFILER SERVICE] First result keys: {list(first_result.keys())}")
-                        print(f"[DEBUG GPROFILER SERVICE] FULL FIRST RESULT:")
-                        for key, value in first_result.items():
-                            if isinstance(value, list) and len(value) > 10:
-                                print(f"  - {key}: [{len(value)} items] First 3: {value[:3]}")
-                            else:
-                                print(f"  - {key}: {value}")
-                        print(f"[DEBUG GPROFILER SERVICE] First result 'intersections' field: {first_result.get('intersections', 'KEY NOT FOUND')[:10] if isinstance(first_result.get('intersections'), list) else first_result.get('intersections')}")
-                        print(f"[DEBUG GPROFILER SERVICE] First result 'intersection' field: {first_result.get('intersection', 'KEY NOT FOUND')[:10] if isinstance(first_result.get('intersection'), list) else first_result.get('intersection')}")
-                    
                     return data['result']
                 else:
                     print(f"[DEBUG GPROFILER SERVICE] No results found in response")

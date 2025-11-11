@@ -434,17 +434,20 @@ def register_enrichment_callbacks(app):
         is_disabled = not (selected_indices and len(selected_indices) > 0)
         return is_disabled, is_disabled
   
-    # 4. Ejecutar g:Profiler (CORREGIDO con Spinner y allow_duplicate)
+    # logic/callbacks/enrichment_analysis.py
+
+    # 4. Ejecutar g:Profiler (CORREGIDO con Spinner, allow_duplicate y selector de fuentes)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-spinner-output', 'children')], 
         Input('run-gprofiler-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
-        State('interest-panel-store', 'data'),
-        State('gprofiler-organism-dropdown', 'value')],
+         State('interest-panel-store', 'data'),
+         State('gprofiler-organism-dropdown', 'value'),
+         State('gprofiler-sources-checklist', 'value')], # <-- 1. Añadimos el nuevo State
         prevent_initial_call=True
     )
-    def run_gprofiler_analysis(n_clicks, selected_indices, items, organism):
+    def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources): # <-- 2. Añadimos el argumento
         if not n_clicks or not selected_indices:
             raise PreventUpdate
         
@@ -471,7 +474,8 @@ def register_enrichment_callbacks(app):
         if not gene_list_upper:
             return {'results': [], 'gene_list': [], 'organism': organism}, None
 
-        results = GProfilerService.get_enrichment(gene_list_upper, organism)
+        # 3. Pasamos 'selected_sources' al servicio
+        results = GProfilerService.get_enrichment(gene_list_upper, organism, selected_sources)
 
         if results is None:
             return None, None 
@@ -479,6 +483,7 @@ def register_enrichment_callbacks(app):
         if not results:
             return {'results': [], 'gene_list': gene_list_upper, 'organism': organism}, None
 
+        # El resto de la función (procesamiento de resultados) no cambia
         enrichment_data_list = []
         for term in results:
             source_order_value = str(term.get('source_order', 'N/A'))
