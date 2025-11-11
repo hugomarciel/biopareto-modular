@@ -29,7 +29,8 @@ class GProfilerService:
             payload = {
                 "organism": organism,
                 "query": gene_list,
-                "sources": ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"]
+                "sources": ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"],
+                "all_results": True
             }
 
             response = requests.post(GProfilerService.BASE_URL, json=payload, timeout=30)

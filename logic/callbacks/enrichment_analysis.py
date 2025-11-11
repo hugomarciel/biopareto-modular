@@ -67,7 +67,8 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         
     df['marker_size'] = df['marker_size'].clip(upper=max_size)
     
-    df_plot = df[df['significant'] == True].copy().reset_index(drop=True) 
+    # Cambio
+    df_plot = df.copy().reset_index(drop=True)
 
     if df_plot.empty:
         fig = go.Figure()
@@ -546,7 +547,8 @@ def register_enrichment_callbacks(app):
         
         filtered_df = df[df['p_value'] < val_threshold].copy()
         filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
-        df_plot = df[df['significant'] == True].copy() 
+        # Cambio
+        df_plot = df.copy()
         manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value)
         
         display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False]) if not filtered_df.empty else pd.DataFrame()

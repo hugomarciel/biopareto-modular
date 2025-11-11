@@ -14,7 +14,7 @@ import json
 
 def register_pareto_plot_callbacks(app):
 
-    # 1. Callback para actualizar las opciones y visibilidad de los dropdowns de ejes (SIN CAMBIOS)
+    # 1. Callback para actualizar las opciones y visibilidad de los dropdowns de ejes (MODIFICADO)
     @app.callback(
         [Output('x-axis-dropdown', 'options'),
          Output('y-axis-dropdown', 'options'),
@@ -26,7 +26,7 @@ def register_pareto_plot_callbacks(app):
          Output('y-axis-static-text', 'children'),
          Output('x-axis-static-text', 'style'),
          Output('y-axis-static-text', 'style')],
-        [Input('objectives-store', 'data'),
+        [Input('objectives-store', 'data'),      # Se mantiene como Input para disparar el callback
          Input('data-store', 'data'),
          Input('swap-axes-btn', 'n_clicks')],
         [State('x-axis-dropdown', 'value'),
@@ -35,22 +35,39 @@ def register_pareto_plot_callbacks(app):
          State('y-axis-static-text', 'children')],
         prevent_initial_call=False
     )
-    def update_axis_dropdowns(objectives, data_store, swap_clicks, current_x_value, current_y_value, current_x_text, current_y_text):
+    def update_axis_dropdowns(objectives_from_store, data_store, swap_clicks, current_x_value, current_y_value, current_x_text, current_y_text):
         """
         Update axis dropdown options and visibility based on available objectives.
+        MODIFICADO: Siempre usa 2 objetivos de 'explicit_objectives' y oculta dropdowns.
         """
         ctx = dash.callback_context
         triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
-        if not objectives:
+        # --- MODIFICACIÓN INICIO ---
+        # 1. Ignorar 'objectives_from_store'. Usar 'explicit_objectives' de 'data_store'.
+        if not data_store:
+            data_store = {} # Evitar error si data_store es None
+        
+        # Usar 'explicit_objectives' como la *única* fuente de verdad para los ejes.
+        objectives = data_store.get('explicit_objectives', [])
+        
+        if not objectives or len(objectives) < 2:
+            # No hay 2 objetivos explícitos, ocultar todo
             return [], [], None, None, {'display': 'none'}, {'display': 'none'}, "", "", {'display': 'none'}, {'display': 'none'}
+
+        # 2. Asegurarse de que solo usamos los dos primeros objetivos
+        objectives = objectives[:2]
+        # --- MODIFICACIÓN FIN ---
 
         options = [{'label': obj.replace('_', ' ').title(), 'value': obj} for obj in objectives]
 
-        explicit_objectives = data_store.get('explicit_objectives', [])
-        default_x = explicit_objectives[0] if len(explicit_objectives) > 0 else (objectives[0] if objectives else None)
-        default_y = explicit_objectives[1] if len(explicit_objectives) > 1 else (objectives[1] if len(objectives) > 1 else (objectives[0] if objectives else None))
+        # --- MODIFICACIÓN INICIO ---
+        # 3. 'explicit_objectives' son los únicos defaults
+        default_x = objectives[0]
+        default_y = objectives[1]
+        # --- MODIFICACIÓN FIN ---
         
+        # Esta lógica de persistencia está bien, pero ahora 'objectives' siempre tendrá 2 elementos
         if triggered_id != 'swap-axes-btn' and current_x_value in objectives:
             final_x_value = current_x_value
         else:
@@ -61,18 +78,20 @@ def register_pareto_plot_callbacks(app):
         else:
             final_y_value = default_y
         
-        if len(objectives) > 2:
-            dropdown_style = {'display': 'block'}
-            static_text_style = {'display': 'none'}
-            x_static_text = ""
-            y_static_text = ""
-        else:
-            dropdown_style = {'display': 'none'}
-            static_text_style = {'display': 'block', 'fontSize': '14px', 'padding': '8px 0'}
-            x_static_text = final_x_value.replace('_', ' ').title() if final_x_value else ""
-            y_static_text = final_y_value.replace('_', ' ').title() if final_y_value else ""
-            if triggered_id == 'swap-axes-btn':
-                x_static_text, y_static_text = current_y_text, current_x_text
+        # --- MODIFICACIÓN INICIO ---
+        # 4. Eliminar el 'if len(objectives) > 2:' y forzar el modo de texto estático
+        
+        dropdown_style = {'display': 'none'}
+        static_text_style = {'display': 'block', 'fontSize': '14px', 'padding': '8px 0'}
+        
+        x_static_text = final_x_value.replace('_', ' ').title() if final_x_value else ""
+        y_static_text = final_y_value.replace('_', ' ').title() if final_y_value else ""
+
+        if triggered_id == 'swap-axes-btn':
+            # Al swapear, tomar el texto del estado anterior
+            x_static_text, y_static_text = current_y_text, current_x_text
+        
+        # --- MODIFICACIÓN FIN ---
 
         return options, options, final_x_value, final_y_value, dropdown_style, dropdown_style, x_static_text, y_static_text, static_text_style, static_text_style
 
@@ -124,7 +143,9 @@ def register_pareto_plot_callbacks(app):
                 return updated_layout
         raise PreventUpdate
 
-    # 4. Callback principal para generar el gráfico de Pareto (MODIFICADO TOTALMENTE)
+    # 4. Callback principal para generar el gráfico de Pareto (SIN CAMBIOS)
+    # (No es necesario modificarlo, ya que leerá los valores correctos
+    # de x_axis_value y y_axis_value, forzados por el Callback 1)
     @app.callback(
         [Output('pareto-plot', 'figure'),
          Output('selected-solutions-info', 'children'),
@@ -151,6 +172,8 @@ def register_pareto_plot_callbacks(app):
             return {}, "", "Pareto Front (No visible fronts)"
 
         # --- 1. Determinar Ejes ---
+        # (Esta lógica ahora funcionará como se espera, ya que x_axis_value
+        # y y_axis_value serán seteados por el Callback 1)
         explicit_objectives = data_store.get('explicit_objectives', [])
         objectives = data_store.get('main_objectives') or (explicit_objectives if explicit_objectives else (visible_fronts[0]['objectives'] if visible_fronts else []))
         x_axis = x_axis_value or (explicit_objectives[0] if explicit_objectives else (objectives[0] if objectives else 'num_genes'))
@@ -391,7 +414,7 @@ def register_pareto_plot_callbacks(app):
         plot_title = f"Pareto Front: {y_axis.replace('_', ' ').title()} vs {x_axis.replace('_', ' ').title()}"
         return fig, selected_info, plot_title
 
-    # --- 5. NUEVO: Callback para abrir/cerrar el modal ---
+    # --- 5. NUEVO: Callback para abrir/cerrar el modal --- (SIN CAMBIOS)
     @app.callback(
         Output('multi-solution-modal', 'is_open'),
         [Input('multi-solution-modal-store', 'data'),
@@ -409,7 +432,10 @@ def register_pareto_plot_callbacks(app):
             return True
         return is_open
 
-    # --- 6. NUEVO: Callback para poblar el contenido del modal ---
+    # --- 6. NUEVO: Callback para poblar el contenido del modal --- (SIN CAMBIOS)
+    # (Este callback usa 'objectives-store', lo cual es correcto,
+    # ya que queremos mostrar *todos* los objetivos en el modal,
+    # incluso los que no están en los ejes X/Y)
     @app.callback(
         [Output('multi-solution-modal-header', 'children'),
          Output('multi-solution-modal-body', 'children')],
@@ -443,6 +469,7 @@ def register_pareto_plot_callbacks(app):
 
         # Identificar otros objetivos (que no sean X, Y o internos)
         internal_keys = ['front_name', 'color', 'unique_id', 'current_x', 'current_y', 'x_coord', 'y_coord', 'solution_id', 'selected_genes']
+        # 'all_objectives' aquí viene de 'objectives-store', lo cual es correcto.
         other_objectives = [obj for obj in all_objectives if obj not in [x_axis, y_axis] and obj not in internal_keys and obj in sol_sample]
 
         selected_ids = {s['unique_id'] for s in (selected_solutions or [])}

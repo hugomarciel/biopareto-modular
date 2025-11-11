@@ -18,7 +18,7 @@ from logic.utils.data_processing import validate_and_process_fronts
 
 def register_data_management_callbacks(app):
     
-    # 1. Callback principal para manejo de carga y borrado
+    # 1. Callback principal para manejo de carga y borrado (SIN CAMBIOS)
     @app.callback(
         [Output('data-store', 'data'),
          Output('upload-status', 'children'),
@@ -48,7 +48,7 @@ def register_data_management_callbacks(app):
 
         raise PreventUpdate
 
-    # 2. Callback para el despliegue visual de los frentes cargados
+    # 2. Callback para el despliegue visual de los frentes cargados (MODIFICADO)
     @app.callback(
         Output('fronts-list', 'children'),
         Input('data-store', 'data'),
@@ -61,6 +61,13 @@ def register_data_management_callbacks(app):
 
         if not current_data or not current_data.get('fronts'):
             return html.P("No fronts loaded yet.", className="text-muted")
+
+        # --- INICIO DE LA MODIFICACIÓN ---
+        # Obtener los 2 objetivos explícitos del data-store principal.
+        # Esta lista (ej: ['auc', 'accuracy']) será usada para el display.
+        explicit_objectives = current_data.get('explicit_objectives', [])
+        objectives_str = ', '.join(explicit_objectives)
+        # --- FIN DE LA MODIFICACIÓN ---
 
         fronts_items = []
         for front in current_data['fronts']:
@@ -99,7 +106,8 @@ def register_data_management_callbacks(app):
                         ], width=2)
                     ]),
                     html.Small(
-                        f"Solutions: {len(front['data'])} | Objectives: {', '.join(front['objectives'])}" +
+                        # --- MODIFICACIÓN: Usar objectives_str en lugar de front['objectives'] ---
+                        f"Solutions: {len(front['data'])} | Objectives: {objectives_str}" +
                         (f" | (CONSOLIDATED)" if front.get('is_consolidated') else ""),
                         className="text-muted mt-2 d-block"
                     )
@@ -109,7 +117,7 @@ def register_data_management_callbacks(app):
 
         return fronts_items
 
-    # 3. Callback para actualizar los nombres de los frentes (Input dinámico)
+    # 3. Callback para actualizar los nombres de los frentes (Input dinámico) (SIN CAMBIOS)
     @app.callback(
         Output('data-store', 'data', allow_duplicate=True),
         Input({'type': 'front-name-input', 'index': ALL}, 'value'),
@@ -133,7 +141,7 @@ def register_data_management_callbacks(app):
 
         return updated_data
 
-    # 4. Callback para definir el frente principal
+    # 4. Callback para definir el frente principal (SIN CAMBIOS)
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
          Output('objectives-store', 'data', allow_duplicate=True)],
@@ -195,7 +203,7 @@ def register_data_management_callbacks(app):
 
         return updated_data, main_objectives
 
-    # 5. Callback para eliminar un frente
+    # 5. Callback para eliminar un frente (SIN CAMBIOS)
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
          Output('objectives-store', 'data', allow_duplicate=True)],
@@ -243,7 +251,7 @@ def register_data_management_callbacks(app):
 
         return updated_data, main_objectives
 
-    # 6. Callback para descargar archivo de prueba
+    # 6. Callback para descargar archivo de prueba (SIN CAMBIOS)
     @app.callback(
         Output('download-test-file', 'data'),
         Input('download-test-btn', 'n_clicks'),
@@ -274,7 +282,7 @@ def register_data_management_callbacks(app):
             filename="test.json"
         )
 
-    # 7. Callback para alternar la visibilidad de la información de formato
+    # 7. Callback para alternar la visibilidad de la información de formato (SIN CAMBIOS)
     @app.callback(
         Output("format-info-collapse", "is_open"),
         Input("toggle-format-info", "n_clicks"),
