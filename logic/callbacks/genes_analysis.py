@@ -1,14 +1,15 @@
 # logic/callbacks/genes_analysis.py
 
 import dash
-from dash import Output, Input, State, dcc, html, dash_table
+from dash import Output, Input, State, dcc, html, dash_table, ctx
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
-from io import StringIO # <-- 1. IMPORTAR STRINGIO
+from io import StringIO 
+from datetime import datetime
 
 def register_genes_analysis_callbacks(app):
 
@@ -19,6 +20,7 @@ def register_genes_analysis_callbacks(app):
         Input('data-store', 'data')
     )
     def prepare_data_and_common_analysis(data):
+        # ... (código sin cambios) ...
         """
         Paso 1: Procesa los datos de 'data-store'.
         - Genera el análisis común (100% y gráfico de frecuencia).
@@ -30,7 +32,7 @@ def register_genes_analysis_callbacks(app):
 
         all_solutions_list = []
         available_objectives = []
-        genes_data = [] 
+        genes_data = []
 
         # 1. Iterar sobre los frentes para construir la lista de soluciones Y el DF maestro
         for front in data.get("fronts", []):
@@ -56,7 +58,7 @@ def register_genes_analysis_callbacks(app):
             # 1.2. Construir los datos para el DF maestro
             for solution in solutions_data:
                 sol_id = solution.get('solution_id', 'N/A')
-                unique_sol_id = f"{front_name} - {sol_id}" 
+                unique_sol_id = f"{front_name} - {sol_id}"
                 
                 for gene in solution.get('selected_genes', []):
                     row = {
@@ -180,9 +182,8 @@ def register_genes_analysis_callbacks(app):
         # 3. Retornar el HTML de análisis común y el DF maestro
         return combined_analysis, genes_df.to_json(orient='split')
 
-    
-   # logic/callbacks/genes_analysis.py
 
+    
     # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (MODIFICADO) ---
     @app.callback(
         Output('genes-table-container', 'children'),
@@ -191,25 +192,24 @@ def register_genes_analysis_callbacks(app):
     def build_detailed_layout(data_json):
         """
         Paso 2: Se activa cuando el 'genes_df' maestro está listo.
-        - Construye el layout HTML para la sección detallada, incluyendo el Filtro Global.
-        - Prepara la tabla y el gráfico con las columnas correctas.
+        - CORRECCIÓN: Se elimina 'clear_on_unhover' del dcc.Graph.
         """
         if not data_json:
             return dbc.Alert("No data loaded.", color="info")
             
         genes_df = pd.read_json(StringIO(data_json), orient='split')
         
-        # 1. Crear opciones para el Filtro Global
+        # 1. Crear opciones para el Filtro Global (sin cambios)
         front_names = genes_df['front_name'].unique()
         front_filter_options = [{'label': 'All Fronts', 'value': 'all'}] + \
                                [{'label': name, 'value': name} for name in front_names]
         
-        # 2. Crear opciones para el Dropdown de Métricas
+        # 2. Crear opciones para el Dropdown de Métricas (sin cambios)
         objective_options = []
         categorical_options = []
         
         categorical_cols = ['gene', 'front_name', 'unique_solution_id']
-        excluded_cols = categorical_cols + ['solution_id'] 
+        excluded_cols = categorical_cols + ['solution_id']
         
         for col in genes_df.columns:
             if col in excluded_cols:
@@ -220,10 +220,10 @@ def register_genes_analysis_callbacks(app):
         categorical_options = [{'label': col.replace('_', ' ').title(), 'value': col} for col in categorical_cols]
         metric_options = categorical_options + objective_options
 
-        # 3. Crear Columnas para la Tabla
+        # 3. Crear Columnas para la Tabla (sin cambios)
         table_columns = []
         for col in genes_df.columns:
-            if col == 'solution_id': 
+            if col == 'solution_id':
                 continue 
                 
             column_name = col.replace('_', ' ').title()
@@ -244,9 +244,7 @@ def register_genes_analysis_callbacks(app):
             
             table_columns.append(col_def)
             
-        # 4. Construir el Layout
-        
-        # --- 🔑 INICIO DEL CAMBIO ---
+        # 4. Construir el Layout (sin cambios)
         
         new_graph_section = html.Div([
             html.H5("📊 Analysis of Filtered Table Data", className="text-secondary mb-3"),
@@ -259,36 +257,51 @@ def register_genes_analysis_callbacks(app):
                     dcc.Dropdown(
                         id='genes-global-front-filter',
                         options=front_filter_options,
-                        value='all', 
+                        value='all',
                         clearable=False
                     )
-                ], width=12, md=6),
+                ], width=12, lg=4, className="mb-2 mb-lg-0"),
                 
                 # Columna para el Dropdown de Métricas
                 dbc.Col([
                     dbc.Label("Select metric to plot:"),
                     dcc.Dropdown(
                         id='genes-table-graph-metric-select',
-                        options=metric_options, 
-                        value='gene' 
+                        options=metric_options,
+                        value='gene'
                     )
-                ], width=12, md=6)
+                ], width=12, lg=5, className="mb-2 mb-lg-0"),
+
+                # Columna para el botón de Guardar Grupo
+                dbc.Col([
+                    dbc.Button(
+                        [html.I(className="bi bi-bookmark-plus me-2"), "Save Visible Group"],
+                        id='save-graph-group-btn',
+                        color="info",
+                        size="sm",
+                        className="w-100",
+                        style={'display': 'block'}
+                    )
+                ], width=12, lg=3, className="d-flex align-items-end")
+
             ], className="mb-3"), # Cierre del dbc.Row
             
             dcc.Loading(
+                # --- 🔑 INICIO DEL CAMBIO (Quitar 'clear_on_unhover') ---
                 dcc.Graph(id='genes-table-histogram')
-            )
+                # --- 🔑 FIN DEL CAMBIO ---
+            ),
+            
         ])
-        
-        # --- 🔑 FIN DEL CAMBIO ---
         
         
         table = dash_table.DataTable(
-            id='detailed-genes-table', 
-            data=genes_df.to_dict('records'), 
-            columns=table_columns, 
+            id='detailed-genes-table',
+            data=genes_df.to_dict('records'),
+            columns=table_columns,
             sort_action='native',
             filter_action='native',
+            filter_query="",
             page_action='native',
             page_size=20,
             style_cell={'textAlign': 'left', 'padding': '10px'},
@@ -307,33 +320,53 @@ def register_genes_analysis_callbacks(app):
             style_data_conditional=[
                 {'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}
             ],
-            tooltip_duration=None, 
+            tooltip_duration=None,
         )
 
         # 5. Devolver el layout completo de la sección detallada
-        # (El filtro global ya no se pone aquí)
         return html.Div([
             html.Hr(),
-            new_graph_section, 
+            new_graph_section,
             html.Hr(),
             html.H5("📋 Detailed Gene Table by Solution", className="text-secondary mb-3"),
-            table 
+            
+            # Botón Limpiar (sin cambios)
+            dbc.Row([
+                dbc.Col(
+                    html.Div(id='genes-table-summary-panel'),
+                    width=12, lg=9, xl=10, className="mb-2 mb-lg-0"
+                ),
+                dbc.Col(
+                    dbc.Button(
+                        [html.I(className="bi bi-eraser me-2"), "Clear All Filters"],
+                        id='genes-table-clear-filters-btn',
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="w-100"
+                    ),
+                    width=12, lg=3, xl=2,
+                    className="d-flex align-items-center"
+                )
+            ], className="mb-3", align="center"),
+            
+            table
         ])
     
-    # --- CALLBACK 3: FILTRAR TABLA (MODIFICADO) ---
+    # --- CALLBACK 3: FILTRAR TABLA (Sin Cambios) ---
     @app.callback(
         Output('detailed-genes-table', 'data'),
         Input('genes-global-front-filter', 'value'),
         State('genes-analysis-internal-store', 'data')
     )
     def filter_table_by_front(selected_front, data_json):
+        # ... (código sin cambios) ...
         """
         Paso 3: Filtra el 'data' de la tabla cuando el Filtro Global cambia.
         """
         if not data_json:
             raise PreventUpdate
             
-        # --- 🔑 CAMBIO 3: USAR STRINGIO ---
         genes_df = pd.read_json(StringIO(data_json), orient='split')
         
         if selected_front == 'all':
@@ -343,13 +376,14 @@ def register_genes_analysis_callbacks(app):
         return filtered_df.to_dict('records')
         
 
-    # 4. Callback para mostrar los genes al hacer clic en una barra del gráfico (Sin Cambios)
+    # --- CALLBACK 4: MOSTRAR GENES AL CLICAR EN GRÁFICO DE FRECUENCIA (Sin Cambios) ---
     @app.callback(
         Output('clicked-genes-display', 'children'),
         [Input('gene-frequency-chart', 'clickData')],
         [State('data-store', 'data')]
     )
     def display_clicked_genes(clickData, data):
+        # ... (código sin cambios) ...
         """Display genes for clicked frequency bar, along with Add to Panel button."""
         if not clickData or not data:
             return ""
@@ -416,32 +450,67 @@ def register_genes_analysis_callbacks(app):
         ], className="mt-3")
 
 
-    # --- CALLBACK 5: ACTUALIZAR GRÁFICO (MODIFICADO) ---
+    # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (Sin Cambios) ---
     @app.callback(
-        Output('genes-table-histogram', 'figure'),
+        [Output('genes-table-histogram', 'figure'),
+         Output('save-graph-group-btn', 'style'), 
+         Output('genes-table-summary-panel', 'children')], 
         [Input('detailed-genes-table', 'derived_virtual_data'),
          Input('genes-table-graph-metric-select', 'value')]
     )
-    def update_table_histogram(derived_virtual_data, selected_metric):
+    def update_table_histogram_and_summary(derived_virtual_data, selected_metric):
+        # ... (código sin cambios) ...
         """
-        Paso 4: Actualiza el gráfico interactivo.
+        Paso 4: Actualiza el gráfico, el panel de resumen y la visibilidad del botón "Save Group".
         """
         
         default_layout = go.Layout(
             title='Filter the table below to see analysis or select a metric',
             height=400,
-            #plot_bgcolor='lightgray', # <-- Fondo gris
-            #paper_bgcolor='lightgray' # <-- Fondo gris
         )
         
+        default_summary = dbc.Alert(
+            "Filter the table to see summary statistics.",
+            color="info",
+            className="border-start border-info border-4"
+        )
+        
+        # Estilo por defecto para el botón (oculto)
+        save_btn_style = {'display': 'none'}
+
         if not derived_virtual_data or not selected_metric:
-            return go.Figure(layout=default_layout)
+            return go.Figure(layout=default_layout), save_btn_style, default_summary
 
         filtered_df = pd.DataFrame(derived_virtual_data)
 
+        # Calcular estadísticas (sin cambios)
+        total_rows = len(filtered_df)
+        unique_solutions = filtered_df['unique_solution_id'].nunique()
+        unique_genes = filtered_df['gene'].nunique()
+
+        summary_panel = dbc.Alert(
+            dbc.Row([
+                dbc.Col(html.Div([
+                    html.Strong("Total Rows (Gene-Solution pairs): "),
+                    dbc.Badge(f"{total_rows:,}", color="secondary", pill=True, className="ms-1")
+                ]), width="auto", className="me-3"),
+                dbc.Col(html.Div([
+                    html.Strong("Unique Solutions: "),
+                    dbc.Badge(f"{unique_solutions:,}", color="primary", pill=True, className="ms-1")
+                ]), width="auto", className="me-3"),
+                dbc.Col(html.Div([
+                    html.Strong("Unique Genes: "),
+                    dbc.Badge(f"{unique_genes:,}", color="success", pill=True, className="ms-1")
+                ]), width="auto"),
+            ], justify="start"),
+            color="light",
+            className="border"
+        )
+
+
         if selected_metric not in filtered_df.columns:
             default_layout.title = f"Metric '{selected_metric}' not in filtered data."
-            return go.Figure(layout=default_layout)
+            return go.Figure(layout=default_layout), save_btn_style, summary_panel
         
         metric_name = selected_metric.replace('_', ' ').title()
         
@@ -450,85 +519,421 @@ def register_genes_analysis_callbacks(app):
         # --- Lógica de Gráfico Categórico (Barras) ---
         if not pd.api.types.is_numeric_dtype(filtered_df[selected_metric]):
             
+            save_btn_style = {'display': 'block'}
+
             counts = filtered_df[selected_metric].value_counts().reset_index()
             counts.columns = [selected_metric, 'count']
-            counts = counts.sort_values('count', ascending=False) 
+            counts = counts.sort_values('count', ascending=False)
 
             default_items_to_show = 50
             max_range_index = min(default_items_to_show, len(counts))
             
-            # --- 🔑 REVERSIÓN DE LÓGICA DE COLOR ---
             fig = px.bar(
-                counts, 
-                x=selected_metric, 
+                counts,
+                x=selected_metric,
                 y='count',
-                color='count', # <-- DEVUELTO A 'count'
-                color_continuous_scale='Blues', # <-- DEVUELTO A 'Blues'
-                title=f"Counts for '{metric_name}' in Filtered Data (Top {max_range_index} shown by default)"
+                color='count',
+                color_continuous_scale='Blues',
+                title=f"Counts for '{metric_name}' in Filtered Data (Top {max_range_index} shown by default)",
+                custom_data=[selected_metric]
             )
             
             fig.update_layout(
-                xaxis_title=metric_name, 
+                xaxis_title=metric_name,
                 yaxis_title='Count',
                 xaxis_tickangle=-45,
-                xaxis_range=[-0.5, max_range_index - 0.5], 
-                xaxis_rangeslider=dict( 
-                    visible=True,
-                    bgcolor="#EEEEEE", 
-                    bordercolor="#444", 
-                    borderwidth=2,
-                    thickness=0.15
-                ),
-                coloraxis_showscale=False # Ocultar la barra de color sigue siendo buena idea
-            )
-        
-        # --- Lógica de Gráfico Numérico (Histograma) ---
-        else:
-            valid_data = filtered_df[selected_metric].dropna()
-            if valid_data.empty:
-                default_layout.title = f"No valid numeric data for '{metric_name}'."
-                return go.Figure(layout=default_layout)
-                
-            counts, bin_edges = np.histogram(valid_data, bins=20) 
-            
-            # Formato de etiqueta corregido para evitar el error '1-0.81'
-            bin_labels = [f"{bin_edges[i]:.3g} - {bin_edges[i+1]:.3g}" for i in range(len(counts))]
-            
-            hist_df = pd.DataFrame({
-                'count': counts,
-                'bin_label': bin_labels
-            })
-            hist_df = hist_df[hist_df['count'] > 0]
-
-            # --- 🔑 REVERSIÓN DE LÓGICA DE COLOR ---
-            fig = px.bar(
-                hist_df,
-                x='bin_label', 
-                y='count',
-                color='count', # <-- DEVUELTO A 'count'
-                color_continuous_scale='Blues', # <-- DEVUELTO A 'Blues'
-                title=f"Distribution of '{metric_name}' in Filtered Data"
-            )
-
-            fig.update_layout(
-                xaxis_title=metric_name + " (Binned)", 
-                yaxis_title='Frequency (count)',
-                xaxis_tickangle=-45,
+                xaxis_range=[-0.5, max_range_index - 0.5],
                 xaxis_rangeslider=dict(
                     visible=True,
-                    bgcolor="#EEEEEE", 
+                    bgcolor="#EEEEEE",
                     bordercolor="#444",
                     borderwidth=2,
                     thickness=0.15
                 ),
-                xaxis_type='category', 
-                coloraxis_showscale=False # Ocultar la barra de color
+                coloraxis_showscale=False,
+                margin=dict(l=60, r=60, t=60, b=60)
             )
+            
+            return fig, save_btn_style, summary_panel
         
-        # --- Layout Común ---
-        fig.update_layout(
-            margin=dict(l=60, r=60, t=60, b=60),
-            #plot_bgcolor='lightgray', # <-- Fondo gris
-            #paper_bgcolor='lightgray' # <-- Fondo gris
-        )
-        return fig
+        # --- Lógica de Gráfico Numérico (Histograma) ---
+        else:
+            # save_btn_style ya está {'display': 'none'}
+            
+            valid_data = filtered_df[selected_metric].dropna()
+            if valid_data.empty:
+                default_layout.title = f"No valid numeric data for '{metric_name}'."
+                return go.Figure(layout=default_layout), save_btn_style, summary_panel
+                
+            counts, bin_edges = np.histogram(valid_data, bins=20)
+            
+            bin_data_to_plot = []
+            for i in range(len(counts)):
+                if counts[i] > 0:
+                    bin_data_to_plot.append({
+                        'count': counts[i],
+                        'bin_label': f"{bin_edges[i]:.3g} - {bin_edges[i+1]:.3g}",
+                        'bin_start': bin_edges[i],
+                        'bin_end': bin_edges[i+1]
+                    })
+            
+            if not bin_data_to_plot:
+                default_layout.title = f"No data to plot for '{metric_name}'."
+                return go.Figure(layout=default_layout), save_btn_style, summary_panel
+
+            hist_df = pd.DataFrame(bin_data_to_plot)
+            
+            fig = px.bar(
+                hist_df,
+                x='bin_label',
+                y='count',
+                color='count',
+                color_continuous_scale='Blues',
+                title=f"Distribution of '{metric_name}' in Filtered Data",
+                custom_data=['bin_start', 'bin_end', 'bin_label']
+            )
+
+            fig.update_layout(
+                xaxis_title=metric_name + " (Binned)",
+                yaxis_title='Frequency (count)',
+                xaxis_tickangle=-45,
+                xaxis_rangeslider=dict(
+                    visible=True,
+                    bgcolor="#EEEEEE",
+                    bordercolor="#444",
+                    borderwidth=2,
+                    thickness=0.15
+                ),
+                xaxis_type='category',
+                coloraxis_showscale=False,
+                margin=dict(l=60, r=60, t=60, b=60)
+            )
+            
+            return fig, save_btn_style, summary_panel
+
+
+    # --- CALLBACK 6: MANEJAR INTERACCIONES DEL GRÁFICO (MODIFICADO) ---
+    @app.callback(
+        [Output('genes-graph-action-modal', 'is_open'),
+         Output('genes-graph-modal-title', 'children'),
+         Output('genes-graph-modal-body', 'children'),
+         Output('genes-graph-modal-footer', 'children'),
+         Output('genes-graph-temp-store', 'data')],
+        [Input('genes-table-histogram', 'clickData'),
+         Input('save-graph-group-btn', 'n_clicks')],
+        [State('genes-table-graph-metric-select', 'value'),
+         State('detailed-genes-table', 'derived_virtual_data')],
+        prevent_initial_call=True
+    )
+    def handle_graph_interactions(clickData, group_n_clicks, selected_metric, derived_virtual_data):
+        """
+        Paso 5: Maneja los clics en el gráfico y el botón "Save Visible Group".
+        - CORRECCIÓN: Eliminado el 'Input' del contador.
+        """
+        
+        triggered_id = ctx.triggered_id
+        
+        if not triggered_id or derived_virtual_data is None:
+            raise PreventUpdate
+            
+        filtered_df = pd.DataFrame(derived_virtual_data)
+        
+        if filtered_df.empty:
+            raise PreventUpdate
+
+        # Componentes estándar del modal (sin cambios)
+        cancel_button = dbc.Button("Cancel", id='genes-graph-modal-cancel-btn', color="secondary", className="me-2")
+        confirm_button = dbc.Button("Add to Panel", id="genes-graph-modal-confirm-btn", color="primary")
+        footer = html.Div([cancel_button, confirm_button])
+        
+        # --- Lógica para "Save Visible Group" (Opción B Categórica) ---
+        if triggered_id == 'save-graph-group-btn':
+            
+            genes_in_group = sorted(filtered_df['gene'].unique())
+            
+            group_name = f"Visible Group ({selected_metric})"
+            source_display = f"Visible group from '{selected_metric}' analysis"
+            
+            title = "Add Genes to Interest Panel"
+            body = html.Div([
+                html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
+                html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
+                html.P([html.Strong("Source: "), html.Span(source_display, className="text-muted")]),
+                html.P([html.Strong("Number of genes: "), html.Span(f"{len(genes_in_group)}")]),
+                dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
+                dbc.Textarea(
+                    id='genes-graph-modal-comment-input',
+                    placeholder="e.g., 'Top genes from filtered table'...",
+                    style={'height': '100px'},
+                    className='mb-2',
+                    value=f"Group of {len(genes_in_group)} genes from filtered table analysis."
+                )
+            ])
+            
+            temp_data = {
+                'type': 'gene_set',
+                'name': group_name,
+                'source': source_display,
+                'genes': genes_in_group,
+                'count': len(genes_in_group)
+            }
+            
+            return True, title, body, footer, temp_data
+
+        # --- Lógica para Clic en una Barra (Opción A Categórica y Numérica) ---
+        if triggered_id == 'genes-table-histogram':
+            if not clickData:
+                raise PreventUpdate 
+            
+            is_numeric = pd.api.types.is_numeric_dtype(filtered_df[selected_metric])
+            
+            # --- 1. Clic en Métrica Categórica (Opción A) ---
+            if not is_numeric:
+                clicked_category = clickData['points'][0]['customdata'][0]
+                
+                # Caso especial: Si la métrica es 'gene'
+                if selected_metric == 'gene':
+                    gene_name = clicked_category
+                    source_display = "Graph click (Gene metric)"
+                    
+                    title = "Add Genes to Interest Panel"
+                    body = html.Div([
+                        html.P([html.Strong("Type: "), html.Span("🔬 Individual Gene", className="text-info")]),
+                        html.P([html.Strong("Gene: "), html.Code(gene_name, className="text-primary")]),
+                        html.P([html.Strong("Source: "), html.Span(source_display, className="text-muted")]),
+                        dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
+                        dbc.Textarea(
+                            id='genes-graph-modal-comment-input',
+                            placeholder="e.g., 'Key gene identified in analysis'...",
+                            style={'height': '100px'},
+                            className='mb-2',
+                            value=f"Individual gene {gene_name} from filtered table analysis."
+                        )
+                    ])
+                    
+                    temp_data = {
+                        'type': 'individual_gene',
+                        'gene': gene_name,
+                        'source': source_display
+                    }
+                    
+                    return True, title, body, footer, temp_data
+                
+                # Otro caso categórico (ej. 'front_name')
+                else:
+                    category_df = filtered_df[filtered_df[selected_metric] == clicked_category]
+                    genes_in_category = sorted(category_df['gene'].unique())
+                    
+                    group_name = f"Genes from '{clicked_category}'"
+                    source_display = f"Graph click ({selected_metric} = {clicked_category})"
+                    
+                    title = "Add Genes to Interest Panel"
+                    body = html.Div([
+                        html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
+                        html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
+                        html.P([html.Strong("Source: "), html.Span(source_display, className="text-muted")]),
+                        html.P([html.Strong("Number of genes: "), html.Span(f"{len(genes_in_category)}")]),
+                        dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
+                        dbc.Textarea(
+                            id='genes-graph-modal-comment-input',
+                            placeholder="e.g., 'Genes from selected category'...",
+                            style={'height': '100px'},
+                            className='mb-2',
+                            value=f"Group of {len(genes_in_category)} genes from category '{clicked_category}'."
+                        )
+                    ])
+
+                    temp_data = {
+                        'type': 'gene_set',
+                        'name': group_name,
+                        'source': source_display,
+                        'genes': genes_in_category,
+                        'count': len(genes_in_category)
+                    }
+                    
+                    return True, title, body, footer, temp_data
+
+            # --- 2. Clic en Métrica Numérica (Histograma) ---
+            else:
+                
+                valid_data = filtered_df[selected_metric].dropna()
+                if valid_data.empty:
+                    return True, "No Data", dbc.Alert("No valid data in this bin to analyze.", color="warning"), footer, None
+
+                try:
+                    customdata = clickData['points'][0]['customdata']
+                    bin_start = customdata[0]
+                    bin_end = customdata[1]
+                    clicked_bin_label = customdata[2]
+                except (IndexError, TypeError):
+                    return True, "Error", dbc.Alert("Could not read bin data.", color="danger"), footer, None
+
+                try:
+                    is_last_bin = (bin_end == valid_data.max())
+
+                    if is_last_bin:
+                         bin_data = filtered_df[
+                             (filtered_df[selected_metric] >= bin_start) & 
+                             (filtered_df[selected_metric] <= bin_end)
+                         ]
+                    else:
+                        bin_data = filtered_df[
+                             (filtered_df[selected_metric] >= bin_start) & 
+                             (filtered_df[selected_metric] < bin_end)
+                         ]
+                    
+                    genes_in_bin = sorted(bin_data['gene'].unique())
+
+                    group_name = f"Genes from Bin '{clicked_bin_label}'"
+                    source_display = f"Graph click ({selected_metric} bin: {clicked_bin_label})"
+                    
+                    title = "Add Genes to Interest Panel"
+                    body = html.Div([
+                        html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
+                        html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
+                        html.P([html.Strong("Source: "), html.Span(source_display, className="text-muted")]),
+                        html.P([html.Strong("Number of genes: "), html.Span(f"{len(genes_in_bin)}")]),
+                        dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
+                        dbc.Textarea(
+                            id='genes-graph-modal-comment-input',
+                            placeholder="e.g., 'High-performing genes'...",
+                            style={'height': '100px'},
+                            className='mb-2',
+                            value=f"Group of {len(genes_in_bin)} genes from {selected_metric} bin [{bin_start:.3g}, {bin_end:.3g}]."
+                        )
+                    ])
+
+                    temp_data = {
+                        'type': 'gene_set',
+                        'name': group_name,
+                        'source': source_display,
+                        'genes': genes_in_bin,
+                        'count': len(genes_in_bin)
+                    }
+                    
+                    return True, title, body, footer, temp_data
+
+                except Exception as e:
+                    title = "Error"
+                    body = dbc.Alert(f"Error processing bin click: {e}", color="danger")
+                    footer = html.Div([cancel_button])
+                    return True, title, body, footer, None
+
+        return False, "", "", "", None
+
+    
+    # --- CALLBACK 7: CERRAR MODAL CON BOTÓN "CANCELAR" (MODIFICADO) ---
+    @app.callback(
+        [Output('genes-graph-action-modal', 'is_open', allow_duplicate=True),
+         Output('genes-table-histogram', 'clickData', allow_duplicate=True)], # <--- 🔑 Output de reseteo
+        Input('genes-graph-modal-cancel-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def close_genes_modal_on_cancel(n_clicks):
+        """
+        Paso 6: Cierra el modal si se hace clic en "Cancelar".
+        - CORRECCIÓN: Resetea clickData a None para permitir clics repetidos.
+        """
+        if n_clicks:
+            return False, None # Cierra el modal Y resetea el clickData
+        raise PreventUpdate
+
+    
+    # --- CALLBACK 8: GUARDAR EN EL PANEL DESDE EL NUEVO MODAL (MODIFICADO) ---
+    @app.callback(
+        [Output('interest-panel-store', 'data', allow_duplicate=True),
+         Output('genes-graph-action-modal', 'is_open', allow_duplicate=True),
+         Output('genes-graph-temp-store', 'data', allow_duplicate=True),
+         Output('genes-table-histogram', 'clickData', allow_duplicate=True)], # <--- 🔑 Output de reseteo
+        Input('genes-graph-modal-confirm-btn', 'n_clicks'),
+        [State('genes-graph-temp-store', 'data'),
+         State('genes-graph-modal-comment-input', 'value'),
+         State('interest-panel-store', 'data')],
+        prevent_initial_call=True
+    )
+    def save_from_graph_modal_to_panel(n_clicks, temp_data, comment, current_items):
+        """
+        Paso 7: Guarda el ítem (gen o grupo) del modal del gráfico en el panel de interés.
+        - CORRECCIÓN: Resetea clickData a None para permitir clics repetidos.
+        """
+        
+        # Valor de reseteo para clickData
+        click_data_reset = None
+
+        if n_clicks is None or n_clicks == 0:
+            raise PreventUpdate
+            
+        if not temp_data:
+            return dash.no_update, False, None, click_data_reset
+            
+        if current_items is None:
+            current_items = []
+            
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Caso 1: Guardar un Grupo de Genes (gene_set)
+        if temp_data.get('type') == 'gene_set':
+            new_item = {
+                'type': 'gene_set',
+                'id': f"gene_set_{len(current_items)}_{timestamp}",
+                'name': temp_data['name'],
+                'comment': comment or "",
+                'data': temp_data,
+                'timestamp': timestamp
+            }
+            return current_items + [new_item], False, None, click_data_reset
+
+        # Caso 2: Guardar un Gen Individual
+        elif temp_data.get('type') == 'individual_gene':
+            new_item = {
+                'type': 'individual_gene',
+                'id': f"gene_{temp_data['gene']}_{timestamp}",
+                'name': f"Gene: {temp_data['gene']}",
+                'comment': comment or "",
+                'data': temp_data,
+                'timestamp': timestamp
+            }
+            return current_items + [new_item], False, None, click_data_reset
+
+        # Si algo falla
+        return dash.no_update, False, None, click_data_reset
+
+    
+    # --- CALLBACK 9: LIMPIAR FILTRO GLOBAL (Sin Cambios) ---
+    @app.callback(
+        [Output('genes-global-front-filter', 'value'),
+         Output('detailed-genes-table', 'filter_query')], 
+        Input('genes-table-clear-filters-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def clear_global_filter(n_clicks):
+        """
+        Paso 8: Resetea el dropdown de filtro global y los filtros internos
+        de la tabla. El gráfico se actualizará automáticamente.
+        """
+        if n_clicks:
+            # Resetea el filtro global y la query de filtros de la tabla
+            return 'all', ""
+        raise PreventUpdate
+
+    
+    # --- 🔑 INICIO DEL CAMBIO (NUEVO CALLBACK) ---
+    # --- CALLBACK 10: MANEJAR CIERRE DE MODAL POR 'X' O BACKDROP ---
+    @app.callback(
+        Output('genes-table-histogram', 'clickData', allow_duplicate=True),
+        Input('genes-graph-action-modal', 'is_open'),
+        State('genes-graph-action-modal', 'id'), # Usamos un State para que este callback tenga menor prioridad
+        prevent_initial_call=True
+    )
+    def reset_clickdata_on_modal_close(is_open, modal_id):
+        """
+        Paso 9: Escucha el estado 'is_open' del modal. Si se cierra (is_open=False)
+        por cualquier razón, resetea el clickData del gráfico.
+        Esto soluciona el bug del clic repetido para la 'X' y el backdrop.
+        """
+        if not is_open:
+            # Si el modal se cierra, resetea clickData
+            return None
+        # Si se está abriendo (is_open=True), no hagas nada
+        raise PreventUpdate
+    # --- 🔑 FIN DEL CAMBIO (NUEVO CALLBACK) ---
