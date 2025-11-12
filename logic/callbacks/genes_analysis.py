@@ -13,14 +13,14 @@ from datetime import datetime
 
 def register_genes_analysis_callbacks(app):
 
-    # --- CALLBACK 1: PROCESAR DATOS Y ANÁLISIS COMÚN (Sin Cambios) ---
+    # --- CALLBACK 1: PROCESAR DATOS Y ANÁLISIS COMÚN (MODIFICADO) ---
     @app.callback(
         [Output('common-genes-analysis', 'children'),
          Output('genes-analysis-internal-store', 'data')],
         Input('data-store', 'data')
     )
     def prepare_data_and_common_analysis(data):
-        # ... (código sin cambios) ...
+        # ... (código previo sin cambios) ...
         """
         Paso 1: Procesa los datos de 'data-store'.
         - Genera el análisis común (100% y gráfico de frecuencia).
@@ -83,21 +83,19 @@ def register_genes_analysis_callbacks(app):
         genes_100_percent = gene_counts[gene_counts == total_solutions]
         genes_under_100 = gene_counts[gene_counts < total_solutions]
 
-        # --- Contenido de Genes al 100% (sin cambios) ---
+        # --- 🔑 INICIO DEL CAMBIO (Botón 100%) ---
         genes_100_content = []
         if len(genes_100_percent) > 0:
             genes_100_content = [
                 html.Div([
-                    html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3", style={'display': 'inline-block'}),
+                    html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3"),
                     dbc.Button(
-                        [html.I(className="bi bi-plus-circle me-2"), "Add group to Interest Panel"],
+                        [html.I(className="bi bi-bookmark-plus me-2"), "Save 100% Group"], # Icono y texto cambiados
                         id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
-                        color="success",
-                        size="sm",
-                        className="ms-3",
-                        style={'fontSize': '0.85rem'}
+                        color="info", # Color cambiado
+                        size="sm"
                     )
-                ], className="d-flex align-items-center mb-3"),
+                ], className="d-flex justify-content-between align-items-center mb-3"), # Alineación cambiada
                 dbc.Card([
                     dbc.CardBody([
                         html.P(f"Found {len(genes_100_percent)} genes that appear in all {total_solutions} solutions:",
@@ -120,17 +118,19 @@ def register_genes_analysis_callbacks(app):
             ]
         else:
             genes_100_content = [
-                html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3"),
-                dbc.Button(
-                    [html.I(className="bi bi-plus-circle me-2"), "Add group to Interest Panel"],
-                    id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
-                    color="success",
-                    size="sm",
-                    className="ms-3",
-                    style={'display': 'none'}
-                ),
+                html.Div([
+                    html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3"),
+                    dbc.Button(
+                        [html.I(className="bi bi-bookmark-plus me-2"), "Save 100% Group"], # Icono y texto cambiados
+                        id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
+                        color="info", # Color cambiado
+                        size="sm",
+                        style={'display': 'none'} # Sigue oculto
+                    )
+                ], className="d-flex justify-content-between align-items-center mb-3"), # Alineación cambiada
                 dbc.Alert("No genes appear in 100% of the solutions.", color="info", className="mb-4")
             ]
+        # --- 🔑 FIN DEL CAMBIO (Botón 100%) ---
         
         # --- Contenido de Distribución de Frecuencia (sin cambios) ---
         genes_under_100_content = []
@@ -184,15 +184,16 @@ def register_genes_analysis_callbacks(app):
 
 
     
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (MODIFICADO) ---
+    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (Sin Cambios) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
     )
     def build_detailed_layout(data_json):
+        # ... (código sin cambios) ...
         """
         Paso 2: Se activa cuando el 'genes_df' maestro está listo.
-        - CORRECCIÓN: Se elimina 'clear_on_unhover' del dcc.Graph.
+        - Se elimina 'clear_on_unhover' del dcc.Graph.
         """
         if not data_json:
             return dbc.Alert("No data loaded.", color="info")
@@ -287,9 +288,7 @@ def register_genes_analysis_callbacks(app):
             ], className="mb-3"), # Cierre del dbc.Row
             
             dcc.Loading(
-                # --- 🔑 INICIO DEL CAMBIO (Quitar 'clear_on_unhover') ---
                 dcc.Graph(id='genes-table-histogram')
-                # --- 🔑 FIN DEL CAMBIO ---
             ),
             
         ])
@@ -376,14 +375,13 @@ def register_genes_analysis_callbacks(app):
         return filtered_df.to_dict('records')
         
 
-    # --- CALLBACK 4: MOSTRAR GENES AL CLICAR EN GRÁFICO DE FRECUENCIA (Sin Cambios) ---
+    # --- CALLBACK 4: MOSTRAR GENES AL CLICAR EN GRÁFICO DE FRECUENCIA (MODIFICADO) ---
     @app.callback(
         Output('clicked-genes-display', 'children'),
         [Input('gene-frequency-chart', 'clickData')],
         [State('data-store', 'data')]
     )
     def display_clicked_genes(clickData, data):
-        # ... (código sin cambios) ...
         """Display genes for clicked frequency bar, along with Add to Panel button."""
         if not clickData or not data:
             return ""
@@ -416,17 +414,16 @@ def register_genes_analysis_callbacks(app):
 
         genes_at_percentage.sort(key=lambda x: (-gene_counts[x], x))
 
+        # --- 🔑 INICIO DEL CAMBIO (Botón <100%) ---
         return dbc.Card([
             dbc.CardHeader([
                 html.Div([
-                    html.H6(f"Genes with {clicked_percentage}% frequency", className="mb-0 text-primary", style={'display': 'inline-block'}),
+                    html.H6(f"Genes with {clicked_percentage}% frequency", className="mb-0 text-primary"),
                     dbc.Button(
-                        [html.I(className="bi bi-plus-circle me-2"), "Add group to Interest Panel"],
+                        [html.I(className="bi bi-bookmark-plus me-2"), "Save Group"], # Icono y texto cambiados
                         id={'type': 'genes-tab-add-gene-group-btn', 'index': str(clicked_percentage)},
-                        color="primary",
-                        size="sm",
-                        className="ms-3",
-                        style={'fontSize': '0.8rem'}
+                        color="info", # Color cambiado
+                        size="sm"
                     )
                 ], className="d-flex align-items-center justify-content-between")
             ]),
@@ -448,6 +445,7 @@ def register_genes_analysis_callbacks(app):
                 ])
             ])
         ], className="mt-3")
+        # --- 🔑 FIN DEL CAMBIO (Botón <100%) ---
 
 
     # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (Sin Cambios) ---
@@ -612,7 +610,7 @@ def register_genes_analysis_callbacks(app):
             return fig, save_btn_style, summary_panel
 
 
-    # --- CALLBACK 6: MANEJAR INTERACCIONES DEL GRÁFICO (MODIFICADO) ---
+    # --- CALLBACK 6: MANEJAR INTERACCIONES DEL GRÁFICO (Sin Cambios) ---
     @app.callback(
         [Output('genes-graph-action-modal', 'is_open'),
          Output('genes-graph-modal-title', 'children'),
@@ -626,9 +624,9 @@ def register_genes_analysis_callbacks(app):
         prevent_initial_call=True
     )
     def handle_graph_interactions(clickData, group_n_clicks, selected_metric, derived_virtual_data):
+        # ... (código sin cambios) ...
         """
         Paso 5: Maneja los clics en el gráfico y el botón "Save Visible Group".
-        - CORRECCIÓN: Eliminado el 'Input' del contador.
         """
         
         triggered_id = ctx.triggered_id
