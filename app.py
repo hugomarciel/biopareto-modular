@@ -65,11 +65,11 @@ from logic.callbacks.gene_groups_analysis import register_gene_groups_callbacks
 from logic.callbacks.enrichment_analysis import register_enrichment_callbacks
 from logic.callbacks.export_callbacks import register_export_callbacks 
 # -------------------------------------------------------------
-
+BOOTSTRAP_ICONS_URL = "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
 
 # Inicialización de Dash y configuración
 app = dash.Dash(__name__,
-                external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
+                external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME, BOOTSTRAP_ICONS_URL],
                 suppress_callback_exceptions=True)
                 
 server = app.server # <-- ¡AÑADIR ESTO!

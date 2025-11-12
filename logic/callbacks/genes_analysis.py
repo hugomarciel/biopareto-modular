@@ -184,16 +184,16 @@ def register_genes_analysis_callbacks(app):
 
 
     
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (Sin Cambios) ---
+    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (MODIFICADO CON AYUDA) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
     )
     def build_detailed_layout(data_json):
-        # ... (código sin cambios) ...
         """
         Paso 2: Se activa cuando el 'genes_df' maestro está listo.
         - Se elimina 'clear_on_unhover' del dcc.Graph.
+        - 🔑 CAMBIO: Popover de ayuda ahora está en inglés, incluye 'sort' y se cierra al 'clic-away'.
         """
         if not data_json:
             return dbc.Alert("No data loaded.", color="info")
@@ -245,8 +245,9 @@ def register_genes_analysis_callbacks(app):
             
             table_columns.append(col_def)
             
-        # 4. Construir el Layout (sin cambios)
+        # 4. Construir el Layout
         
+        # --- Sección del Gráfico (sin cambios) ---
         new_graph_section = html.Div([
             html.H5("📊 Analysis of Filtered Table Data", className="text-secondary mb-3"),
             html.P("This graph updates dynamically as you filter the table below.", className="text-muted small"),
@@ -293,6 +294,48 @@ def register_genes_analysis_callbacks(app):
             
         ])
         
+        # --- 🔑 INICIO DEL CAMBIO: Popover de Ayuda (Inglés, Sort, Clic-Away) ---
+        
+        # Definición del Popover
+        filter_help_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader("Table Filtering & Sorting Help"), # <-- 🔑 CAMBIO (Inglés)
+                dbc.PopoverBody([
+                    html.P("You can filter or sort each column:", className="mb-2"),
+                    
+                    # --- 🔑 CAMBIO: Añadida sección de Sort ---
+                    html.Strong("To Sort:"),
+                    html.Ul([
+                        html.Li("Click the arrows (▲/▼) in the column header to sort ascending or descending.")
+                    ], className="mt-1 mb-3"),
+                    # ---
+
+                    html.Strong("To Filter Text Columns:"), # <-- 🔑 CAMBIO (Inglés)
+                    html.Ul([
+                        html.Li(["Type a value (e.g., ", html.Code("TP53"), ") for an exact match."]),
+                        html.Li(["Use ", html.Code("contains ..."), " (e.g., ", html.Code("contains TP"), ") to find sub-strings."]),
+                        html.Li(["Use ", html.Code("ne ..."), " or ", html.Code("!= ..."), " to exclude."]),
+                    ], className="mt-1 mb-3"),
+                    
+                    html.Strong("To Filter Numeric Columns:"), # <-- 🔑 CAMBIO (Inglés)
+                    html.Ul([
+                        html.Li(["Use ", html.Code("> 0.8"), ", ", html.Code("< 10")]),
+                        html.Li(["Use ", html.Code(">= 0.8"), ", ", html.Code("<= 10")]),
+                        html.Li(["Use ", html.Code("= 5"), ", ", html.Code("!= 5")]),
+                    ], className="mt-1 mb-3"),
+                    
+                    html.P("You can combine filters across multiple columns.", className="mb-0"), # <-- 🔑 CAMBIO (Inglés)
+                    html.P("Use the 'Clear All Filters' button to reset.", className="mb-0") # <-- 🔑 CAMBIO (Inglés)
+                ])
+            ],
+            id="filter-help-popover",
+            target="genes-filter-help-icon", # El ID del icono
+            trigger="legacy", # <-- 🔑 CAMBIO: "click" -> "legacy" para cerrar al clic-away
+            placement="bottom-start",
+        )
+        
+        # --- FIN DEL CAMBIO: Popover de Ayuda ---
+
         
         table = dash_table.DataTable(
             id='detailed-genes-table',
@@ -313,7 +356,7 @@ def register_genes_analysis_callbacks(app):
             },
             style_filter={
                 'backgroundColor': 'rgb(220, 235, 255)',
-                'border': '1px solid rgb(70, 130, 180)',
+                'border': '1px solid rgb(7G0, 130, 180)',
                 'fontWeight': 'bold'
             },
             style_data_conditional=[
@@ -327,7 +370,22 @@ def register_genes_analysis_callbacks(app):
             html.Hr(),
             new_graph_section,
             html.Hr(),
-            html.H5("📋 Detailed Gene Table by Solution", className="text-secondary mb-3"),
+            
+            # --- Título de la Tabla con Icono (sin cambios) ---
+            html.H5([
+                "📋 Detailed Gene Table by Solution",
+                html.I( 
+                    id="genes-filter-help-icon", 
+                    className="fa fa-question-circle ms-2", 
+                    style={
+                        'cursor': 'pointer', 
+                        'fontSize': '16px', 
+                        'color': 'var(--bs-info)' 
+                    }
+                )
+            ], className="text-secondary mb-3 d-flex align-items-center"),
+            
+            filter_help_popover, # <-- Se incluye el Popover en el layout
             
             # Botón Limpiar (sin cambios)
             dbc.Row([
@@ -351,7 +409,6 @@ def register_genes_analysis_callbacks(app):
             
             table
         ])
-    
     # --- CALLBACK 3: FILTRAR TABLA (Sin Cambios) ---
     @app.callback(
         Output('detailed-genes-table', 'data'),
