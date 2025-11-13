@@ -184,7 +184,7 @@ def register_genes_analysis_callbacks(app):
 
 
     
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (MODIFICADO CON AYUDA) ---
+   # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CORREGIDO) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
@@ -192,8 +192,10 @@ def register_genes_analysis_callbacks(app):
     def build_detailed_layout(data_json):
         """
         Paso 2: Se activa cuando el 'genes_df' maestro está listo.
-        - Se elimina 'clear_on_unhover' del dcc.Graph.
-        - 🔑 CAMBIO: Popover de ayuda ahora está en inglés, incluye 'sort' y se cierra al 'clic-away'.
+        - 🔑 CAMBIO: Eliminado el 'dcc.Loading' que envolvía al
+        - dcc.Graph(id='genes-table-histogram') para evitar el "pestañeo"
+        - (flicker) al cerrar el modal. El gráfico usará su
+        - propio indicador de carga interno.
         """
         if not data_json:
             return dbc.Alert("No data loaded.", color="info")
@@ -247,7 +249,7 @@ def register_genes_analysis_callbacks(app):
             
         # 4. Construir el Layout
         
-        # --- Sección del Gráfico (sin cambios) ---
+        # --- Sección del Gráfico (sin cambios en la lógica, solo en layout) ---
         new_graph_section = html.Div([
             html.H5("📊 Analysis of Filtered Table Data", className="text-secondary mb-3"),
             html.P("This graph updates dynamically as you filter the table below.", className="text-muted small"),
@@ -288,53 +290,49 @@ def register_genes_analysis_callbacks(app):
 
             ], className="mb-3"), # Cierre del dbc.Row
             
-            dcc.Loading(
-                dcc.Graph(id='genes-table-histogram')
-            ),
+            # --- 🔑 INICIO DEL CAMBIO ---
+            # Se elimina el 'dcc.Loading' que envolvía a este gráfico
+            dcc.Graph(id='genes-table-histogram'),
+            # --- 🔑 FIN DEL CAMBIO ---
             
         ])
         
-        # --- 🔑 INICIO DEL CAMBIO: Popover de Ayuda (Inglés, Sort, Clic-Away) ---
-        
-        # Definición del Popover
+        # --- Popover de Ayuda (sin cambios) ---
         filter_help_popover = dbc.Popover(
             [
-                dbc.PopoverHeader("Table Filtering & Sorting Help"), # <-- 🔑 CAMBIO (Inglés)
+                dbc.PopoverHeader("Table Filtering & Sorting Help"), 
                 dbc.PopoverBody([
                     html.P("You can filter or sort each column:", className="mb-2"),
                     
-                    # --- 🔑 CAMBIO: Añadida sección de Sort ---
                     html.Strong("To Sort:"),
                     html.Ul([
                         html.Li("Click the arrows (▲/▼) in the column header to sort ascending or descending.")
                     ], className="mt-1 mb-3"),
-                    # ---
 
-                    html.Strong("To Filter Text Columns:"), # <-- 🔑 CAMBIO (Inglés)
+                    html.Strong("To Filter Text Columns:"), 
                     html.Ul([
                         html.Li(["Type a value (e.g., ", html.Code("TP53"), ") for an exact match."]),
                         html.Li(["Use ", html.Code("contains ..."), " (e.g., ", html.Code("contains TP"), ") to find sub-strings."]),
                         html.Li(["Use ", html.Code("ne ..."), " or ", html.Code("!= ..."), " to exclude."]),
                     ], className="mt-1 mb-3"),
                     
-                    html.Strong("To Filter Numeric Columns:"), # <-- 🔑 CAMBIO (Inglés)
+                    html.Strong("To Filter Numeric Columns:"), 
                     html.Ul([
                         html.Li(["Use ", html.Code("> 0.8"), ", ", html.Code("< 10")]),
                         html.Li(["Use ", html.Code(">= 0.8"), ", ", html.Code("<= 10")]),
                         html.Li(["Use ", html.Code("= 5"), ", ", html.Code("!= 5")]),
                     ], className="mt-1 mb-3"),
                     
-                    html.P("You can combine filters across multiple columns.", className="mb-0"), # <-- 🔑 CAMBIO (Inglés)
-                    html.P("Use the 'Clear All Filters' button to reset.", className="mb-0") # <-- 🔑 CAMBIO (Inglés)
+                    html.P("You can combine filters across multiple columns.", className="mb-0"), 
+                    html.P("Use the 'Clear All Filters' button to reset.", className="mb-0") 
                 ])
             ],
             id="filter-help-popover",
-            target="genes-filter-help-icon", # El ID del icono
-            trigger="legacy", # <-- 🔑 CAMBIO: "click" -> "legacy" para cerrar al clic-away
+            target="genes-filter-help-icon", 
+            trigger="legacy", 
             placement="bottom-start",
         )
         
-        # --- FIN DEL CAMBIO: Popover de Ayuda ---
 
         
         table = dash_table.DataTable(
@@ -385,7 +383,7 @@ def register_genes_analysis_callbacks(app):
                 )
             ], className="text-secondary mb-3 d-flex align-items-center"),
             
-            filter_help_popover, # <-- Se incluye el Popover en el layout
+            filter_help_popover, 
             
             # Botón Limpiar (sin cambios)
             dbc.Row([
@@ -409,6 +407,8 @@ def register_genes_analysis_callbacks(app):
             
             table
         ])
+    
+    
     # --- CALLBACK 3: FILTRAR TABLA (Sin Cambios) ---
     @app.callback(
         Output('detailed-genes-table', 'data'),
