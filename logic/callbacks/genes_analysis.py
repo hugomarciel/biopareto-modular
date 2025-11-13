@@ -159,7 +159,7 @@ def register_genes_analysis_callbacks(app):
                 title={'text': f'📊 Gene Frequency Distribution ({len(genes_under_100)} genes under 100%)', 'x': 0.5, 'xanchor': 'center', 'font': {'size': 16, 'color': 'rgb(70, 130, 180)'}},
                 xaxis_title='Frequency (%)', yaxis_title='Number of Genes', height=400,
                 margin=dict(l=60, r=60, t=60, b=60), plot_bgcolor='white', paper_bgcolor='white', font=dict(size=12),
-                xaxis=dict(gridcolor='rgb(230, 230, 230)', showgrid=True, tickmode='array', tickvals=percentages, ticktext=[f'%{p}' for p in percentages]),
+                xaxis=dict(gridcolor='rgb(230, 230, 230)', showgrid=True, tickmode='array', tickvals=percentages, ticktext=[f'{p}%' for p in percentages]),
                 yaxis=dict(gridcolor='rgb(230, 230, 230)', showgrid=True)
             )
             genes_under_100_content = [
@@ -416,7 +416,7 @@ def register_genes_analysis_callbacks(app):
             table
         ])
     
-    
+
     # --- CALLBACK 3: FILTRAR TABLA (Sin Cambios) ---
     @app.callback(
         Output('detailed-genes-table', 'data'),
@@ -512,18 +512,23 @@ def register_genes_analysis_callbacks(app):
         ], className="mt-3")
 
 
-    # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (Sin Cambios) ---
+    # logic/callbacks/genes_analysis.py (CALLBACK 5 - REVISIÓN FINAL)
+
+# --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (REVISIÓN FINAL) ---
     @app.callback(
         [Output('genes-table-histogram', 'figure'),
-         Output('save-graph-group-btn', 'style'), 
-         Output('genes-table-summary-panel', 'children')], 
+        Output('save-graph-group-btn', 'style'), 
+        Output('genes-table-summary-panel', 'children')], 
         [Input('detailed-genes-table', 'derived_virtual_data'),
-         Input('genes-table-graph-metric-select', 'value')]
+        Input('genes-table-graph-metric-select', 'value'),
+        Input('genes-analysis-internal-store', 'data')], 
+        [State('genes-analysis-internal-store', 'data')] 
     )
-    def update_table_histogram_and_summary(derived_virtual_data, selected_metric):
-        # ... (código sin cambios) ...
+    def update_table_histogram_and_summary(derived_virtual_data, selected_metric, internal_store_data_input, internal_store_data_state):
         """
         Paso 4: Actualiza el gráfico, el panel de resumen y la visibilidad del botón "Save Group".
+        
+        Lógica robusta para la carga inicial y el manejo de filtros.
         """
         
         default_layout = go.Layout(
@@ -539,16 +544,54 @@ def register_genes_analysis_callbacks(app):
         
         # Estilo por defecto para el botón (oculto)
         save_btn_style = {'display': 'none'}
+        
+        # 1. CARGAR DATOS DESDE EL STORE Y DETERMINAR DATOS FINALES
+        final_df = None
+        
+        if internal_store_data_state:
+            try:
+                # Intentar cargar el DataFrame completo desde el Store (para la lógica de inicialización)
+                full_genes_df = pd.read_json(StringIO(internal_store_data_state), orient='split')
+            except Exception as e:
+                print(f"Error reading internal store for graph update: {e}")
+                return go.Figure(layout=default_layout), save_btn_style, default_summary
 
-        if not derived_virtual_data or not selected_metric:
+            # Lógica de Selección de Datos:
+            # A. Si tenemos data filtrada (derived_virtual_data) y no está vacía: USAR ESTA (Filtro de Usuario)
+            if derived_virtual_data is not None and len(derived_virtual_data) > 0:
+                final_df = pd.DataFrame(derived_virtual_data)
+            # B. Si derived_virtual_data es None (Carga Inicial) O está vacío (Filtro demasiado restrictivo):
+            #    USAR EL DATAFRAME COMPLETO del Store (para asegurar la primera visualización)
+            elif full_genes_df is not None and not full_genes_df.empty:
+                final_df = full_genes_df
+                # Si el trigger fue el store (carga inicial), usar la data completa
+                # Si el trigger fue el derived_virtual_data vacío, se respeta la data vacía (ver punto 2)
+                # Pero en la carga inicial, derived_virtual_data es None, por lo que se usa el full_genes_df
+                # y esto arregla el problema de renderizado inicial.
+            
+        # 2. VALIDACIÓN FINAL DE DATOS
+        if final_df is None or final_df.empty or not selected_metric:
+            
+            # Caso de filtro demasiado restrictivo (derived_virtual_data es vacío)
+            if derived_virtual_data is not None and len(derived_virtual_data) == 0:
+                layout_empty = go.Layout(
+                    title='No data matches the current filter selection.',
+                    height=400,
+                )
+                return go.Figure(layout=layout_empty), save_btn_style, default_summary
+
+            # Caso de No Data o Carga Incompleta
             return go.Figure(layout=default_layout), save_btn_style, default_summary
 
-        filtered_df = pd.DataFrame(derived_virtual_data)
-
-        # Calcular estadísticas (sin cambios)
-        total_rows = len(filtered_df)
-        unique_solutions = filtered_df['unique_solution_id'].nunique()
-        unique_genes = filtered_df['gene'].nunique()
+        
+        # *******************************************************************
+        # * A PARTIR DE AQUÍ, final_df ES UN DATAFRAME VÁLIDO CON DATOS *
+        # *******************************************************************
+        
+        # 3. Calcular estadísticas
+        total_rows = len(final_df)
+        unique_solutions = final_df['unique_solution_id'].nunique()
+        unique_genes = final_df['gene'].nunique()
 
         summary_panel = dbc.Alert(
             dbc.Row([
@@ -569,21 +612,20 @@ def register_genes_analysis_callbacks(app):
             className="border"
         )
 
-
-        if selected_metric not in filtered_df.columns:
-            default_layout.title = f"Metric '{selected_metric}' not in filtered data."
+        if selected_metric not in final_df.columns:
+            default_layout.title = f"Metric '{selected_metric}' not in data."
             return go.Figure(layout=default_layout), save_btn_style, summary_panel
         
         metric_name = selected_metric.replace('_', ' ').title()
         
-        fig = go.Figure(layout=default_layout)
+        # 4. Lógica de Gráfico
         
         # --- Lógica de Gráfico Categórico (Barras) ---
-        if not pd.api.types.is_numeric_dtype(filtered_df[selected_metric]):
+        if not pd.api.types.is_numeric_dtype(final_df[selected_metric]):
             
             save_btn_style = {'display': 'block'}
 
-            counts = filtered_df[selected_metric].value_counts().reset_index()
+            counts = final_df[selected_metric].value_counts().reset_index()
             counts.columns = [selected_metric, 'count']
             counts = counts.sort_values('count', ascending=False)
 
@@ -622,13 +664,15 @@ def register_genes_analysis_callbacks(app):
         else:
             # save_btn_style ya está {'display': 'none'}
             
-            valid_data = filtered_df[selected_metric].dropna()
+            valid_data = final_df[selected_metric].dropna()
             if valid_data.empty:
                 default_layout.title = f"No valid numeric data for '{metric_name}'."
                 return go.Figure(layout=default_layout), save_btn_style, summary_panel
                 
+            # Generar histograma y bins
             counts, bin_edges = np.histogram(valid_data, bins=20)
             
+            # Preparar data para Plotly
             bin_data_to_plot = []
             for i in range(len(counts)):
                 if counts[i] > 0:

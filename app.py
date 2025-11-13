@@ -318,7 +318,7 @@ app.layout = dbc.Container([
             dbc.Tab(label="📁 Load Data", tab_id="upload-tab"),
             dbc.Tab(label="📊 Pareto Front", tab_id="pareto-tab"),
             dbc.Tab(label="🧬 Genes", tab_id="genes-tab"),
-            dbc.Tab(label="🧬 Gene Groups Analysis", tab_id="gene-groups-tab"),
+            dbc.Tab(label=" 🧪 Gene Groups Analysis", tab_id="gene-groups-tab"),
             dbc.Tab(label="🔬 Biological Analysis", tab_id="enrichment-tab"),
             #dbc.Tab(label="📤 Export", tab_id="export-tab"),
         ], id="main-tabs", active_tab="upload-tab"),

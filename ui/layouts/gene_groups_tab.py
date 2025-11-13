@@ -9,7 +9,7 @@ from dash import html
 def create_gene_groups_tab():
     """Create the Gene Groups Analysis tab with visual card selection"""
     return dbc.Container([
-        html.H4("🧬 Gene Groups Analysis", className="mb-4"),
+        html.H4(" Gene Groups Analysis", className="mb-4"),
         html.P("Select items from your Interest Panel to analyze their genes together",
                className="text-muted mb-4"),
 
