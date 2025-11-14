@@ -138,10 +138,13 @@ def create_navbar():
                         ],
                         width="auto"
                     ),
+                    
+                    # --- 💡 MODIFICACIÓN: El botón 'toggle-panel-btn' se ha eliminado de aquí 💡 ---
+                    
                     dbc.Col(
                         html.Img(src="/assets/LAI2B.png", height="40px"),
                         width="auto",
-                        className="ms-auto"
+                        className="ms-auto" # 'ms-auto' vuelve aquí para alinear el logo a la derecha
                     )
                 ],
                 align="center",
@@ -152,7 +155,6 @@ def create_navbar():
         dark=True,
         className="mb-4"
     )
-
 # create_interest_panel()
 def create_interest_panel():
     """Create the interest panel/annotation board"""
@@ -191,6 +193,8 @@ def create_genes_frequency_chart_for_pdf(pareto_data):
 
 
 # Layout principal (se mantiene aquí)
+# Layout principal (se mantiene aquí)
+# Layout principal (se mantiene aquí)
 app.layout = dbc.Container([
     # STORES (se mantienen en app.py)
     dcc.Store(id='add-all-trigger-store', data=0), 
@@ -216,6 +220,12 @@ app.layout = dbc.Container([
     
     # NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
     dcc.Store(id='enrichment-render-trigger-store', data=None), 
+    
+    # --- 💡 MODIFICACIÓN (STORE DE VISIBILIDAD) 💡 ---
+    dcc.Store(id='ui-state-store', data={'panel_visible': True}, storage_type='session'),
+    # --- 💡 NUEVO STORE DUMMY PARA SCROLL 💡 ---
+    dcc.Store(id='scroll-to-top-dummy-store'),
+    # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
 
 
     # MODALES (se mantienen en app.py)
@@ -324,7 +334,39 @@ app.layout = dbc.Container([
         ], id="main-tabs", active_tab="upload-tab"),
         
 
-        html.Div(id="tab-content", className="mt-4", style={'marginRight': '360px'})
+        html.Div(id="tab-content", className="mt-4", style={'marginRight': '360px'}),
+
+        # --- 💡 INICIO: NUEVOS CONTROLES FLOTANTES 💡 ---
+        html.Div(
+            dbc.ButtonGroup(
+                [
+                    dbc.Button(
+                        html.I(className="bi bi-arrow-up-circle fs-5"), 
+                        id="scroll-to-top-btn", 
+                        color="primary", 
+                        outline=True, 
+                        title="Scroll to Top"
+                    ),
+                    dbc.Button(
+                        html.I(className="bi bi-layout-sidebar-inset fs-5"), 
+                        id="floating-toggle-panel-btn", 
+                        color="primary", 
+                        outline=True, 
+                        title="Toggle Interest Panel"
+                    ),
+                ],
+                vertical=True,
+                size="lg"
+            ),
+            style={
+                'position': 'fixed',
+                'bottom': '30px',
+                'right': '30px',
+                'zIndex': '1050' # Más alto que el panel de interés
+            }
+        ),
+        # --- 💡 FIN: NUEVOS CONTROLES FLOTANTES 💡 ---
+
     ], fluid=True),
 
     # Footer
@@ -354,14 +396,18 @@ def transfer_add_all_click(n_clicks):
         raise PreventUpdate
     return n_clicks
 
-# Callback para ocultar/mostrar panel de interés
+
 @app.callback(
     Output("interest-panel-wrapper", "style"),
     Output("tab-content", "style"),
-    Input("main-tabs", "active_tab")
+    Input("main-tabs", "active_tab"),
+    Input("ui-state-store", "data") # <-- 💡 AÑADIDO
 )
-def toggle_interest_panel_visibility(active_tab):
-    """Ocultar el panel en pestañas de carga y exportación y ajustar el margen del contenido"""
+def toggle_interest_panel_visibility(active_tab, ui_state): # <-- 💡 AÑADIDO
+    """
+    Ocultar el panel en pestañas de carga/exportación O si el usuario lo oculta manualmente,
+    y ajustar el margen del contenido.
+    """
     panel_style = {
         'position': 'fixed',
         'right': '20px',
@@ -372,14 +418,61 @@ def toggle_interest_panel_visibility(active_tab):
         'zIndex': '1000'
     }
 
-    if active_tab in ["upload-tab", "export-tab"]:
+    # --- 💡 INICIO DE LA MODIFICACIÓN (LÓGICA COMBINADA) 💡 ---
+    # Condición 1: La pestaña es de carga o exportación
+    is_hidden_tab = active_tab in ["upload-tab", "export-tab"]
+    # Condición 2: El usuario lo ocultó manualmente (default a True si no existe)
+    is_manually_hidden = not ui_state.get('panel_visible', True)
+
+    if is_hidden_tab or is_manually_hidden:
         panel_style['display'] = 'none'
         content_style = {'marginRight': '0px'}
     else:
         panel_style['display'] = 'block'
         content_style = {'marginRight': '440px'}
+    # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
 
     return panel_style, content_style
+
+# --- 💡 CALLBACK MODIFICADO (NUEVO INPUT) 💡 ---
+@app.callback(
+    Output('ui-state-store', 'data'),
+    Input('floating-toggle-panel-btn', 'n_clicks'), # <-- CAMBIO DE ID
+    State('ui-state-store', 'data'),
+    prevent_initial_call=True
+)
+def toggle_panel_store(n_clicks, current_state):
+    """Invierte el estado de visibilidad en el ui-state-store cuando se hace clic en el botón."""
+    if not n_clicks:
+        raise PreventUpdate
+    
+    # Obtiene el estado actual (default a True) e inviértelo
+    is_visible = current_state.get('panel_visible', True)
+    
+    # Guarda el estado opuesto
+    return {'panel_visible': not is_visible}
+# --- 💡 FIN DEL CALLBACK MODIFICADO 💡 ---
+
+# --- 💡 INICIO: NUEVO CALLBACK (CLIENTSIDE) PARA SCROLL-TO-TOP 💡 ---
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        // n_clicks será 1 o más, ya que prevent_initial_call=True
+        if (n_clicks) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // 💡 LA CORRECCIÓN ESTÁ AQUÍ:
+        // Se usa 'window.dash_clientside.no_update' (JS) 
+        // en lugar de 'dash.no_update' (Python)
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('scroll-to-top-dummy-store', 'data'), # Salida dummy
+    Input('scroll-to-top-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+# --- 💡 FIN: NUEVO CALLBACK 💡 ---
 
 # Callback para renderizar el contenido de la pestaña
 @app.callback(
