@@ -1249,7 +1249,7 @@ def register_enrichment_callbacks(app):
         return [], base_style_data_conditional
             
             
-    # 8. Callback para Heatmap (Sin cambios)
+    # 8. Callback para Heatmap (CORREGIDO)
     @app.callback(
         Output('gprofiler-clustergram-output', 'children'),
         [Input('gprofiler-results-store', 'data'),      # Se activa cuando cambian los resultados
@@ -1259,16 +1259,32 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_gprofiler_clustergram(stored_data, threshold_value, selected_indices, items):
-        # ... (código original, líneas 1103-1135)
         """
         Renderiza el clustergram (heatmap) basado en los resultados de g:Profiler.
         """
+
+        # --- 💡 INICIO DE LA CORRECCIÓN 💡 ---
+        # Se añade una guarda para manejar el estado inicial del store.
+        # El store se inicializa como [] (lista), pero este callback espera un dict.
+        # Esta guarda previene el crash 'AttributeError: 'list' object has no attribute 'get''
+        # cuando se cambia el umbral (threshold) antes de ejecutar un análisis.
+        if not stored_data or isinstance(stored_data, list):
+            # Si el store está vacío (None) o es una lista (su estado inicial),
+            # no hay datos para procesar el heatmap. Retorna un mensaje informativo.
+            return dbc.Alert(
+                "Ejecute un análisis de g:Profiler para generar el clustergram.",
+                color="info",
+                className="mt-3"
+            )
+        # --- 💡 FIN DE LA CORRECCIÓN 💡 ---
+
         try:
             val_threshold = float(threshold_value)
         except (TypeError, ValueError):
             val_threshold = 0.05 
 
         # Llama a la función de procesamiento para obtener la matriz de datos
+        # En este punto, 'stored_data' tiene garantía de ser un diccionario
         heatmap_matrix, debug_counters = process_data_for_gene_term_heatmap(stored_data, threshold=val_threshold, max_terms=50) 
         
         # Si la matriz está vacía, muestra un mensaje de información detallado
@@ -1294,7 +1310,3 @@ def register_enrichment_callbacks(app):
 
         # Retorna el gráfico
         return dcc.Graph(figure=heatmap_fig, config={'displayModeBar': True})
-        
-        
-    # --- 🔑 CALLBACK #9 ELIMINADO ---
-    # (Ya no se necesita el callback de 'trigger' separado, ni el 'clientside')
