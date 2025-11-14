@@ -183,8 +183,8 @@ def register_pareto_plot_callbacks(app):
             is_selected = any(s['unique_id'] in selected_unique_ids for s in solutions)
 
             # ⭐️ --- INICIO DE LA CORRECCIÓN --- ⭐️
-            x_to_plot = coord[0] # Default to rounded coord
-            y_to_plot = coord[1] # Default to rounded coord
+            
+            # (Se eliminan los valores por defecto que usaban la coordenada redondeada)
 
             if count == 1:
                 sol = solutions[0]
@@ -199,16 +199,20 @@ def register_pareto_plot_callbacks(app):
                 y_to_plot = sol['current_y']
 
             else:
+                # ⬇️ --- ESTA ES LA SECCIÓN MODIFICADA --- ⬇️
+                # Tomamos la coordenada precisa de la primera solución del grupo
+                # (ya que todas las soluciones agrupadas tienen el mismo valor original exacto)
+                sol_sample = solutions[0]
+                x_to_plot = sol_sample['current_x'] # <-- CORREGIDO (usar valor preciso)
+                y_to_plot = sol_sample['current_y'] # <-- CORREGIDO (usar valor preciso)
+
                 hover_text = (f"<b>{count} Solutions (Multiple)</b><br>"
-                              f"{x_axis.replace('_', ' ').title()}: {coord[0]}<br>"
-                              f"{y_axis.replace('_', ' ').title()}: {coord[1]}<br>"
+                              f"{x_axis.replace('_', ' ').title()}: {x_to_plot}<br>" # <-- CORREGIDO (mostrar valor preciso)
+                              f"{y_axis.replace('_', ' ').title()}: {y_to_plot}<br>" # <-- CORREGIDO (mostrar valor preciso)
                               "<i>Click to inspect</i><extra></extra>")
                 marker_color = 'black'
                 front_name_para_df = 'Multiple'
-                
-                # Para puntos múltiples, SÍ usamos el valor redondeado
-                x_to_plot = coord[0]
-                y_to_plot = coord[1]
+                # ⬆️ --- FIN DE LA SECCIÓN MODIFICADA --- ⬆️
 
             plot_data.append({
                 'x': x_to_plot, # <-- Corregido
