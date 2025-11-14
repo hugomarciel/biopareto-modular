@@ -322,6 +322,7 @@ app.layout = dbc.Container([
             dbc.Tab(label="🔬 Biological Analysis", tab_id="enrichment-tab"),
             #dbc.Tab(label="📤 Export", tab_id="export-tab"),
         ], id="main-tabs", active_tab="upload-tab"),
+        
 
         html.Div(id="tab-content", className="mt-4", style={'marginRight': '360px'})
     ], fluid=True),
@@ -396,17 +397,56 @@ def render_tab_content(active_tab):
     elif active_tab == "gene-groups-tab":
         return create_gene_groups_tab()
     elif active_tab == "enrichment-tab":
-        # LLAMADA FINAL Y DEFINITIVA
-        return create_enrichment_tab_modified() 
+        return html.Div(id="enrichment-tab-container", children=[
+            # 1. El trigger (sin cambios)
+            dcc.Store(id="enrichment-tab-load-trigger", data=True),
+            
+            # 2. El placeholder del loader (sin cambios)
+            html.Div(id="enrichment-loader-placeholder", children=[
+                
+                # --- 💡 INICIO DEL CAMBIO 💡 ---
+                # Usamos un Div con un dbc.Spinner.
+                # Esto es VISIBLE INMEDIATAMENTE.
+                html.Div([
+                    dbc.Spinner(size="lg", color="primary"),
+                    html.P("Loading Biological Analysis module...", className="text-primary mt-2")
+                ], style={
+                    'textAlign': 'center', 
+                    'paddingTop': '100px', 
+                    'minHeight': '500px'
+                })
+                # --- 💡 FIN DEL CAMBIO 💡 ---
+                
+            ])
+        ])
     elif active_tab == "export-tab":
         return create_export_tab()
     return html.Div("Tab not found")
 
-# -------------------------------------------------------------
-# CALLBACKS DE GESTIÓN DE INTERÉS Y MODALES (SE MANTIENEN HASTA SU FASE)
-# -------------------------------------------------------------
+# NUEVO CALLBACK PARA LA CARGA PEREZOSA DE LA PESTAÑA DE ENRIQUECIMIENTO
+@app.callback(
+    # 💡 ¡ESTE ES EL CAMBIO CLAVE! 💡
+    # El Output ahora es el "children" del placeholder.
+    Output("enrichment-loader-placeholder", "children"),
+    Input("enrichment-tab-load-trigger", "data")
+)
+def load_enrichment_tab_content(trigger_data):
+    """
+    Este callback ejecuta la función lenta (create_enrichment_tab_modified)
+    solo una vez, cuando la pestaña se abre por primera vez.
+    """
+    if not trigger_data:
+        raise PreventUpdate
+    
+    # AHORA SÍ, EJECUTAMOS LA FUNCIÓN LENTA
+    # El 'dcc.Loading' (que está dentro del placeholder) estará visible
+    # mientras esta función se ejecuta.
+    final_layout = create_enrichment_tab_modified()
 
-# app.py
+    # 💡 Este 'return' REEMPLAZA el 'dcc.Loading' con el layout final.
+    # El spinner fullscreen original es DESTRUIDO y ya no puede
+    # interferir con las otras interacciones.
+    return final_layout
 
 @app.callback(
     [Output('pareto-front-tab-interest-modal', 'is_open'),

@@ -311,7 +311,7 @@ def register_genes_analysis_callbacks(app):
             [
                 dbc.PopoverHeader("Table Filtering & Sorting Help"), 
                 dbc.PopoverBody([
-                    html.P("You can filter and sort each column using filters in the first row of the table.:", className="mb-2"),
+                    html.P("You can filter and sort each column using filters in the first row of the table:", className="mb-2"),
                     
                     html.Strong("To Sort:"),
                     html.Ul([
@@ -327,9 +327,12 @@ def register_genes_analysis_callbacks(app):
                     
                     html.Strong("To Filter Numeric Columns:"), 
                     html.Ul([
-                        html.Li(["Use ", html.Code("> 0.8"), ", ", html.Code("< 10")]),
-                        html.Li(["Use ", html.Code(">= 0.8"), ", ", html.Code("<= 10")]),
-                        html.Li(["Use ", html.Code("= 5"), ", ", html.Code("!= 5")]),
+                        html.Li(["Use ", html.Code("> 0.8"), ", ", html.Code("<= 10")]),
+                        html.Li(["Use ", html.Code("= 5"), " (ideal for integers)."]),
+                        html.Li([
+                            "For decimals (e.g., 0.089), it's safer to use ranges: ",
+                            html.Code("> 0.0885"), " or ", html.Code("< 0.0895")
+                        ]),
                     ], className="mt-1 mb-3"),
                     
                     html.P("You can combine filters across multiple columns.", className="mb-0"), 
