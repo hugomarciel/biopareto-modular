@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 import pandas as pd
 import io
+import pathlib # <-- 💡 Se añade pathlib para manejar rutas de archivos
 
 # Importar la lógica de procesamiento (requiere que logic/utils/data_processing.py exista)
 from logic.utils.data_processing import validate_and_process_fronts 
@@ -48,7 +49,8 @@ def register_data_management_callbacks(app):
 
         raise PreventUpdate
 
-    # 2. Callback para el despliegue visual de los frentes cargados (MODIFICADO)
+    # 2. Callback para el despliegue visual de los frentes cargados (SIN CAMBIOS)
+    # (El código es idéntico al que proporcionaste)
     @app.callback(
         Output('fronts-list', 'children'),
         Input('data-store', 'data'),
@@ -62,12 +64,8 @@ def register_data_management_callbacks(app):
         if not current_data or not current_data.get('fronts'):
             return html.P("No fronts loaded yet.", className="text-muted")
 
-        # --- INICIO DE LA MODIFICACIÓN ---
-        # Obtener los 2 objetivos explícitos del data-store principal.
-        # Esta lista (ej: ['auc', 'accuracy']) será usada para el display.
         explicit_objectives = current_data.get('explicit_objectives', [])
         objectives_str = ', '.join(explicit_objectives)
-        # --- FIN DE LA MODIFICACIÓN ---
 
         fronts_items = []
         for front in current_data['fronts']:
@@ -106,7 +104,6 @@ def register_data_management_callbacks(app):
                         ], width=2)
                     ]),
                     html.Small(
-                        # --- MODIFICACIÓN: Usar objectives_str en lugar de front['objectives'] ---
                         f"Solutions: {len(front['data'])} | Objectives: {objectives_str}" +
                         (f" | (CONSOLIDATED)" if front.get('is_consolidated') else ""),
                         className="text-muted mt-2 d-block"
@@ -251,36 +248,81 @@ def register_data_management_callbacks(app):
 
         return updated_data, main_objectives
 
-    # 6. Callback para descargar archivo de prueba (SIN CAMBIOS)
+    # --- 
+    # 6. Callback para descargar archivo de prueba (MODIFICADO)
+    # ---
     @app.callback(
         Output('download-test-file', 'data'),
         Input('download-test-btn', 'n_clicks'),
         prevent_initial_call=True
     )
     def download_test_file(n_clicks):
-        """Download a basic test JSON file."""
+        """
+        Download a pre-compiled test file (e.g., .rar or .zip) 
+        from the /assets folder.
+        """
         if not n_clicks:
             return None
 
-        # Contenido del archivo de prueba
-        test_data = [
-            {
-                "selected_genes": ["BRCA1", "TP53", "EGFR"],
-                "accuracy": 0.92,
-                "num_genes": 3,
-                "solution_id": "Sol_1"
-            },
-            {
-                "selected_genes": ["BRCA1", "TP53", "EGFR", "MYC"],
-                "accuracy": 0.94,
-                "num_genes": 4,
-                "solution_id": "Sol_2"
-            }
-        ]
-        return dict(
-            content=json.dumps(test_data, indent=2),
-            filename="test.json"
-        )
+        # --- 💡 INICIO DE LA MODIFICACIÓN 💡 ---
+        # El nombre del archivo que está en tu carpeta /assets
+        filename = "json V2.1.rar" 
+        
+        # Construir la ruta al archivo en /assets
+        # __file__ es 'logic/callbacks/data_management.py'
+        # .parent es 'logic/callbacks'
+        # .parent.parent es 'logic'
+        # .parent.parent.parent es la raíz del proyecto (donde está app.py)
+        root_dir = pathlib.Path(__file__).parent.parent.parent
+        file_path = root_dir / "assets" / filename
+
+        try:
+            # Leer el archivo en modo binario
+            binary_content = file_path.read_bytes()
+            
+            # Codificar el contenido binario a Base64
+            base64_content = base64.b64encode(binary_content).decode('utf-8')
+            
+            # Retornar el diccionario para dcc.Download
+            # 'base64=True' le dice a Dash que 'content' es una string Base64
+            return dict(
+                content=base64_content,
+                filename=filename,
+                base64=True
+            )
+
+        except FileNotFoundError:
+            print(f"Error: El archivo de prueba '{filename}' no se encontró en la carpeta /assets.")
+            # Si el archivo no existe, puedes opcionalmente generar el JSON antiguo
+            # o simplemente no hacer nada. Aquí no hacemos nada.
+            return dash.no_update
+        except Exception as e:
+            print(f"Error al leer el archivo de prueba: {e}")
+            return dash.no_update
+        
+        
+        # --- Lógica JSON anterior (comentada como solicitaste) ---
+        # # Contenido del archivo de prueba
+        # test_data = [
+        #     {
+        #         "selected_genes": ["BRCA1", "TP53", "EGFR"],
+        #         "accuracy": 0.92,
+        #         "num_genes": 3,
+        #         "solution_id": "Sol_1"
+        #     },
+        #     {
+        #         "selected_genes": ["BRCA1", "TP53", "EGFR", "MYC"],
+        #         "accuracy": 0.94,
+        #         "num_genes": 4,
+        #         "solution_id": "Sol_2"
+        #     }
+        # ]
+        # return dict(
+        #     content=json.dumps(test_data, indent=2),
+        #     filename="json V2.1.rar" # (Este nombre era engañoso, era un .json)
+        # )
+        # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
+
 
     # 7. Callback para alternar la visibilidad de la información de formato (SIN CAMBIOS)
     @app.callback(
