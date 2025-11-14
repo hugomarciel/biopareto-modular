@@ -7,62 +7,47 @@ from dash import dcc, html
 def create_pareto_tab():
     """Create Pareto front tab layout"""
     return dbc.Container([
+        
+        # --- AÑADIDO: Stores para los ejes ---
+        dcc.Store(id='x-axis-store'),
+        dcc.Store(id='y-axis-store'),
+        
         dbc.Row([
             dbc.Col([
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Card([
-                            dbc.CardHeader([
-                                html.H5("Axis Configuration", className="text-secondary mb-0")
-                            ]),
-                            dbc.CardBody([
-                                dbc.Row([
-                                    dbc.Col([
-                                        dbc.Label("X Axis:", className="fw-bold"),
-                                        dcc.Dropdown(
-                                            id='x-axis-dropdown',
-                                            placeholder="Select X axis objective...",
-                                            className="mb-2"
-                                        ),
-                                        html.Div(
-                                            id='x-axis-static-text',
-                                            className="text-muted",
-                                            style={'display': 'none'}
-                                        )
-                                    ], width=5),
-                                    dbc.Col([
-                                        dbc.Label("Y Axis:", className="fw-bold"),
-                                        dcc.Dropdown(
-                                            id='y-axis-dropdown',
-                                            placeholder="Select Y axis objective...",
-                                            className="mb-2"
-                                        ),
-                                        html.Div(
-                                            id='y-axis-static-text',
-                                            className="text-muted",
-                                            style={'display': 'none'}
-                                        )
-                                    ], width=5),
-                                    dbc.Col([
-                                        dbc.Label(" ", className="fw-bold d-block"),
-                                        dbc.Button("⇄ Swap Axes",
-                                                 id="swap-axes-btn",
-                                                 color="info",
-                                                 size="sm",
-                                                 className="w-100")
-                                    ], width=2)
-                                ])
-                            ])
-                        ])
-                    ], width=12)
-                ], className="mb-3"),
+                
+                # --- ELIMINADO: Row de Configuración de Ejes ---
+                # La dbc.Row que contenía la Card "Axis Configuration" ha sido eliminada.
 
                 dbc.Row([
                     dbc.Col([
                         dbc.Card([
-                            dbc.CardHeader([
-                                html.H4(id="pareto-plot-title", className="text-primary mb-0")
-                            ]),
+                            
+                            # --- MODIFICADO: CardHeader con Título y Botón Swap ---
+                            dbc.CardHeader(
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            html.H4(id="pareto-plot-title", className="text-primary mb-0"),
+                                            width="auto"
+                                        ),
+                                        dbc.Col(
+                                            dbc.Button(
+                                                "⇄ Swap Axes",
+                                                id="swap-axes-btn",
+                                                color="info",
+                                                outline=True,
+                                                size="sm"
+                                            ),
+                                            width="auto",
+                                            className="ms-auto" # Alinea a la derecha
+                                        )
+                                    ],
+                                    align="center",
+                                    justify="between" # Asegura que uno esté a la izq y otro a la der
+                                )
+                            ),
+                            # --- FIN DE LA MODIFICACIÓN ---
+                            
                             dbc.CardBody([
                                 dcc.Graph(id='pareto-plot', style={'height': '500px'}, config={'responsive': True}),
                                 html.Hr(),
@@ -120,7 +105,7 @@ def create_pareto_tab():
             ], width=12),
         ]),
         
-        # --- AÑADIDO: Store y Modal para puntos múltiples ---
+        # --- Sin cambios: Store y Modal para puntos múltiples ---
         dcc.Store(id='multi-solution-modal-store'),
         
         dbc.Modal(
@@ -132,9 +117,9 @@ def create_pareto_tab():
                 ),
             ],
             id="multi-solution-modal",
-            size="xl", # Extra Large para más espacio
+            size="xl", 
             is_open=False,
-            scrollable=True, # Para listas largas
+            scrollable=True, 
             centered=True,
         )
         # --- FIN DE LO AÑADIDO ---

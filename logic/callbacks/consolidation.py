@@ -55,7 +55,7 @@ def register_consolidation_callbacks(app):
 
         raise PreventUpdate
 
-    # 2. Callback para realizar la consolidación
+    # 2. Callback para realizar la consolidación (MODIFICADO)
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
          Output('selected-solutions-store', 'data', allow_duplicate=True)], # Limpiar selección
@@ -63,8 +63,8 @@ def register_consolidation_callbacks(app):
         [State('data-store', 'data'),
          State('selected-solutions-store', 'data'),
          State('consolidate-front-name-input', 'value'),
-         State('x-axis-dropdown', 'value'),
-         State('y-axis-dropdown', 'value')],
+         State('x-axis-store', 'data'), # <-- MODIFICADO
+         State('y-axis-store', 'data')], # <-- MODIFICADO
         prevent_initial_call=True
     )
     def perform_consolidation(n_clicks, current_data, selected_solutions, new_front_name, current_x_axis, current_y_axis):
@@ -79,6 +79,22 @@ def register_consolidation_callbacks(app):
 
         # 1. Determinar objetivos (Deben ser los del frente principal)
         objectives = updated_data.get('main_objectives')
+        
+        # --- MODIFICACIÓN: Asegurar que los ejes no sean None ---
+        if not current_x_axis or not current_y_axis:
+            if objectives and len(objectives) >= 2:
+                current_x_axis = objectives[0]
+                current_y_axis = objectives[1]
+            else:
+                 # Fallback si main_objectives no está, usar explicit_objectives
+                 explicit = updated_data.get('explicit_objectives', [])
+                 if explicit and len(explicit) >= 2:
+                     current_x_axis = explicit[0]
+                     current_y_axis = explicit[1]
+                 else:
+                     # Si no hay ejes, no se puede ordenar, pero se continúa
+                     pass
+        # --- FIN MODIFICACIÓN ---
 
         # 2. Preparar los datos del nuevo frente
         new_front_data = [sol['full_data'].copy() for sol in selected_solutions]
@@ -86,12 +102,13 @@ def register_consolidation_callbacks(app):
         # 3. Ordenar las soluciones
         if objectives:
             sort_keys = []
-            if current_x_axis in objectives:
+            if current_x_axis and current_x_axis in objectives:
                 sort_keys.append(current_x_axis)
-            if current_y_axis in objectives:
+            if current_y_axis and current_y_axis in objectives:
                 sort_keys.append(current_y_axis)
             
             if not sort_keys:
+                 # Fallback si los ejes actuales no están en los objetivos
                  explicit_objectives = [obj for obj in objectives if obj not in ['num_genes']]
                  if len(explicit_objectives) >= 2:
                      sort_keys = [explicit_objectives[0], explicit_objectives[1]]

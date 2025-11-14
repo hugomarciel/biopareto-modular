@@ -14,31 +14,20 @@ import json
 
 def register_pareto_plot_callbacks(app):
 
-    # 1. Callback para actualizar las opciones y visibilidad de los dropdowns de ejes (SIN CAMBIOS)
+    # 1. Callback para actualizar los STORES de ejes (SIN CAMBIOS)
     @app.callback(
-        [Output('x-axis-dropdown', 'options'),
-         Output('y-axis-dropdown', 'options'),
-         Output('x-axis-dropdown', 'value'), 
-         Output('y-axis-dropdown', 'value'), 
-         Output('x-axis-dropdown', 'style'),
-         Output('y-axis-dropdown', 'style'),
-         Output('x-axis-static-text', 'children'),
-         Output('y-axis-static-text', 'children'),
-         Output('x-axis-static-text', 'style'),
-         Output('y-axis-static-text', 'style')],
-        [Input('objectives-store', 'data'),      # Se mantiene como Input para disparar el callback
+        [Output('x-axis-store', 'data'),
+         Output('y-axis-store', 'data')],
+        [Input('objectives-store', 'data'),
          Input('data-store', 'data'),
          Input('swap-axes-btn', 'n_clicks')],
-        [State('x-axis-dropdown', 'value'),
-         State('y-axis-dropdown', 'value'),
-         State('x-axis-static-text', 'children'),
-         State('y-axis-static-text', 'children')],
-        prevent_initial_call=False
+        [State('x-axis-store', 'data'),
+         State('y-axis-store', 'data')],
+        prevent_initial_call=False 
     )
-    def update_axis_dropdowns(objectives_from_store, data_store, swap_clicks, current_x_value, current_y_value, current_x_text, current_y_text):
+    def update_axis_stores(objectives_from_store, data_store, swap_clicks, current_x_value, current_y_value):
         """
-        Update axis dropdown options and visibility based on available objectives.
-        MODIFICADO: Siempre usa 2 objetivos de 'explicit_objectives' y oculta dropdowns.
+        Update axis stores based on available objectives or swap button.
         """
         ctx = dash.callback_context
         triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
@@ -49,54 +38,26 @@ def register_pareto_plot_callbacks(app):
         objectives = data_store.get('explicit_objectives', [])
         
         if not objectives or len(objectives) < 2:
-            return [], [], None, None, {'display': 'none'}, {'display': 'none'}, "", "", {'display': 'none'}, {'display': 'none'}
+            raise PreventUpdate
 
         objectives = objectives[:2]
-        options = [{'label': obj.replace('_', ' ').title(), 'value': obj} for obj in objectives]
         default_x = objectives[0]
         default_y = objectives[1]
-        
-        if triggered_id != 'swap-axes-btn' and current_x_value in objectives:
-            final_x_value = current_x_value
-        else:
-            final_x_value = default_x
-            
-        if triggered_id != 'swap-axes-btn' and current_y_value in objectives:
-            final_y_value = current_y_value
-        else:
-            final_y_value = default_y
-        
-        dropdown_style = {'display': 'none'}
-        static_text_style = {'display': 'block', 'fontSize': '14px', 'padding': '8px 0'}
-        
-        x_static_text = final_x_value.replace('_', ' ').title() if final_x_value else ""
-        y_static_text = final_y_value.replace('_', ' ').title() if final_y_value else ""
 
         if triggered_id == 'swap-axes-btn':
-            x_static_text, y_static_text = current_y_text, current_x_text
-        
-        return options, options, final_x_value, final_y_value, dropdown_style, dropdown_style, x_static_text, y_static_text, static_text_style, static_text_style
+            if current_x_value and current_y_value:
+                return current_y_value, current_x_value
+            else:
+                return default_y, default_x
 
-    # 2. Callback para intercambiar ejes (Swap Axes) (SIN CAMBIOS)
-    @app.callback(
-        [Output('x-axis-dropdown', 'value', allow_duplicate=True),
-         Output('y-axis-dropdown', 'value', allow_duplicate=True),
-         Output('x-axis-static-text', 'children', allow_duplicate=True),
-         Output('y-axis-static-text', 'children', allow_duplicate=True),
-         Output('pareto-layout-store', 'data', allow_duplicate=True)],
-        Input('swap-axes-btn', 'n_clicks'),
-        [State('x-axis-dropdown', 'value'),
-         State('y-axis-dropdown', 'value'),
-         State('x-axis-static-text', 'children'),
-         State('y-axis-static-text', 'children')],
-        prevent_initial_call=True
-    )
-    def swap_axes(n_clicks, current_x, current_y, current_x_text, current_y_text):
-        if not n_clicks:
-            raise PreventUpdate
-        return current_y, current_x, current_y_text, current_x_text, {}
+        if current_x_value in objectives and current_y_value in objectives:
+             if triggered_id == 'data-store':
+                 raise PreventUpdate
+             return current_x_value, current_y_value
 
-    # 3. Callback para almacenar el layout (Zoom/Pan) (CORRECCIÓN DEFINITIVA)
+        return default_x, default_y
+
+    # 2. Callback para almacenar el layout (Zoom/Pan) (SIN CAMBIOS)
     @app.callback(
         Output('pareto-layout-store', 'data', allow_duplicate=True),
         Input('pareto-plot', 'relayoutData'),
@@ -105,62 +66,43 @@ def register_pareto_plot_callbacks(app):
     )
     def store_pareto_layout(relayoutData, current_layout):
         if relayoutData:
-            
-            # --- CORRECCIÓN DEFINITIVA INICIO ---
-            
-            # Condición 1: Reseteo por Autorange (Botón Home o Doble Clic que envía 'autorange')
             is_autorange_reset = (
                 relayoutData.get('xaxis.autorange') == True or
                 relayoutData.get('yaxis.autorange') == True
             )
-            
-            # Condición 2: Reseteo por Doble Clic que envía 'autosize'
-            # (Debe ser 'autosize' sin rangos de ejes)
             is_autosize_reset = (
                 'autosize' in relayoutData and
                 'xaxis.range[0]' not in relayoutData and
                 'yaxis.range[0]' not in relayoutData
             )
 
-            # Si se cumple CUALQUIERA de las condiciones de reseteo, vaciar el layout.
             if is_autorange_reset or is_autosize_reset:
-                return {} # Resetear layout
+                return {} 
 
-            # Si *no* es un reseteo, procesar el guardado de layout (Pan, Zoom, Lazo)
-            
-            # CASO: Inicio de Lazo/Caja.
-            # Si el evento es *solo* un cambio de 'dragmode' (p.ej. iniciar un lazo)
-            # y *no* incluye un nuevo rango de ejes, NO queremos guardar
-            # nada, pero tampoco queremos resetear. Simplemente prevenimos el update.
             if ('dragmode' in relayoutData and 
                 'xaxis.range[0]' not in relayoutData and 
                 'yaxis.range[0]' not in relayoutData):
-                raise PreventUpdate # Es un inicio de lazo/caja, no un zoom.
+                raise PreventUpdate 
 
-            # CASO: Fin de Zoom, Pan, o Fin de Lazo/Caja (que hace zoom).
-            # Si el evento SÍ incluye un rango, lo guardamos.
             if 'xaxis.range[0]' in relayoutData or 'yaxis.range[0]' in relayoutData:
-                # Filtramos claves irrelevantes para el layout
                 keys_to_remove = ['lasso', 'box', 'click', 'xaxis.autorange', 'yaxis.autorange', 'autosize', 'dragmode']
                 filtered_relayout = {k: v for k, v in relayoutData.items() if not any(key in k for key in keys_to_remove)}
                 
                 updated_layout = (current_layout or {}).copy()
                 updated_layout.update(filtered_relayout)
                 return updated_layout
-            
-            # --- CORRECCIÓN DEFINITIVA FIN ---
                 
         raise PreventUpdate
 
-    # 4. Callback principal para generar el gráfico de Pareto (SIN CAMBIOS RESPECTO AL ANTERIOR)
+    # 4. Callback principal para generar el gráfico de Pareto (MODIFICADO)
     @app.callback(
         [Output('pareto-plot', 'figure'),
          Output('selected-solutions-info', 'children'),
          Output('pareto-plot-title', 'children')],
         [Input('data-store', 'data'),
          Input('selected-solutions-store', 'data'),
-         Input('x-axis-dropdown', 'value'),
-         Input('y-axis-dropdown', 'value'),
+         Input('x-axis-store', 'data'), 
+         Input('y-axis-store', 'data'), 
          Input({'type': 'main-front-checkbox', 'index': ALL}, 'value'),
          Input({'type': 'front-name-input', 'index': ALL}, 'value')],
         State('pareto-layout-store', 'data'),
@@ -178,11 +120,13 @@ def register_pareto_plot_callbacks(app):
         if not visible_fronts:
             return {}, "", "Pareto Front (No visible fronts)"
 
-        # --- 1. Determinar Ejes ---
+        # --- 1. Determinar Ejes --- (Sin cambios)
         explicit_objectives = data_store.get('explicit_objectives', [])
         objectives = data_store.get('main_objectives') or (explicit_objectives if explicit_objectives else (visible_fronts[0]['objectives'] if visible_fronts else []))
+        
         x_axis = x_axis_value or (explicit_objectives[0] if explicit_objectives else (objectives[0] if objectives else 'num_genes'))
         y_axis = y_axis_value or (explicit_objectives[1] if len(explicit_objectives) > 1 else (objectives[1] if len(objectives) > 1 else 'accuracy'))
+
         if x_axis not in objectives: x_axis = objectives[0]
         if y_axis not in objectives: y_axis = objectives[1]
 
@@ -190,7 +134,7 @@ def register_pareto_plot_callbacks(app):
         colors_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
         selected_unique_ids = {s['unique_id'] for s in (selected_solutions or [])}
 
-        # --- 2. Pre-procesar y Agrupar Soluciones ---
+        # --- 2. Pre-procesar y Agrupar Soluciones --- (Sin cambios)
         coord_to_solutions = defaultdict(list)
         all_objectives = set(objectives) 
 
@@ -220,7 +164,7 @@ def register_pareto_plot_callbacks(app):
                 coord_to_solutions[coord].append(sol_data)
                 all_objectives.update(sol_data.keys())
 
-            # --- 3. Dibujar Líneas (Traza por cada frente) ---
+            # --- 3. Dibujar Líneas (Traza por cada frente) --- (Sin cambios)
             df_sorted = df.sort_values(by=[x_axis, y_axis], ascending=True)
             fig.add_trace(go.Scatter(
                 x=df_sorted[x_axis],
@@ -232,11 +176,15 @@ def register_pareto_plot_callbacks(app):
                 legendgroup=front["name"]
             ))
 
-        # --- 4. Preparar Datos para Burbujas ---
+        # --- 4. Preparar Datos para Burbujas --- (MODIFICADO)
         plot_data = []
         for coord, solutions in coord_to_solutions.items():
             count = len(solutions)
             is_selected = any(s['unique_id'] in selected_unique_ids for s in solutions)
+
+            # ⭐️ --- INICIO DE LA CORRECCIÓN --- ⭐️
+            x_to_plot = coord[0] # Default to rounded coord
+            y_to_plot = coord[1] # Default to rounded coord
 
             if count == 1:
                 sol = solutions[0]
@@ -245,6 +193,11 @@ def register_pareto_plot_callbacks(app):
                               f"{y_axis.replace('_', ' ').title()}: {sol['current_y']}<br><extra></extra>")
                 marker_color = sol['color']
                 front_name_para_df = sol['front_name']
+                
+                # Usar el valor original y sin redondear para el punto
+                x_to_plot = sol['current_x'] 
+                y_to_plot = sol['current_y']
+
             else:
                 hover_text = (f"<b>{count} Solutions (Multiple)</b><br>"
                               f"{x_axis.replace('_', ' ').title()}: {coord[0]}<br>"
@@ -252,10 +205,14 @@ def register_pareto_plot_callbacks(app):
                               "<i>Click to inspect</i><extra></extra>")
                 marker_color = 'black'
                 front_name_para_df = 'Multiple'
+                
+                # Para puntos múltiples, SÍ usamos el valor redondeado
+                x_to_plot = coord[0]
+                y_to_plot = coord[1]
 
             plot_data.append({
-                'x': coord[0],
-                'y': coord[1],
+                'x': x_to_plot, # <-- Corregido
+                'y': y_to_plot, # <-- Corregido
                 'count': count,
                 'color': marker_color,
                 'size': 10 + count * 2.5, 
@@ -265,13 +222,14 @@ def register_pareto_plot_callbacks(app):
                 'front_name': front_name_para_df,
                 'solutions_json': json.dumps(solutions) 
             })
+            # ⭐️ --- FIN DE LA CORRECCIÓN --- ⭐️
 
         if not plot_data:
              return {}, "", "Pareto Front (No data for selected axes)"
 
         plot_df = pd.DataFrame(plot_data)
 
-        # --- 5. Dibujar Burbujas (MODIFICADO) ---
+        # --- 5. Dibujar Burbujas (SIN CAMBIOS) ---
         
         # 5a. Dibujar Puntos Únicos (uno por frente)
         for idx, front in enumerate(visible_fronts):
@@ -331,7 +289,7 @@ def register_pareto_plot_callbacks(app):
 
      
 
-        # --- 7. Layout y Renderizado de Selección (Lógica existente) ---
+        # --- 7. Layout y Renderizado de Selección --- (Sin cambios)
         if layout_data:
             layout_updates = {}
             if 'xaxis.range[0]' in layout_data:
@@ -349,7 +307,7 @@ def register_pareto_plot_callbacks(app):
             showlegend=True,
             legend=dict(
                 yanchor="top", y=0.99, xanchor="right", x=0.99, 
-                groupclick="togglegroup" # <-- Corrección de leyenda
+                groupclick="togglegroup" 
             ),
             clickmode='event+select', 
             dragmode='lasso'
@@ -357,7 +315,6 @@ def register_pareto_plot_callbacks(app):
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
 
-        # --- Renderizado de soluciones seleccionadas (Lógica existente, sin cambios) ---
         selected_info = ""
         if selected_solutions and len(selected_solutions) > 0:
             solution_details = []
@@ -408,7 +365,7 @@ def register_pareto_plot_callbacks(app):
         plot_title = f"Pareto Front: {y_axis.replace('_', ' ').title()} vs {x_axis.replace('_', ' ').title()}"
         return fig, selected_info, plot_title
 
-    # --- 5. NUEVO: Callback para abrir/cerrar el modal --- (SIN CAMBIOS)
+    # --- 5. Callback para abrir/cerrar el modal --- (SIN CAMBIOS)
     @app.callback(
         Output('multi-solution-modal', 'is_open'),
         [Input('multi-solution-modal-store', 'data'),
@@ -426,13 +383,13 @@ def register_pareto_plot_callbacks(app):
             return True
         return is_open
 
-    # --- 6. NUEVO: Callback para poblar el contenido del modal --- (SIN CAMBIOS)
+    # --- 6. Callback para poblar el contenido del modal --- (SIN CAMBIOS)
     @app.callback(
         [Output('multi-solution-modal-header', 'children'),
          Output('multi-solution-modal-body', 'children')],
         Input('multi-solution-modal-store', 'data'),
-        [State('x-axis-dropdown', 'value'),
-         State('y-axis-dropdown', 'value'),
+        [State('x-axis-store', 'data'), 
+         State('y-axis-store', 'data'), 
          State('objectives-store', 'data'),
          State('selected-solutions-store', 'data')],
         prevent_initial_call=True
@@ -452,6 +409,13 @@ def register_pareto_plot_callbacks(app):
         count = len(solutions)
         sol_sample = solutions[0]
         
+        if not x_axis or not y_axis:
+            if all_objectives and len(all_objectives) >= 2:
+                x_axis = x_axis or all_objectives[0]
+                y_axis = y_axis or all_objectives[1]
+            else:
+                return "Error", "No se han definido los ejes."
+
         x_val = sol_sample.get('current_x')
         y_val = sol_sample.get('current_y')
         

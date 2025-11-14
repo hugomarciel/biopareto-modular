@@ -21,8 +21,8 @@ def register_pareto_selection_callbacks(app):
         [State('selected-solutions-store', 'data'),
          State('data-store', 'data'),
          State({'type': 'remove-solution-btn', 'index': ALL}, 'id'),
-         State('x-axis-dropdown', 'value'),
-         State('y-axis-dropdown', 'value')],
+         State('x-axis-store', 'data'), # <-- MODIFICADO
+         State('y-axis-store', 'data')], # <-- MODIFICADO
         prevent_initial_call=True
     )
     def update_selected_solutions(selected_data, click_data, clear_clicks, remove_clicks,
@@ -60,6 +60,23 @@ def register_pareto_selection_callbacks(app):
         
         coord_to_solutions = defaultdict(list)
         
+        # --- MODIFICACIÓN: Manejar ejes nulos al inicio ---
+        if not x_axis or not y_axis:
+            # Si los ejes aún no están definidos (p.ej. carga inicial), 
+            # intenta obtenerlos de los datos, pero si no, aborta.
+            if not fronts:
+                raise PreventUpdate
+            
+            explicit_objectives = data_store.get('explicit_objectives', [])
+            objectives = data_store.get('main_objectives') or (explicit_objectives if explicit_objectives else (fronts[0]['objectives'] if fronts else []))
+            
+            if not objectives or len(objectives) < 2:
+                 raise PreventUpdate
+                 
+            x_axis = objectives[0]
+            y_axis = objectives[1]
+        # --- FIN MODIFICACIÓN ---
+
         for front in fronts:
             df = pd.DataFrame(front["data"])
             if x_axis not in df.columns or y_axis not in df.columns:
@@ -94,13 +111,21 @@ def register_pareto_selection_callbacks(app):
 
             if selection_type == 'click':
                 if not solutions_at_coord:
-                    sol_id = point.get('customdata', [None])[0]
-                    front_name = point.get('customdata', [None, None])[1]
-                    unique_id = f"{sol_id}|{front_name}"
-                    if unique_id in all_solutions_for_lookup:
-                         solutions_at_coord.append(all_solutions_for_lookup[unique_id])
-                    else:
-                        return []
+                    # Intenta parsear desde customdata si es un punto múltiple
+                    try:
+                        custom_data_json = point.get('customdata')
+                        if custom_data_json:
+                            # customdata es un string JSON, parsearlo
+                            solutions_at_coord = json.loads(custom_data_json)
+                        else:
+                            return [] # No hay datos
+                    except (json.JSONDecodeError, TypeError):
+                         return [] # Falló el parseo
+                
+                # Si sigue vacío, no podemos hacer nada
+                if not solutions_at_coord:
+                    return []
+
 
                 all_selected = all(s['unique_id'] in [cs['unique_id'] for cs in current_selection] for s in solutions_at_coord)
                 
@@ -116,6 +141,17 @@ def register_pareto_selection_callbacks(app):
                     )
                     
             elif selection_type == 'select':
+                if not solutions_at_coord:
+                    # Intenta parsear desde customdata si es un punto múltiple
+                    try:
+                        custom_data_json = point.get('customdata')
+                        if custom_data_json:
+                            solutions_at_coord = json.loads(custom_data_json)
+                        else:
+                            return []
+                    except (json.JSONDecodeError, TypeError):
+                         return []
+                
                 existing_unique_ids = [s['unique_id'] for s in current_selection]
 
                 for sol in solutions_at_coord:
@@ -127,9 +163,9 @@ def register_pareto_selection_callbacks(app):
                 'id': s['solution_id'],
                 'front_name': s['front_name'],
                 'unique_id': s['unique_id'],
-                'x': s['x'], 
-                'y': s['y'],
-                'objectives': s['objectives'],
+                'x': s.get('x', s.get('current_x')), # Asegura que x/y existan
+                'y': s.get('y', s.get('current_y')),
+                'objectives': s.get('objectives', []),
                 'full_data': s
             } for s in solutions_to_add_remove]
             
@@ -193,5 +229,3 @@ def register_pareto_selection_callbacks(app):
         # Dejamos la lógica de limpieza de Consolidation/Restore en el archivo consolidation.py
         
         return current_selection
-    
-    
