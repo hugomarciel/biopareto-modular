@@ -311,7 +311,7 @@ def register_genes_analysis_callbacks(app):
             [
                 dbc.PopoverHeader("Table Filtering & Sorting Help"), 
                 dbc.PopoverBody([
-                    html.P("You can filter or sort each column:", className="mb-2"),
+                    html.P("You can filter and sort each column using filters in the first row of the table.:", className="mb-2"),
                     
                     html.Strong("To Sort:"),
                     html.Ul([

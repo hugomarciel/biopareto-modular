@@ -14,7 +14,7 @@ import json
 
 def register_pareto_plot_callbacks(app):
 
-    # 1. Callback para actualizar las opciones y visibilidad de los dropdowns de ejes (MODIFICADO)
+    # 1. Callback para actualizar las opciones y visibilidad de los dropdowns de ejes (SIN CAMBIOS)
     @app.callback(
         [Output('x-axis-dropdown', 'options'),
          Output('y-axis-dropdown', 'options'),
@@ -43,31 +43,19 @@ def register_pareto_plot_callbacks(app):
         ctx = dash.callback_context
         triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
-        # --- MODIFICACIÓN INICIO ---
-        # 1. Ignorar 'objectives_from_store'. Usar 'explicit_objectives' de 'data_store'.
         if not data_store:
-            data_store = {} # Evitar error si data_store es None
+            data_store = {} 
         
-        # Usar 'explicit_objectives' como la *única* fuente de verdad para los ejes.
         objectives = data_store.get('explicit_objectives', [])
         
         if not objectives or len(objectives) < 2:
-            # No hay 2 objetivos explícitos, ocultar todo
             return [], [], None, None, {'display': 'none'}, {'display': 'none'}, "", "", {'display': 'none'}, {'display': 'none'}
 
-        # 2. Asegurarse de que solo usamos los dos primeros objetivos
         objectives = objectives[:2]
-        # --- MODIFICACIÓN FIN ---
-
         options = [{'label': obj.replace('_', ' ').title(), 'value': obj} for obj in objectives]
-
-        # --- MODIFICACIÓN INICIO ---
-        # 3. 'explicit_objectives' son los únicos defaults
         default_x = objectives[0]
         default_y = objectives[1]
-        # --- MODIFICACIÓN FIN ---
         
-        # Esta lógica de persistencia está bien, pero ahora 'objectives' siempre tendrá 2 elementos
         if triggered_id != 'swap-axes-btn' and current_x_value in objectives:
             final_x_value = current_x_value
         else:
@@ -78,9 +66,6 @@ def register_pareto_plot_callbacks(app):
         else:
             final_y_value = default_y
         
-        # --- MODIFICACIÓN INICIO ---
-        # 4. Eliminar el 'if len(objectives) > 2:' y forzar el modo de texto estático
-        
         dropdown_style = {'display': 'none'}
         static_text_style = {'display': 'block', 'fontSize': '14px', 'padding': '8px 0'}
         
@@ -88,11 +73,8 @@ def register_pareto_plot_callbacks(app):
         y_static_text = final_y_value.replace('_', ' ').title() if final_y_value else ""
 
         if triggered_id == 'swap-axes-btn':
-            # Al swapear, tomar el texto del estado anterior
             x_static_text, y_static_text = current_y_text, current_x_text
         
-        # --- MODIFICACIÓN FIN ---
-
         return options, options, final_x_value, final_y_value, dropdown_style, dropdown_style, x_static_text, y_static_text, static_text_style, static_text_style
 
     # 2. Callback para intercambiar ejes (Swap Axes) (SIN CAMBIOS)
@@ -114,7 +96,7 @@ def register_pareto_plot_callbacks(app):
             raise PreventUpdate
         return current_y, current_x, current_y_text, current_x_text, {}
 
-    # 3. Callback para almacenar el layout (Zoom/Pan) (SIN CAMBIOS)
+    # 3. Callback para almacenar el layout (Zoom/Pan) (CORRECCIÓN DEFINITIVA)
     @app.callback(
         Output('pareto-layout-store', 'data', allow_duplicate=True),
         Input('pareto-plot', 'relayoutData'),
@@ -123,29 +105,54 @@ def register_pareto_plot_callbacks(app):
     )
     def store_pareto_layout(relayoutData, current_layout):
         if relayoutData:
-            is_autoscale_or_reset = (
+            
+            # --- CORRECCIÓN DEFINITIVA INICIO ---
+            
+            # Condición 1: Reseteo por Autorange (Botón Home o Doble Clic que envía 'autorange')
+            is_autorange_reset = (
                 relayoutData.get('xaxis.autorange') == True or
                 relayoutData.get('yaxis.autorange') == True
             )
-            is_double_click_autoscale = (
-                 len(relayoutData) <= 2 and 
-                 ('autosize' in relayoutData or 'dragmode' in relayoutData) and
-                 'xaxis.range[0]' not in relayoutData and 
-                 'yaxis.range[0]' not in relayoutData
+            
+            # Condición 2: Reseteo por Doble Clic que envía 'autosize'
+            # (Debe ser 'autosize' sin rangos de ejes)
+            is_autosize_reset = (
+                'autosize' in relayoutData and
+                'xaxis.range[0]' not in relayoutData and
+                'yaxis.range[0]' not in relayoutData
             )
-            if is_autoscale_or_reset or is_double_click_autoscale:
-                return {}
-            if 'xaxis.range[0]' in relayoutData or 'yaxis.range[0]' in relayoutData or 'dragmode' in relayoutData:
-                keys_to_remove = ['lasso', 'box', 'click', 'xaxis.autorange', 'yaxis.autorange']
+
+            # Si se cumple CUALQUIERA de las condiciones de reseteo, vaciar el layout.
+            if is_autorange_reset or is_autosize_reset:
+                return {} # Resetear layout
+
+            # Si *no* es un reseteo, procesar el guardado de layout (Pan, Zoom, Lazo)
+            
+            # CASO: Inicio de Lazo/Caja.
+            # Si el evento es *solo* un cambio de 'dragmode' (p.ej. iniciar un lazo)
+            # y *no* incluye un nuevo rango de ejes, NO queremos guardar
+            # nada, pero tampoco queremos resetear. Simplemente prevenimos el update.
+            if ('dragmode' in relayoutData and 
+                'xaxis.range[0]' not in relayoutData and 
+                'yaxis.range[0]' not in relayoutData):
+                raise PreventUpdate # Es un inicio de lazo/caja, no un zoom.
+
+            # CASO: Fin de Zoom, Pan, o Fin de Lazo/Caja (que hace zoom).
+            # Si el evento SÍ incluye un rango, lo guardamos.
+            if 'xaxis.range[0]' in relayoutData or 'yaxis.range[0]' in relayoutData:
+                # Filtramos claves irrelevantes para el layout
+                keys_to_remove = ['lasso', 'box', 'click', 'xaxis.autorange', 'yaxis.autorange', 'autosize', 'dragmode']
                 filtered_relayout = {k: v for k, v in relayoutData.items() if not any(key in k for key in keys_to_remove)}
+                
                 updated_layout = (current_layout or {}).copy()
                 updated_layout.update(filtered_relayout)
                 return updated_layout
+            
+            # --- CORRECCIÓN DEFINITIVA FIN ---
+                
         raise PreventUpdate
 
-    # 4. Callback principal para generar el gráfico de Pareto (SIN CAMBIOS)
-    # (No es necesario modificarlo, ya que leerá los valores correctos
-    # de x_axis_value y y_axis_value, forzados por el Callback 1)
+    # 4. Callback principal para generar el gráfico de Pareto (SIN CAMBIOS RESPECTO AL ANTERIOR)
     @app.callback(
         [Output('pareto-plot', 'figure'),
          Output('selected-solutions-info', 'children'),
@@ -172,8 +179,6 @@ def register_pareto_plot_callbacks(app):
             return {}, "", "Pareto Front (No visible fronts)"
 
         # --- 1. Determinar Ejes ---
-        # (Esta lógica ahora funcionará como se espera, ya que x_axis_value
-        # y y_axis_value serán seteados por el Callback 1)
         explicit_objectives = data_store.get('explicit_objectives', [])
         objectives = data_store.get('main_objectives') or (explicit_objectives if explicit_objectives else (visible_fronts[0]['objectives'] if visible_fronts else []))
         x_axis = x_axis_value or (explicit_objectives[0] if explicit_objectives else (objectives[0] if objectives else 'num_genes'))
@@ -187,7 +192,7 @@ def register_pareto_plot_callbacks(app):
 
         # --- 2. Pre-procesar y Agrupar Soluciones ---
         coord_to_solutions = defaultdict(list)
-        all_objectives = set(objectives) # Rastrear todos los objetivos para el modal
+        all_objectives = set(objectives) 
 
         for idx, front in enumerate(visible_fronts):
             df = pd.DataFrame(front["data"])
@@ -205,12 +210,10 @@ def register_pareto_plot_callbacks(app):
                 coord = (row['x_coord'], row['y_coord'])
                 unique_id = f"{row['solution_id']}|{front['name']}"
                 
-                # Almacenar datos completos de la solución
                 sol_data = row.to_dict()
                 sol_data['front_name'] = front['name']
                 sol_data['color'] = color
                 sol_data['unique_id'] = unique_id
-                # Guardar los valores X/Y de los ejes actuales para referencia
                 sol_data['current_x'] = row[x_axis]
                 sol_data['current_y'] = row[y_axis]
                 
@@ -225,11 +228,10 @@ def register_pareto_plot_callbacks(app):
                 mode='lines',
                 name=front["name"],
                 line=dict(color=color, width=1.5),
-                hoverinfo='none', # Las burbujas manejarán el hover
+                hoverinfo='none', 
                 legendgroup=front["name"]
             ))
 
-        # (Este es el bloque NUEVO de la Sección 4)
         # --- 4. Preparar Datos para Burbujas ---
         plot_data = []
         for coord, solutions in coord_to_solutions.items():
@@ -242,39 +244,35 @@ def register_pareto_plot_callbacks(app):
                               f"{x_axis.replace('_', ' ').title()}: {sol['current_x']}<br>"
                               f"{y_axis.replace('_', ' ').title()}: {sol['current_y']}<br><extra></extra>")
                 marker_color = sol['color']
-                front_name_para_df = sol['front_name'] # <-- AÑADIDO
+                front_name_para_df = sol['front_name']
             else:
                 hover_text = (f"<b>{count} Solutions (Multiple)</b><br>"
                               f"{x_axis.replace('_', ' ').title()}: {coord[0]}<br>"
                               f"{y_axis.replace('_', ' ').title()}: {coord[1]}<br>"
                               "<i>Click to inspect</i><extra></extra>")
                 marker_color = 'black'
-                front_name_para_df = 'Multiple' # <-- AÑADIDO
+                front_name_para_df = 'Multiple'
 
             plot_data.append({
                 'x': coord[0],
                 'y': coord[1],
                 'count': count,
                 'color': marker_color,
-                'size': 10 + count * 2.5, # Tamaño base + N*escala
+                'size': 10 + count * 2.5, 
                 'hover': hover_text,
                 'line_color': 'red' if is_selected else 'white',
                 'line_width': 3 if is_selected else 1,
-                'front_name': front_name_para_df, # <-- AÑADIDO
-                # Serializar *todas* las soluciones en este punto para el clic
+                'front_name': front_name_para_df,
                 'solutions_json': json.dumps(solutions) 
             })
 
-        if not plot_data: # Si no hay datos, salir
+        if not plot_data:
              return {}, "", "Pareto Front (No data for selected axes)"
 
         plot_df = pd.DataFrame(plot_data)
 
-        # (Este es el bloque NUEVO de las Secciones 5 y 6)
         # --- 5. Dibujar Burbujas (MODIFICADO) ---
-        # Ahora dibujamos una traza por cada frente para los puntos únicos
-        # y una traza separada para los puntos múltiples.
-
+        
         # 5a. Dibujar Puntos Únicos (uno por frente)
         for idx, front in enumerate(visible_fronts):
             front_name = front["name"]
@@ -282,7 +280,6 @@ def register_pareto_plot_callbacks(app):
             if front.get('is_consolidated'):
                  color = '#000080'
             
-            # Filtrar el DF de burbujas para *solo* los puntos de este frente
             front_points_df = plot_df[
                 (plot_df['count'] == 1) & (plot_df['front_name'] == front_name)
             ]
@@ -292,11 +289,11 @@ def register_pareto_plot_callbacks(app):
                     x=front_points_df['x'],
                     y=front_points_df['y'],
                     mode='markers',
-                    name=f"{front_name} solutions", # Nombre para hover (no se verá en leyenda)
+                    name=f"{front_name} solutions", 
                     customdata=front_points_df['solutions_json'],
                     hovertemplate=front_points_df['hover'],
                     marker=dict(
-                        color=color, # Usar el color del frente
+                        color=color, 
                         size=front_points_df['size'],
                         sizemode='diameter',
                         line=dict(
@@ -304,8 +301,8 @@ def register_pareto_plot_callbacks(app):
                             width=front_points_df['line_width']
                         )
                     ),
-                    legendgroup=front_name,  # <--- CLAVE: Vincular al grupo de la línea
-                    showlegend=False           # <--- CLAVE: No crear nueva entrada de leyenda
+                    legendgroup=front_name,  
+                    showlegend=False           
                 ))
 
         # 5b. Dibujar Puntos Múltiples (una traza para todos)
@@ -316,11 +313,11 @@ def register_pareto_plot_callbacks(app):
                 x=multiple_points_df['x'],
                 y=multiple_points_df['y'],
                 mode='markers',
-                name='Multiple solutions', # <--- Se verá en la leyenda
+                name='Multiple solutions', 
                 customdata=multiple_points_df['solutions_json'],
                 hovertemplate=multiple_points_df['hover'],
                 marker=dict(
-                    color='black', # <--- Color de burbuja múltiple
+                    color='black', 
                     size=multiple_points_df['size'],
                     sizemode='diameter',
                     line=dict(
@@ -328,8 +325,8 @@ def register_pareto_plot_callbacks(app):
                         width=multiple_points_df['line_width']
                     )
                 ),
-                legendgroup='Multiple solutions_group', # <--- Grupo propio
-                showlegend=True                    # <--- Mostrar en leyenda
+                legendgroup='Multiple solutions_group', 
+                showlegend=True                    
             ))
 
      
@@ -350,16 +347,17 @@ def register_pareto_plot_callbacks(app):
             plot_bgcolor='white', paper_bgcolor='white', font=dict(size=12),
             height=500, margin=dict(l=60, r=60, t=60, b=60),
             showlegend=True,
-            legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99, groupclick="toggleitem"),
-            clickmode='event+select', # Mantenemos 'select' para lasso
+            legend=dict(
+                yanchor="top", y=0.99, xanchor="right", x=0.99, 
+                groupclick="togglegroup" # <-- Corrección de leyenda
+            ),
+            clickmode='event+select', 
             dragmode='lasso'
         )
         fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
 
         # --- Renderizado de soluciones seleccionadas (Lógica existente, sin cambios) ---
-        # (Este es el bloque NUEVO CORREGIDO)
-        # --- Renderizado de soluciones seleccionadas ---
         selected_info = ""
         if selected_solutions and len(selected_solutions) > 0:
             solution_details = []
@@ -392,20 +390,16 @@ def register_pareto_plot_callbacks(app):
                             f"{y_axis}: {int(sol['y']) if isinstance(sol['y'], (int, float)) and sol['y'] == int(sol['y']) else '{:.3f}'.format(sol['y']) if isinstance(sol['y'], float) else sol['y']}"
                         ], className="text-muted d-block mt-1"),
                         
-                        # --- INICIO DE LA CORRECCIÓN ---
-                        # El html.Details debe tener DOs hijos: Summary y Div
                         html.Details([
                             html.Summary(
                                 "Ver genes",
                                 style={'cursor': 'pointer', 'fontSize': '0.85rem', 'color': '#0d6efd', 'marginTop': '0.25rem'}
                             ),
-                            # ESTE DIV FALTABA:
                             html.Div([
                                 html.Strong("Genes: ", className="text-secondary"),
                                 html.Span(', '.join(sol['genes']) if sol['genes'] else 'N/A', className="text-dark")
                             ], className="mt-2 p-2", style={'fontSize': '0.85rem', 'backgroundColor': '#f8f9fa', 'borderRadius': '4px'})
                         ], style={'marginTop': '0.5rem'}) if sol.get('genes') else None
-                        # --- FIN DE LA CORRECCIÓN ---
                         
                     ]) for sol in solution_details
                 ], className="mt-2")
@@ -433,9 +427,6 @@ def register_pareto_plot_callbacks(app):
         return is_open
 
     # --- 6. NUEVO: Callback para poblar el contenido del modal --- (SIN CAMBIOS)
-    # (Este callback usa 'objectives-store', lo cual es correcto,
-    # ya que queremos mostrar *todos* los objetivos en el modal,
-    # incluso los que no están en los ejes X/Y)
     @app.callback(
         [Output('multi-solution-modal-header', 'children'),
          Output('multi-solution-modal-body', 'children')],
@@ -461,15 +452,12 @@ def register_pareto_plot_callbacks(app):
         count = len(solutions)
         sol_sample = solutions[0]
         
-        # Obtener valores X/Y de la primera solución (todos son iguales)
         x_val = sol_sample.get('current_x')
         y_val = sol_sample.get('current_y')
         
         header = f"Inspecting {count} Solutions at ({x_axis}: {x_val}, {y_axis}: {y_val})"
 
-        # Identificar otros objetivos (que no sean X, Y o internos)
         internal_keys = ['front_name', 'color', 'unique_id', 'current_x', 'current_y', 'x_coord', 'y_coord', 'solution_id', 'selected_genes']
-        # 'all_objectives' aquí viene de 'objectives-store', lo cual es correcto.
         other_objectives = [obj for obj in all_objectives if obj not in [x_axis, y_axis] and obj not in internal_keys and obj in sol_sample]
 
         selected_ids = {s['unique_id'] for s in (selected_solutions or [])}
@@ -478,7 +466,6 @@ def register_pareto_plot_callbacks(app):
         for sol in solutions:
             is_selected = sol['unique_id'] in selected_ids
             
-            # Construir la lista de "Otros Objetivos"
             other_obj_items = []
             for obj_key in other_objectives:
                 val = sol.get(obj_key)
@@ -494,7 +481,6 @@ def register_pareto_plot_callbacks(app):
                 ]),
                 html.Hr(className="my-2"),
                 
-                # Botones de Acción
                 dbc.Row([
                     dbc.Col(dbc.Button(
                         "Select" if not is_selected else "Deselect",
@@ -511,7 +497,6 @@ def register_pareto_plot_callbacks(app):
                     ), width="auto"),
                 ], className="mb-3"),
 
-                # Acordeón para Objetivos y Genes
                 dbc.Accordion([
                     dbc.AccordionItem(
                         html.Ul(other_obj_items, className="list-group list-group-flush"),
