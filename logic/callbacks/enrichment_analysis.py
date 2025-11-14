@@ -1,11 +1,8 @@
-# logic/callbacks/enrichment_analysis.py
+# logic/callbacks/enrichment_analysis.py (CÓDIGO COMPLETO Y CORREGIDO)
 
 """
 Módulo de Callbacks para la Pestaña de Análisis de Enriquecimiento.
-
-Define toda la lógica interactiva para g:Profiler y Reactome, incluyendo
-la recolección de genes, la ejecución de análisis y la visualización
-de resultados (tablas, Manhattan plot, clustergram).
+...
 """
 
 # Importaciones estándar de Dash
@@ -14,7 +11,7 @@ from dash import Output, Input, State, dcc, html, ALL, dash_table
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 
-# Importaciones de librerías de análisis y utilidades
+# ... (todas las demás importaciones: pandas, json, etc. son las mismas)
 import pandas as pd
 import json
 from collections import defaultdict
@@ -22,24 +19,19 @@ from datetime import datetime
 import logging
 import numpy as np
 import math 
-
-# Importaciones de visualización
 import plotly.express as px
 import plotly.graph_objects as go
-
-# Importaciones de servicios (lógica de API)
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
-
-# Importaciones de SciPy para el clustering del heatmap
 import scipy.cluster.hierarchy as sch
 from scipy.spatial.distance import pdist, squareform
 
-# Configuración del logger para este módulo
+# Configuración del logger
 logger = logging.getLogger(__name__)
 
-# --- FUNCIÓN DE MANHATTAN PLOT ---
+# --- FUNCIÓN DE MANHATTAN PLOT (Sin cambios) ---
 def create_gprofiler_manhattan_plot(df, threshold_value):
+    # ... (código original de la función, líneas 46-180)
     """
     Genera una figura de Plotly (Manhattan plot) a partir de los resultados de g:Profiler.
     """
@@ -159,8 +151,10 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
     )
     return fig
 
-# --- FUNCIÓN DE PROCESAMIENTO DE HEATMAP ---
+
+# --- FUNCIÓN DE PROCESAMIENTO DE HEATMAP (Sin cambios) ---
 def process_data_for_gene_term_heatmap(stored_data, threshold=0.05, max_terms=50):
+    # ... (código original de la función, líneas 183-259)
     """
     Procesa los datos del store para crear la matriz de datos del heatmap.
     Filtra por p-value, toma el top N, y pivotea los datos (Términos vs Genes).
@@ -233,8 +227,10 @@ def process_data_for_gene_term_heatmap(stored_data, threshold=0.05, max_terms=50
     # Retorna la matriz procesada y los contadores
     return heatmap_matrix, debug_counters
 
-# --- FUNCIÓN DE CREACIÓN DE HEATMAP ---
+
+# --- FUNCIÓN DE CREACIÓN DE HEATMAP (Sin cambios) ---
 def create_gene_term_heatmap(heatmap_matrix):
+    # ... (código original de la función, líneas 262-337)
     """
     Genera la figura Plotly (clustergram/heatmap) a partir de la matriz procesada.
     """
@@ -327,7 +323,7 @@ def register_enrichment_callbacks(app):
     Registra todos los callbacks de la pestaña de enriquecimiento en la app principal.
     """
     
-    # 1. Callback de Actualización de IDs y Trigger
+    # 1. Callback de Actualización de IDs y Trigger (Sin cambios)
     @app.callback(
         [Output('enrichment-selected-item-ids-store', 'data', allow_duplicate=True),
          Output('enrichment-render-trigger-store', 'data', allow_duplicate=True)],
@@ -337,6 +333,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True 
     )
     def update_selected_items_and_render_trigger(items, selected_indices_list, active_tab):
+        # ... (código original, líneas 356-373)
         """
         Este callback "escucha" cambios en el panel de interés o en la selección,
         y actualiza un 'trigger' (enrichment-render-trigger-store).
@@ -361,7 +358,7 @@ def register_enrichment_callbacks(app):
         raise PreventUpdate
 
 
-    # 1.5. Callback de Renderizado Real
+    # 1.5. Callback de Renderizado Real (Sin cambios)
     @app.callback(
         Output('enrichment-visual-selector', 'children'),
         Input('enrichment-render-trigger-store', 'data'), # Disparado por el callback anterior
@@ -371,6 +368,7 @@ def register_enrichment_callbacks(app):
          State('data-store', 'data')]
     )
     def render_visual_enrichment_selector(trigger_data, items, selected_indices_list, active_tab, data_store):
+        # ... (código original, líneas 385-431)
         """
         Construye las "tarjetas" (cards) visuales de selección de ítems
         (soluciones, grupos de genes) en la pestaña de enriquecimiento.
@@ -470,6 +468,7 @@ def register_enrichment_callbacks(app):
         return dbc.Row(cards, className="g-3")
 
 
+    # --- 🔑 INICIO DE LA MODIFICACIÓN (CALLBACK #2) ---
     # 2. Callback de selección
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
@@ -487,15 +486,12 @@ def register_enrichment_callbacks(app):
         if not ctx.triggered or not items:
             raise PreventUpdate
         
-        # Recopila los índices de todas las tarjetas seleccionadas
         selected_indices = {values[0] for values in list_of_checkbox_values if values}
         selected_indices_list = sorted(list(selected_indices))
         
-        # Si no hay nada seleccionado, muestra un mensaje de información
         if not selected_indices_list:
             return selected_indices_list, html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
 
-        # Itera sobre los ítems seleccionados y combina sus genes en un 'set' (para asegurar unicidad)
         combined_genes = set()
         for idx in selected_indices_list:
             if idx < len(items):
@@ -515,21 +511,62 @@ def register_enrichment_callbacks(app):
 
         gene_count = len(combined_genes)
         
+        # --- 🔑 NUEVA LÓGICA DE COPIA ---
+        # Prepara el string de genes (separado por espacios) aquí mismo
+        gene_string = ""
+        if combined_genes:
+            cleaned_genes = {g for g in combined_genes if g and isinstance(g, str)}
+            if cleaned_genes:
+                gene_string = " ".join(sorted(list(cleaned_genes)))
+        
+        
         # Muestra un panel de resumen con el conteo total de genes únicos
         summary_panel = dbc.Alert([
             html.H6("Combined Genes for Enrichment (Input Set)", className="alert-heading"),
             html.P(f"Total Unique Genes: {gene_count}", className="mb-1"),
             html.P(f"Source Items: {len(selected_indices_list)}", className="mb-0"),
-            html.Details([
-                html.Summary("View Gene List", style={'cursor': 'pointer', 'color': 'inherit', 'fontWeight': 'bold'}),
-                html.P(', '.join(sorted(list(combined_genes))), className="mt-2 small")
-            ]) if gene_count > 0 else None,
+            
+            # --- 🔑 ESTRUCTURA CORREGIDA FINAL ---
+            # 1. Un Div padre con 'flex' para alinear el <details> y el icono
+            html.Div([
+                # 2. El <details> ahora solo contiene el <summary> y la lista
+                html.Details([
+                    # 3. El <summary> SÓLO contiene el texto.
+                    #    ¡No se añade NINGÚN 'style' para que la flecha aparezca!
+                    html.Summary("View Gene List", 
+                                 style={'cursor': 'pointer', 'color': 'inherit', 'fontWeight': 'bold'}),
+                    
+                    # 4. La lista de genes (sin cambios)
+                    html.P(', '.join(sorted(list(combined_genes))), className="mt-2 small")
+                
+                ], style={'flex': '1'}), # El Details toma el espacio disponible
+                
+                # 5. El dcc.Clipboard está FUERA del <details>
+                #    pero DENTRO del Div 'flex'.
+                dcc.Clipboard(
+                    content=gene_string,
+                    id='dynamic-clipboard-btn',
+                    style={
+                        "display": "inline-block",
+                        "color": "inherit", # Hereda el color azul del texto
+                        "fontSize": "1rem",
+                        "marginLeft": "8px", # Espacio entre el texto y el icono
+                    },
+                    title="Copy gene list (space-separated)"
+                )
+            ], 
+            # 6. Estilos del Div padre:
+            #    'flex-start' alinea todo arriba, evitando que el icono se mueva
+            style={'display': 'flex', 'alignItems': 'flex-start'}) if gene_count > 0 else None,
+            # --- 🔑 FIN DE LA MODIFICACIÓN ---
+            
         ], color="primary", className="mt-3")
         
-        # Guarda la lista de índices seleccionados y muestra el panel de resumen
         return selected_indices_list, summary_panel
+    # --- 🔑 FIN DE LA MODIFICACIÓN (CALLBACK #2) ---
     
-    # 2.5. Callback de limpiar selección
+    
+    # 2.5. Callback de limpiar selección (Sin cambios)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
          Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
@@ -537,6 +574,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def clear_enrichment_selection(n_clicks):
+        # ... (código original, líneas 480-488)
         """
         Resetea la selección al hacer clic en el botón 'Clear Selection'.
         """
@@ -545,34 +583,38 @@ def register_enrichment_callbacks(app):
             return [], html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
         raise PreventUpdate
 
-    # 2.6. Visibilidad del botón Clear
+    
+    # 2.6. Visibilidad del botón Clear (Sin cambios)
     @app.callback(
         Output('clear-enrichment-btn-container', 'style'),
         Input('enrichment-selected-indices-store', 'data')
     )
     def toggle_clear_selection_button(selected_indices):
+        # ... (código original, líneas 491-499)
         """
         Muestra u oculta el botón 'Clear Selection' basado en si hay ítems seleccionados.
         """
         if selected_indices and len(selected_indices) > 0:
-            return {'display': 'block', 'height': '100%'}
-        return {'display': 'none', 'height': '100%'}
+            return {'display': 'block'}
+        return {'display': 'none'}
 
 
-    # 3. Habilitar botones de análisis
+    # 3. Habilitar botones de análisis (Sin cambios)
     @app.callback(
         [Output('run-gprofiler-btn', 'disabled'),
          Output('run-reactome-btn', 'disabled')], 
         Input('enrichment-selected-indices-store', 'data')
     )
     def toggle_enrichment_button(selected_indices):
+        # ... (código original, líneas 505-512)
         """
         Habilita o deshabilita los botones de 'Run Analysis' si hay al menos un ítem seleccionado.
         """
         is_disabled = not (selected_indices and len(selected_indices) > 0)
         return is_disabled, is_disabled
   
-    # 4. Ejecutar g:Profiler (Callback Principal)
+    
+    # 4. Ejecutar g:Profiler (Callback Principal) (Sin cambios)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-spinner-output', 'children')], 
@@ -584,6 +626,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources):
+        # ... (código original, líneas 515-689)
         """
         Callback principal que se ejecuta al presionar 'Run g:Profiler Analysis'.
         1. Recolecta genes.
@@ -753,8 +796,9 @@ def register_enrichment_callbacks(app):
             'gene_list_original_count': gene_list_original_count,
             'organism': organism
         }, None
-    
-    # 4.5. Mostrar resultados g:Profiler
+
+
+    # 4.5. Mostrar resultados g:Profiler (Sin cambios)
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
@@ -766,6 +810,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_gprofiler_results(stored_data, threshold_value, main_active_tab, service_active_tab):
+        # ... (código original, líneas 692-841)
         """
         Renderiza la sección de resultados de g:Profiler (resumen, tabla, Manhattan plot)
         basado en los datos del 'gprofiler-results-store'.
@@ -910,8 +955,9 @@ def register_enrichment_callbacks(app):
                  summary_message_md += "\n\n**Action Failed:** No genes were validated. Check organism or gene ID format."
             
             return html.Div(dbc.Alert(html.P(dcc.Markdown(summary_message_md, dangerously_allow_html=True), className="mb-0"), color=alert_color, className="mt-3")), False, manhattan_fig
-        
-    # 4.6. Limpiar g:Profiler
+
+
+    # 4.6. Limpiar g:Profiler (Sin cambios)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
@@ -919,6 +965,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def clear_gprofiler_results(n_clicks):
+        # ... (código original, líneas 844-856)
         """
         Resetea el store de g:Profiler a su estado inicial vacío.
         """
@@ -933,7 +980,8 @@ def register_enrichment_callbacks(app):
             return empty_data, go.Figure()
         raise PreventUpdate
 
-    # 5. Ejecutar Reactome
+
+    # 5. Ejecutar Reactome (Sin cambios)
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
          Output('reactome-spinner-output', 'children')], 
@@ -944,6 +992,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def run_reactome_analysis(n_clicks, selected_indices, items, organism_name):
+        # ... (código original, líneas 859-913)
         """
         Callback principal para Reactome. Recolecta genes y llama al servicio.
         """
@@ -999,7 +1048,8 @@ def register_enrichment_callbacks(app):
         # Guarda la respuesta completa en el store de Reactome
         return service_response, None
 
-    # 5.5 Mostrar resultados Reactome
+
+    # 5.5 Mostrar resultados Reactome (Sin cambios)
     @app.callback(
         [Output('reactome-results-content', 'children'),
         Output('clear-reactome-results-btn', 'disabled'),
@@ -1009,6 +1059,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
+        # ... (código original, líneas 916-1025)
         """
         Renderiza la sección de resultados de Reactome (resumen, tabla, fuegos artificiales).
         """
@@ -1100,7 +1151,8 @@ def register_enrichment_callbacks(app):
         ]
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
-    # 6. Visualizar Diagrama Reactome
+
+    # 6. Visualizar Diagrama Reactome (Sin cambios)
     @app.callback(
         [Output('reactome-diagram-output', 'children', allow_duplicate=True),
          Output('reactome-diagram-spinner-output', 'children')], 
@@ -1110,6 +1162,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def visualize_reactome_diagram(selected_rows, table_data, stored_results):
+        # ... (código original, líneas 1028-1077)
         """
         Muestra la imagen del diagrama de pathway para la fila seleccionada en la tabla.
         """
@@ -1161,13 +1214,15 @@ def register_enrichment_callbacks(app):
         
         return diagram_content, None
 
-    # 7. Limpiar Reactome
+
+    # 7. Limpiar Reactome (Sin cambios)
     @app.callback(
         Output('reactome-results-store', 'data', allow_duplicate=True),
         Input('clear-reactome-results-btn', 'n_clicks'), 
         prevent_initial_call=True
     )
     def clear_reactome_results(n_clicks):
+        # ... (código original, líneas 1080-1087)
         """
         Resetea el store de Reactome a su estado inicial vacío.
         """
@@ -1175,7 +1230,8 @@ def register_enrichment_callbacks(app):
             return {'results': [], 'gene_list': [], 'organism': 'Homo sapiens'}
         raise PreventUpdate
             
-    # 7.5. Ajuste de tabla
+            
+    # 7.5. Ajuste de tabla (Sin cambios)
     @app.callback(
         [Output('enrichment-results-table-gprofiler', 'style_header_conditional', allow_duplicate=True),
         Output('enrichment-results-table-gprofiler', 'style_data_conditional', allow_duplicate=True)],
@@ -1184,6 +1240,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def adjust_gprofiler_column_widths_dynamically(current_columns, base_style_data_conditional):
+        # ... (código original, líneas 1090-1100)
         """
         Callback auxiliar para ajustes dinámicos de la tabla (si es necesario).
         """
@@ -1192,16 +1249,17 @@ def register_enrichment_callbacks(app):
         return [], base_style_data_conditional
             
             
-    # 8. Callback para Heatmap
+    # 8. Callback para Heatmap (Sin cambios)
     @app.callback(
         Output('gprofiler-clustergram-output', 'children'),
-        [Input('gprofiler-results-store', 'data'),      # Se actualiza cuando cambian los resultados
+        [Input('gprofiler-results-store', 'data'),      # Se activa cuando cambian los resultados
         Input('gprofiler-threshold-input', 'value')], # O cuando cambia el umbral
         [State('enrichment-selected-indices-store', 'data'),
         State('interest-panel-store', 'data')],
         prevent_initial_call=True
     )
     def display_gprofiler_clustergram(stored_data, threshold_value, selected_indices, items):
+        # ... (código original, líneas 1103-1135)
         """
         Renderiza el clustergram (heatmap) basado en los resultados de g:Profiler.
         """
@@ -1236,3 +1294,7 @@ def register_enrichment_callbacks(app):
 
         # Retorna el gráfico
         return dcc.Graph(figure=heatmap_fig, config={'displayModeBar': True})
+        
+        
+    # --- 🔑 CALLBACK #9 ELIMINADO ---
+    # (Ya no se necesita el callback de 'trigger' separado, ni el 'clientside')

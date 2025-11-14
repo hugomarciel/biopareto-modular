@@ -1,4 +1,4 @@
-# logic/callbacks/export_callbacks.py
+# logic/callbacks/export_callbacks.py (CÓDIGO COMPLETO CON NUEVO CALLBACK)
 
 import dash
 from dash import Output, Input, State, dcc
@@ -157,3 +157,6 @@ def register_export_callbacks(app):
             dbc.ListGroupItem(f"Unique Genes: {len(unique_genes)}"),
             dbc.ListGroupItem(f"Items in Interest Panel: {len(interest_items)}"),
         ])
+        
+        
+    

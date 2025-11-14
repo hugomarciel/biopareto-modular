@@ -1,4 +1,4 @@
-# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON SPINNER EN HEADER)
+# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON CLIPBOARD OCULTO)
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc
@@ -6,10 +6,9 @@ from services.gprofiler_service import get_organisms_from_api
 from services.reactome_service import ReactomeService
 
 
-# --- Componente de Layout de g:Profiler (MODIFICADO) ---
+# --- Componente de Layout de g:Profiler (Sin cambios) ---
 def create_gprofiler_layout(organism_options):
     
-    # 1. Definimos las fuentes de datos que podrá seleccionar el usuario
     gprofiler_source_options = [
         {'label': 'GO:BP (Biological Process)', 'value': 'GO:BP'},
         {'label': 'GO:MF (Molecular Function)', 'value': 'GO:MF'},
@@ -23,19 +22,14 @@ def create_gprofiler_layout(organism_options):
         {'label': 'CORUM', 'value': 'CORUM'},
         {'label': 'Human Phenotype Ontology (HP)', 'value': 'HP'},
     ]
-    
-    # 2. Definimos cuáles estarán seleccionadas por defecto
     default_sources = ['GO:BP', 'GO:MF', 'GO:CC', 'KEGG', 'REAC']
 
     return html.Div([
         dbc.Row([
-            # 3. Columna del Organismo (sin cambios)
             dbc.Col([
                 dbc.Label("Select Organism:", className="fw-bold"),
                 dcc.Dropdown(id='gprofiler-organism-dropdown', options=organism_options, value='hsapiens', placeholder="Select organism for g:Profiler analysis", className="mb-3")
             ], width=5),
-            
-            # 4. Columna de Botones (sin cambios)
             dbc.Col([
                 html.Div(className="d-flex align-items-center mb-3", style={'height': '38px'}, children=[
                     dbc.Button("🚀 Run g:Profiler Analysis", id="run-gprofiler-btn", color="success", disabled=True, className="me-2"),
@@ -51,47 +45,27 @@ def create_gprofiler_layout(organism_options):
                     )
                 ])
             ], width=5),
-            
-            # 5. Columna de Clear (sin cambios)
             dbc.Col([
                 dbc.Button("🗑️ Clear Results", id="clear-gprofiler-results-btn", color="light", disabled=True, className="mb-3 w-100"),
             ], width=2)
         ], className="mb-3 align-items-end"),
-        
-        # 6. 🔑 FILA DE SELECTOR DE FUENTES (MODIFICADA)
         dbc.Row([
             dbc.Col([
                 dbc.Label("Select Data Sources:", className="fw-bold"),
-                
-                # --- 🔑 INICIO DEL CAMBIO ---
                 dbc.Checklist(
                     id='gprofiler-sources-checklist',
                     options=gprofiler_source_options,
                     value=default_sources,
-                    
-                    # 1. Eliminamos 'inline=True' para que la lista sea vertical
-                    # inline=True, 
-                    
                     className="mb-3",
-                    
-                    # 2. Eliminamos las clases de espaciado para 'inline'
-                    # labelClassName="me-3", 
-                    # inputClassName="me-1"
-                    
-                    # 3. Añadimos CSS para un layout de columnas responsivo
                     style={
-                        'column-width': '240px', # Cada columna tendrá ~240px
-                        'padding-left': '20px'  # Para alinear con el label
+                        'column-width': '240px', 
+                        'padding-left': '20px' 
                     }
                 )
-                # --- 🔑 FIN DEL CAMBIO ---
-                
             ], width=12)
         ], className="mb-3"),
         
         html.Hr(),
-        
-        # 7. Resto del layout (sin cambios)
         dcc.Loading(html.Div(id="gprofiler-results-content"), type="default"),
         html.Hr(), 
         dbc.Card([
@@ -116,7 +90,7 @@ def create_gprofiler_layout(organism_options):
         
     ], className="mt-3")
 
-# --- Componente de Layout de Reactome (MODIFICADO) ---
+# --- Componente de Layout de Reactome (Sin cambios) ---
 def create_reactome_layout(organism_options):
     return html.Div([
         dbc.Row([
@@ -158,21 +132,18 @@ def create_reactome_layout(organism_options):
             dbc.Col([dcc.Loading(html.Div(id="reactome-results-content"), type="default")], width=12),
         ], className="g-4 mb-4"),
         
-        # 2. CONTENEDOR DE VISUALIZACIÓN DEL DIAGRAMA (MODIFICADO)
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    # 🔑 CAMBIO: CardHeader ahora usa d-flex y contiene el nuevo spinner
                     dbc.CardHeader(
                         html.Div(className="d-flex align-items-center", children=[
                             html.H4("Reactome Pathway Visualization (Data Overlay)", className="mb-0 me-2"),
-                            # Esta es la "caja" para el spinner, como la de los botones
                             html.Div(
                                 style={'width': '30px', 'height': '30px', 'display': 'flex', 'align-items': 'center', 'justify-content': 'center'},
                                 children=[
                                     dcc.Loading(
-                                        id="loading-reactome-diagram-spinner", # ID Nuevo
-                                        children=html.Div(id="reactome-diagram-spinner-output"), # Dummy Output Nuevo
+                                        id="loading-reactome-diagram-spinner",
+                                        children=html.Div(id="reactome-diagram-spinner-output"),
                                         type="circle",
                                     )
                                 ]
@@ -181,7 +152,6 @@ def create_reactome_layout(organism_options):
                     ),
                     
                     dbc.CardBody(className="", style={'padding': '5px 0 0 0'}), 
-                        # 🔑 CAMBIO: Se eliminó el dcc.Loading que envolvía este Div
                         html.Div(id='reactome-diagram-output', children=[
                             dbc.Alert("Select a pathway from the table of results above to visualize the gene overlay.", color="secondary")
                         ], className="p-1 border rounded")
@@ -190,7 +160,6 @@ def create_reactome_layout(organism_options):
             ], width=12) 
         ], className="g-4 mb-4"),
         
-        # ... (Resto del layout sin cambios) ...
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -207,7 +176,7 @@ def create_reactome_layout(organism_options):
     ], className="mt-3")
 
 
-# --- Función principal (Sin cambios) ---
+# --- Función principal (MODIFICADA) ---
 def create_enrichment_tab_modified(): 
     try:
         organism_options_gprofiler = get_organisms_from_api() 
@@ -229,15 +198,32 @@ def create_enrichment_tab_modified():
                             html.Div(id='enrichment-visual-selector', children=[html.P("Loading items...", className="text-muted text-center py-4")])
                         ], className="mb-4"),
                         dbc.Row([
+                            
+                            # --- 🔑 INICIO DE LA MODIFICACIÓN ---
+                            # 1. El dcc.Clipboard ya no está aquí
                             dbc.Col([
                                 html.Div(
-                                    dbc.Button("Clear Selection", id="clear-enrichment-selection-btn", color="secondary", outline=True, size="md", className="me-2"),
+                                    [
+                                        dbc.Button("Clear Selection", id="clear-enrichment-selection-btn", color="secondary", outline=True, size="md", className="me-2"),
+                                        
+                                        # (El dcc.Clipboard fue removido de esta sección)
+                                        
+                                    ],
                                     id="clear-enrichment-btn-container",
-                                    style={'display': 'none', 'width': 'auto'} 
+                                    style={'display': 'none', 'width': 'auto', 'vertical-align': 'middle'} 
                                 ),
                             ], width=12, className="mb-4"), 
+                            # --- 🔑 FIN DE LA MODIFICACIÓN ---
+                            
                         ]),
+                        
+                        # 2. El panel dinámico (donde irá el nuevo botón)
                         html.Div(id='enrichment-selection-panel'),
+                        
+                        # 3. Ponemos el Clipboard OCULTO aquí.
+                        # Estará en el layout, pero invisible.
+                        #dcc.Clipboard(id="clipboard-gene-list", style={'display': 'none'}),
+                        
                         html.Hr(),
                         html.H5("Select Enrichment Service:", className="mb-3"),
                         dbc.Tabs([
