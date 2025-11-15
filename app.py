@@ -107,6 +107,24 @@ app.index_string = '''
             top: 20px; /* Adjust as needed */
             z-index: 1000;
         }
+        @keyframes pulse {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.1);
+            opacity: 0.7;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        .pulse-animation {
+          animation: pulse 0.5s ease-in-out;
+        }
         </style>
     </head>
     <body>
@@ -195,6 +213,7 @@ def create_genes_frequency_chart_for_pdf(pareto_data):
 # Layout principal (se mantiene aquí)
 # Layout principal (se mantiene aquí)
 # Layout principal (se mantiene aquí)
+# app.py (Línea 187)
 app.layout = dbc.Container([
     # STORES (se mantienen en app.py)
     dcc.Store(id='add-all-trigger-store', data=0), 
@@ -225,6 +244,8 @@ app.layout = dbc.Container([
     dcc.Store(id='ui-state-store', data={'panel_visible': True}, storage_type='session'),
     # --- 💡 NUEVO STORE DUMMY PARA SCROLL 💡 ---
     dcc.Store(id='scroll-to-top-dummy-store'),
+    # --- 💡 NUEVO INTERVALO PARA ANIMACIÓN 💡 ---
+    dcc.Interval(id='badge-animation-interval', interval=1000, n_intervals=0, disabled=True),
     # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
 
 
@@ -342,36 +363,67 @@ app.layout = dbc.Container([
             # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
         }),
 
-        # --- 💡 INICIO: NUEVOS CONTROLES FLOTANTES 💡 ---
+        # --- 💡 INICIO: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
         html.Div(
-            dbc.ButtonGroup(
-                [
-                    dbc.Button(
-                        html.I(className="bi bi-arrow-up-circle fs-5"), 
-                        id="scroll-to-top-btn", 
-                        color="primary", 
-                        outline=True, 
-                        title="Scroll to Top"
-                    ),
-                    dbc.Button(
-                        html.I(className="bi bi-layout-sidebar-inset fs-5"), 
-                        id="floating-toggle-panel-btn", 
-                        color="primary", 
-                        outline=True, 
-                        title="Toggle Interest Panel"
-                    ),
-                ],
-                vertical=True,
-                size="lg"
-            ),
+            # Se usa un Div normal para apilar verticalmente
+            [
+                # 1. Botón de Scroll (sin cambios)
+                dbc.Button(
+                    html.I(className="bi bi-arrow-up-circle fs-5"), 
+                    id="scroll-to-top-btn", 
+                    color="primary", 
+                    outline=True, 
+                    title="Scroll to Top",
+                    className="mb-2" # Añadido margen inferior
+                ),
+                
+                # 2. Contenedor del Botón de Panel + Insignia
+                html.Div(
+                    [
+                        # El botón de Ocultar/Mostrar
+                        dbc.Button(
+                            html.I(className="bi bi-layout-sidebar-inset fs-5"), 
+                            id="floating-toggle-panel-btn", 
+                            color="primary", 
+                            outline=True, 
+                            title="Toggle Interest Panel",
+                            style={'width': '100%'} # Asegura que ocupe el espacio
+                        ),
+                        
+                        # La Insignia (Badge) de notificación
+                        dbc.Badge(
+                            "0", 
+                            id="interest-panel-item-count-badge",
+                            color="danger", 
+                            pill=True, 
+                            text_color="white",
+                            # Estilo para posicionarlo en la esquina
+                            style={
+                                "position": "absolute",
+                                "top": "0",
+                                "right": "0",
+                                "transform": "translate(40%, -40%)",
+                                "zIndex": "1051", # Encima del botón
+                                "display": "none" # Oculto por defecto
+                            }
+                        )
+                    ],
+                    style={
+                        "position": "relative", # Clave para el posicionamiento del Badge
+                        "display": "inline-block",
+                        "width": "100%"
+                    }
+                )
+            ],
             style={
                 'position': 'fixed',
                 'bottom': '30px',
                 'right': '30px',
-                'zIndex': '1050' # Más alto que el panel de interés
+                'zIndex': '1050', # Más alto que el panel de interés
+                'width': '58px' # Ancho fijo (basado en 'size="lg"')
             }
         ),
-        # --- 💡 FIN: NUEVOS CONTROLES FLOTANTES 💡 ---
+        # --- 💡 FIN: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
 
     ], fluid=True),
 
@@ -1188,6 +1240,75 @@ def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, 
         return current_items + [new_item], None, False
         
     raise PreventUpdate
+
+# app.py (Añadir al final del archivo)
+
+# --- 💡 INICIO: NUEVOS CALLBACKS PARA LA INSIGNIA (BADGE) 💡 ---
+
+@app.callback(
+    [Output('interest-panel-item-count-badge', 'children'),
+     Output('interest-panel-item-count-badge', 'style'),
+     Output('interest-panel-item-count-badge', 'className'),
+     Output('badge-animation-interval', 'disabled')],
+    Input('interest-panel-store', 'data'),
+    State('interest-panel-item-count-badge', 'children'),
+    prevent_initial_call=True
+)
+def update_item_count_badge(items, current_count_str):
+    """
+    Actualiza el número en la insignia (badge) y dispara la animación 
+    solo si se ha añadido un nuevo ítem.
+    """
+    if items is None:
+        count = 0
+    else:
+        count = len(items)
+
+    try:
+        current_count = int(current_count_str)
+    except (ValueError, TypeError):
+        current_count = 0
+
+    # Estilo base para la insignia
+    badge_style = {
+        "position": "absolute",
+        "top": "0",
+        "right": "0",
+        "transform": "translate(40%, -40%)",
+        "zIndex": "1051"
+    }
+
+    # Ocultar la insignia si el conteo es 0
+    if count == 0:
+        badge_style['display'] = 'none'
+        return "0", badge_style, "", True # Sin animación, Intervalo deshabilitado
+    
+    # Mostrar la insignia si el conteo > 0
+    badge_style['display'] = 'block'
+    
+    # Comprobar si se *añadió* un ítem (conteo actual > conteo anterior)
+    if count > current_count:
+        # Disparar la animación y habilitar el intervalo para resetearla
+        return count, badge_style, "pulse-animation", False
+    else:
+        # Si se borró un ítem o no hubo cambio, solo actualiza el número
+        return count, badge_style, "", True # Sin animación, Intervalo deshabilitado
+
+@app.callback(
+    [Output('interest-panel-item-count-badge', 'className', allow_duplicate=True),
+     Output('badge-animation-interval', 'disabled', allow_duplicate=True)],
+    Input('badge-animation-interval', 'n_intervals'),
+    prevent_initial_call=True
+)
+def reset_badge_animation(n_intervals):
+    """
+    Este callback se dispara por el intervalo (1 segundo después de la animación)
+    para quitar la clase 'pulse-animation' y deshabilitarse a sí mismo.
+    """
+    # Quita la clase de animación y deshabilita el intervalo
+    return "", True
+
+# --- 💡 FIN: NUEVOS CALLBACKS 💡 ---
 
 
 #🔑 REGISTRO DE CALLBACKS MODULARIZADOS PARA AMBOS MODOS 🔑
