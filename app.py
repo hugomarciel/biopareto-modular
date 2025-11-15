@@ -363,18 +363,20 @@ app.layout = dbc.Container([
             # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
         }),
 
+        # app.py (Línea 341)
         # --- 💡 INICIO: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
         html.Div(
             # Se usa un Div normal para apilar verticalmente
             [
-                # 1. Botón de Scroll (sin cambios)
+                # 1. Botón de Scroll (Corregido)
                 dbc.Button(
                     html.I(className="bi bi-arrow-up-circle fs-5"), 
                     id="scroll-to-top-btn", 
                     color="primary", 
                     outline=True, 
                     title="Scroll to Top",
-                    className="mb-2" # Añadido margen inferior
+                    className="mb-2",
+                    style={'width': '100%'} # <-- 💡 ESTA LÍNEA AÑADIDA SOLUCIONA EL TAMAÑO
                 ),
                 
                 # 2. Contenedor del Botón de Panel + Insignia
@@ -423,6 +425,7 @@ app.layout = dbc.Container([
                 'width': '58px' # Ancho fijo (basado en 'size="lg"')
             }
         ),
+        # --- 💡 FIN: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
         # --- 💡 FIN: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
 
     ], fluid=True),
