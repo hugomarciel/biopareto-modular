@@ -314,13 +314,14 @@ app.layout = dbc.Container([
         create_interest_panel()
     ], id="interest-panel-wrapper", style={
         'position': 'fixed',
-        'right': '20px',
+        'right': '-420px',
         'top': '120px',
         'width': '400px',
         'maxHeight': 'calc(100vh - 140px)',
         'overflowY': 'auto',
         'zIndex': '1000',
-        'display': 'block'
+        'transition': 'right 0.4s ease-in-out'
+        #'display': 'block'
     }),
 
     dbc.Container([
@@ -334,7 +335,12 @@ app.layout = dbc.Container([
         ], id="main-tabs", active_tab="upload-tab"),
         
 
-        html.Div(id="tab-content", className="mt-4", style={'marginRight': '360px'}),
+        html.Div(id="tab-content", className="mt-4", style={
+            # --- 💡 INICIO DE LA MODIFICACIÓN 💡 ---
+            'marginRight': '0px', # # Estado inicial Oculto
+            'transition': 'margin-right 0.4s ease-in-out'
+            # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
+        }),
 
         # --- 💡 INICIO: NUEVOS CONTROLES FLOTANTES 💡 ---
         html.Div(
@@ -397,6 +403,7 @@ def transfer_add_all_click(n_clicks):
     return n_clicks
 
 
+# app.py (Línea 374)
 @app.callback(
     Output("interest-panel-wrapper", "style"),
     Output("tab-content", "style"),
@@ -406,31 +413,41 @@ def transfer_add_all_click(n_clicks):
 def toggle_interest_panel_visibility(active_tab, ui_state): # <-- 💡 AÑADIDO
     """
     Ocultar el panel en pestañas de carga/exportación O si el usuario lo oculta manualmente,
-    y ajustar el margen del contenido.
+    y ajustar el margen del contenido CON UNA TRANSICIÓN DE DESLIZAMIENTO.
     """
+    # --- 💡 INICIO DE LA MODIFICACIÓN (LÓGICA DE TRANSICIÓN) 💡 ---
+    
+    # 1. Definir el estilo base del panel (siempre incluye la transición)
     panel_style = {
         'position': 'fixed',
-        'right': '20px',
         'top': '120px',
         'width': '400px',
         'maxHeight': 'calc(100vh - 140px)',
         'overflowY': 'auto',
-        'zIndex': '1000'
+        'zIndex': '1000',
+        'transition': 'right 0.4s ease-in-out'
+    }
+    
+    # 2. Definir el estilo base del contenido (siempre incluye la transición)
+    content_style = {
+        'transition': 'margin-right 0.4s ease-in-out'
     }
 
-    # --- 💡 INICIO DE LA MODIFICACIÓN (LÓGICA COMBINADA) 💡 ---
-    # Condición 1: La pestaña es de carga o exportación
+    # 3. Comprobar las condiciones de ocultamiento
     is_hidden_tab = active_tab in ["upload-tab", "export-tab"]
-    # Condición 2: El usuario lo ocultó manualmente (default a True si no existe)
     is_manually_hidden = not ui_state.get('panel_visible', True)
 
+    # 4. Aplicar los estilos de "Oculto" o "Visible"
     if is_hidden_tab or is_manually_hidden:
-        panel_style['display'] = 'none'
-        content_style = {'marginRight': '0px'}
+        # Oculto: Mover panel fuera de la pantalla y colapsar margen
+        panel_style['right'] = '-420px' # (400px de ancho + 20px de margen)
+        content_style['marginRight'] = '0px'
     else:
-        panel_style['display'] = 'block'
-        content_style = {'marginRight': '440px'}
-    # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
+        # Visible: Poner panel en su sitio y expandir margen
+        panel_style['right'] = '20px'
+        content_style['marginRight'] = '440px'
+    
+    # --- 💡 FIN DE la MODIFICACIÓN 💡 ---
 
     return panel_style, content_style
 
