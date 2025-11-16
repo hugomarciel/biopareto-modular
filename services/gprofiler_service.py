@@ -1,4 +1,4 @@
-# services/gprofiler_service.py
+# services/gprofiler_service.py (CÓDIGO COMPLETO Y CORREGIDO)
 
 """
 Módulo de Servicio para la API de g:Profiler
@@ -11,6 +11,7 @@ los endpoints de la API de g:Profiler.
 import requests
 # Se importa 'logging' para registrar eventos, errores y mensajes de depuración.
 import logging
+from collections import defaultdict
 
 # Se configura una instancia de 'logger' específica para este módulo.
 # '__name__' asegura que el logger tenga el nombre del archivo (services.gprofiler_service).
@@ -27,6 +28,10 @@ class GProfilerService:
     BASE_URL = "https://biit.cs.ut.ee/gprofiler/api/gost/profile/"
     # URL para el endpoint que lista los organismos disponibles.
     ORGANISMS_URL = "https://biit.cs.ut.ee/gprofiler/api/util/organisms_list"
+    
+    # URL correcta para la API g:Convert (basada en la documentación)
+    CONVERT_URL = "https://biit.cs.ut.ee/gprofiler/api/convert/convert/"
+
 
     @staticmethod
     def get_enrichment(gene_list, organism='hsapiens', sources=None):
@@ -48,15 +53,15 @@ class GProfilerService:
                 sources = ["GO:BP", "GO:MF", "GO:CC", "KEGG", "REAC"]
 
             # Registro de depuración (reemplaza a print) con información de la solicitud.
-            logger.debug(f"Solicitando enriquecimiento a g:Profiler para {len(gene_list)} genes.")
+            logger.debug(f"Solicitando enriquecimiento (g:GOSt) a g:Profiler para {len(gene_list)} genes.")
             logger.debug(f"Organismo: {organism}, Fuentes: {sources}") 
             
             # Se construye el 'payload' (cuerpo de la solicitud) en formato JSON.
             payload = {
                 "organism": organism,
-                "query": gene_list,    # Esta es la lista "sucia" (con todos los genes).
+                "query": gene_list,
                 "sources": sources,     
-                "all_results": True     # Se piden todos los resultados (significativos o no).
+                "all_results": True
             }
 
             # Se realiza la solicitud POST a la API, con un tiempo de espera (timeout) de 420s.
@@ -66,23 +71,94 @@ class GProfilerService:
             if response.status_code == 200:
                 # Se convierte la respuesta JSON en un diccionario de Python.
                 data = response.json()
-                logger.debug("Respuesta de g:Profiler recibida exitosamente.")
-                # Se retorna la respuesta completa. Esto es crucial, ya que
-                # necesitamos tanto 'result' (los términos) como 'meta' (la validación).
+                logger.debug("Respuesta de g:Profiler (g:GOSt) recibida exitosamente.")
+                # Se retorna la respuesta completa.
                 return data
             else:
                 # Si la API devuelve un error (ej. 404, 500), se registra y retorna None.
-                logger.error(f"Error en la API de g:Profiler: {response.status_code} - {response.text}")
+                logger.error(f"Error en la API de g:Profiler (g:GOSt): {response.status_code} - {response.text}")
                 return None
 
         except Exception as e:
             # Si ocurre un error de red o de timeout, se captura, registra y retorna None.
-            logger.error(f"Error de conexión con g:Profiler: {str(e)}")
+            logger.error(f"Error de conexión con g:Profiler (g:GOSt): {str(e)}")
             return None
 
-    # La función 'validate_genes' se eliminó, ya que este
-    # análisis ahora se realiza implícitamente en 'get_enrichment'
-    # y se maneja en el callback usando los metadatos.
+    @staticmethod
+    def validate_genes(gene_list, organism='hsapiens', target_namespace='HGNC'):
+        """
+        Valida y "sanea" una lista de IDs (ej. probes) usando g:Convert.
+        Convierte la lista sucia en una lista limpia de símbolos de genes canónicos.
+
+        Args:
+            gene_list (list): La lista "sucia" de IDs de genes/probes.
+            organism (str): El ID del organismo (ej. 'hsapiens').
+            target_namespace (str): El espacio de nombres de destino. 'HGNC' es ideal
+                                     para símbolos de genes humanos canónicos (ej. 'TP53').
+                                     Usar 'ENSG' para Ensembl IDs.
+
+        Returns:
+            dict: Un diccionario con:
+                  {'validated_genes': [lista_limpia], 'unrecognized_probes': [lista_no_reconocida]}
+                  Retorna {'validated_genes': [], 'unrecognized_probes': []} si falla.
+        """
+        if not gene_list:
+            return {'validated_genes': [], 'unrecognized_probes': []}
+            
+        # Convertimos la lista de entrada a un set para facilitar la resta
+        input_gene_set = set(gene_list)
+
+        try:
+            logger.debug(f"Validando (g:Convert) {len(input_gene_set)} IDs. Organismo: {organism}, Target: {target_namespace}")
+            
+            payload = {
+                "organism": organism,
+                "target": target_namespace,
+                "query": list(input_gene_set), # Enviamos la lista de IDs únicos
+                "numeric_ns": "skip" # Ignora IDs puramente numéricos si no se mapean
+            }
+
+            response = requests.post(GProfilerService.CONVERT_URL, json=payload, timeout=120)
+
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get('result', [])
+                
+                # Usamos sets para manejar eficientemente los IDs
+                validated_canonical_genes = set()
+                probes_que_mapearon = set()
+                
+                # g:Convert devuelve una lista de mapeos
+                for item in results:
+                    input_probe = item.get('incoming') # El ID de entrada (ej. '2121_at')
+                    converted_gene = item.get('converted') # El ID de salida (ej. 'TP53')
+                    
+                    # --- 🔑 INICIO DE LA CORRECCIÓN 🔑 ---
+                    # Se añade "and converted_gene != 'None'" para filtrar el string "None"
+                    if converted_gene and converted_gene != 'N/A' and converted_gene is not None and converted_gene != 'None':
+                        validated_canonical_genes.add(converted_gene)
+                        probes_que_mapearon.add(input_probe)
+                    # --- 🔑 FIN DE LA CORRECCIÓN 🔑 ---
+
+                # Los no reconocidos son los que estaban en el input pero no mapearon a nada
+                unrecognized_probes_set = input_gene_set - probes_que_mapearon
+                
+                logger.info(f"g:Convert: {len(input_gene_set)} IDs -> {len(validated_canonical_genes)} genes canónicos. {len(unrecognized_probes_set)} IDs descartados.")
+                
+                return {
+                    'validated_genes': sorted(list(validated_canonical_genes)),
+                    'unrecognized_probes': sorted(list(unrecognized_probes_set))
+                }
+
+            else:
+                logger.error(f"Error en la API de g:Profiler (g:Convert): {response.status_code} - {response.text}")
+                # Fallback: si g:Convert falla, intentamos usar la lista original
+                return {'validated_genes': sorted(list(input_gene_set)), 'unrecognized_probes': []}
+
+        except Exception as e:
+            logger.error(f"Error de conexión con g:Profiler (g:Convert): {str(e)}")
+            # Fallback: si hay un error de conexión, usamos la lista original
+            return {'validated_genes': sorted(list(input_gene_set)), 'unrecognized_probes': []}
 
 
 def get_organisms_from_api():
