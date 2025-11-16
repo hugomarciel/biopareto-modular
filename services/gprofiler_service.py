@@ -59,8 +59,8 @@ class GProfilerService:
                 "all_results": True     # Se piden todos los resultados (significativos o no).
             }
 
-            # Se realiza la solicitud POST a la API, con un tiempo de espera (timeout) de 90s.
-            response = requests.post(GProfilerService.BASE_URL, json=payload, timeout=240)
+            # Se realiza la solicitud POST a la API, con un tiempo de espera (timeout) de 420s.
+            response = requests.post(GProfilerService.BASE_URL, json=payload, timeout=420)
 
             # Se verifica si la solicitud fue exitosa (código de estado 200).
             if response.status_code == 200:
