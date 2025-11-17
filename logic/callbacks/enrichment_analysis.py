@@ -602,7 +602,7 @@ def register_enrichment_callbacks(app):
         return is_disabled, is_disabled
   
     
-    # 4. Ejecutar g:Profiler (Callback Principal) (Sin cambios)
+    # 4. Ejecutar g:Profiler (MODIFICADO: Sin guardar no reconocidos)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-spinner-output', 'children')], 
@@ -614,285 +614,159 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources):
-        """
-        Callback principal que se ejecuta al presionar 'Run g:Profiler Analysis'.
-        1. Recolecta IDs "sucios" (probes/genes).
-        2. Llama a g:Convert (validate_genes) para sanear la lista.
-        3. Llama a g:GOSt (get_enrichment) con la lista "limpia".
-        4. Procesa los metadatos de g:GOSt para la intersección.
-        5. Guarda todo en el 'gprofiler-results-store'.
-        """
         if not n_clicks or not selected_indices:
             raise PreventUpdate
         
-        # --- PASO 1: Recolección de Genes (Lista "Sucia") ---
-        # Combina los genes de todos los ítems seleccionados en un set
+        # 1. Recolección
         combined_genes_dirty = set()
         for idx in selected_indices:
             if idx < len(items):
                 item = items[idx]
                 item_type = item.get('type', '')
-                
-                if item_type == 'solution':
-                    combined_genes_dirty.update(item.get('data', {}).get('selected_genes', []))
+                if item_type == 'solution': combined_genes_dirty.update(item.get('data', {}).get('selected_genes', []))
                 elif item_type == 'solution_set':
-                    solutions = item.get('data', {}).get('solutions', [])
-                    for sol in solutions:
-                        combined_genes_dirty.update(sol.get('selected_genes', []))
-                elif item_type in ['gene_set', 'combined_gene_group']:
-                    combined_genes_dirty.update(item.get('data', {}).get('genes', []))
-                elif item_type == 'individual_gene':
-                    combined_genes_dirty.add(item.get('data', {}).get('gene', ''))
+                    for sol in item.get('data', {}).get('solutions', []): combined_genes_dirty.update(sol.get('selected_genes', []))
+                elif item_type in ['gene_set', 'combined_gene_group']: combined_genes_dirty.update(item.get('data', {}).get('genes', []))
+                elif item_type == 'individual_gene': combined_genes_dirty.add(item.get('data', {}).get('gene', ''))
         
-        # Limpia la lista (elimina None o strings vacíos)
         gene_list_raw_dirty = [g for g in combined_genes_dirty if g and isinstance(g, str)]
-        
-        # Esta es la lista "sucia" (IDs de entrada) que se envía a g:Convert
         gene_list_to_validate = [g for g in gene_list_raw_dirty if g] 
         gene_list_original_count = len(set(gene_list_to_validate))
 
-        # Si la lista original está vacía, guarda un estado vacío y termina
         if not gene_list_to_validate:
-            return {
-                'results': [], 'gene_list_validated': [], 'gene_list_unrecognized': [],
-                'gene_list_original_count': 0, 'organism': organism
-            }, None
+            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': 0, 'organism': organism}, None
 
-        # --- 🔑 PASO 2: Validación (g:Convert) ---
-        # Llama al servicio para sanear la lista. 'HGNC' obtiene símbolos como 'TP53'.
-        # (Usar 'ENSG' si se prefieren IDs de Ensembl)
-        validation_response = GProfilerService.validate_genes(
-            gene_list_to_validate, 
-            organism, 
-            target_namespace='HGNC'
-        )
-        
-        # Esta es la lista "limpia" de genes canónicos (ej. 'TP53', 'EGFR')
+        # 2. Validación
+        validation_response = GProfilerService.validate_genes(gene_list_to_validate, organism, target_namespace='HGNC')
         clean_gene_list = validation_response.get('validated_genes', [])
-        # Esta es la lista de probes/IDs que g:Convert no pudo mapear
-        unrecognized_probes_list = validation_response.get('unrecognized_probes', [])
         
-        # Si la validación no devuelve NINGÚN gen, guarda y termina
         if not clean_gene_list:
-            return {
-                'results': [], 
-                'gene_list_validated': [], 
-                'gene_list_unrecognized': unrecognized_probes_list, # Guarda los no reconocidos
-                'gene_list_original_count': gene_list_original_count, 
-                'organism': organism
-            }, None
+            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None
 
-        # --- 🔑 PASO 3: Análisis (g:GOSt) ---
-        # Llama al servicio de enriquecimiento (g:GOSt) usando la lista "limpia"
+        # 3. Análisis
         full_response = GProfilerService.get_enrichment(clean_gene_list, organism, selected_sources)
 
-        # Si la API (g:GOSt) falla, guarda un estado de error
         if full_response is None:
-            return {
-                'results': None, 
-                'gene_list_validated': clean_gene_list, # Guarda la lista limpia
-                'gene_list_unrecognized': unrecognized_probes_list, # Guarda los no reconocidos
-                'gene_list_original_count': gene_list_original_count, 
-                'organism': organism
-            }, None 
+            return {'results': None, 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None 
 
-        # --- 🔑 PASO 4: Extracción de Resultados y Metadatos ---
+        # 4. Procesamiento
         enrichment_data_list = full_response.get('result', [])
         metadata = full_response.get('meta', {})
         
-        # Impresión de depuración
-        logger.debug("\n[DEBUG GPROFILER (g:GOSt) CALLBACK] Full Meta Structure:")
-        try:
-            logger.debug(json.dumps(metadata, indent=2))
-        except Exception as e:
-            logger.warning(f"Could not log metadata structure: {e}")
-        
-        # La API agrupa los metadatos bajo un nombre de query (ej. 'query_1')
         query_key = next(iter(metadata.get('genes_metadata', {}).get('query', {})), None)
         
         if not query_key:
-             # Fallback si la estructura de metadatos no es la esperada
-             logger.error("Error: 'query_1' (o similar) no encontrado en metadatos de g:Profiler (g:GOSt)")
-             # Asumimos que la lista que enviamos (limpia) es la que se usó
              validated_genes_set_gost = set(clean_gene_list)
              mapped_ensg_list = []
              ensg_to_input_map = {}
         else:
-            # Accede a los metadatos de nuestra query (g:GOSt)
             query_metadata = metadata['genes_metadata']['query'][query_key]
-            
-            # Obtiene el diccionario de mapeo (ej. {'TP53': ['ENSG...'], ...})
-            # Las claves (keys) son los genes de nuestra lista "limpia"
             mapping_dict = query_metadata.get('mapping', {})
-            
-            # Los genes VALIDADOS por g:GOSt (deberían ser los de nuestra lista limpia)
-            validated_genes_set_gost = set(mapping_dict.keys())
-            
-            # Esta es la lista de IDs de Ensembl (ENSG) que la API usó internamente
             mapped_ensg_list = query_metadata.get('ensgs', [])
             
-            # Crea un mapa inverso para traducir ENSG de vuelta al ID de entrada (limpio)
-            # ej. {'ENSG...': 'TP53'}
             ensg_to_input_map = {}
             for input_id, ensg_list in mapping_dict.items():
                 for ensg in ensg_list:
                     ensg_to_input_map[ensg] = input_id
 
-        # Si no hay términos de enriquecimiento, guarda y termina
         if not enrichment_data_list:
-            return {
-                'results': [], 
-                'gene_list_validated': clean_gene_list, 
-                'gene_list_unrecognized': unrecognized_probes_list,
-                'gene_list_original_count': gene_list_original_count, 
-                'organism': organism
-            }, None
+            return {'results': [], 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None
 
-        # --- 🔑 PASO 5: Procesamiento de 'intersections' (Lógica Clave) ---
-        # La API devuelve 'intersections' como una lista de flags [None, ['ENSG...'], None]
-        # Necesitamos traducir esto de vuelta a los IDs de entrada (ej. 'TP53')
         final_enrichment_data = []
-        
         for term in enrichment_data_list:
-            intersection_genes_input_ids = set() # Set para evitar duplicados
+            intersection_genes_input_ids = set()
             intersections_flags = term.get('intersections', [])
             
-            # Itera sobre los flags y la lista de ENSG al mismo tiempo
             for i, flag in enumerate(intersections_flags):
-                # Si el flag no está vacío (es un match) y está dentro de los límites
                 if i < len(mapped_ensg_list) and flag:
-                    # Obtiene el ENSG de esa posición
                     ensg_id = mapped_ensg_list[i]
-                    # Usa el mapa inverso para encontrar el ID de entrada original (limpio)
                     input_id = ensg_to_input_map.get(ensg_id)
-                    
                     if input_id:
                         intersection_genes_input_ids.add(input_id)
             
-            # Lista final de genes de intersección (ordenada)
             intersection_list = sorted(list(intersection_genes_input_ids))
             
-            # Crea el diccionario de resultados limpio
             new_term_data = {
                 'source': term.get('source', ''),
                 'term_name': term.get('name', ''), 
                 'description': term.get('description', ''),
                 'p_value': term.get('p_value', 1.0),
                 'term_size': term.get('term_size', 0),
-                'query_size': term.get('query_size', 0),
-                'intersection_size': len(intersection_list), # Usa nuestro conteo corregido
+                'intersection_size': len(intersection_list),
                 'precision': term.get('precision', 0.0),
                 'recall': term.get('recall', 0.0),
                 'source_order_display': str(term.get('source_order', 'N/A')), 
-                'significant': term.get('significant', False),
-                'intersection_genes': intersection_list # Usa nuestra lista de IDs (limpios)
+                'intersection_genes': intersection_list
             }
             final_enrichment_data.append(new_term_data)
 
-        # --- 🔑 PASO 6: Reporte (Guardar en Store) ---
-        # Guarda la lista de resultados procesada y los conteos de validación
         return {
             'results': final_enrichment_data, 
-            'gene_list_validated': clean_gene_list, # Lista LIMPIA
-            'gene_list_unrecognized': unrecognized_probes_list, # Lista de Probes DESCARTADOS
-            'gene_list_original_count': gene_list_original_count, # Conteo de la lista SUCIA
+            'gene_list_validated': clean_gene_list, 
+            'gene_list_original_count': gene_list_original_count, 
             'organism': organism
         }, None
-    
 
-    # --- 🔑 INICIO DE LA MODIFICACIÓN (CALLBACK #4.5) ---
-    # 4.5. Mostrar resultados g:Profiler (MODIFICADO)
+    # 4.5. Mostrar resultados g:Profiler (MODIFICADO: UI Limpia)
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
-        [Input('gprofiler-results-store', 'data'),      # Se activa cuando el store se actualiza
-         Input('gprofiler-threshold-input', 'value')], # Se activa al cambiar el umbral
+        [Input('gprofiler-results-store', 'data'),
+         Input('gprofiler-threshold-input', 'value')], 
         [State('main-tabs', 'active_tab'),
          State('enrichment-service-tabs', 'active_tab')], 
         prevent_initial_call=True
     )
     def display_gprofiler_results(stored_data, threshold_value, main_active_tab, service_active_tab):
-        """
-        Renderiza la sección de resultados de g:Profiler (resumen, tabla, Manhattan plot)
-        basado en los datos del 'gprofiler-results-store'.
-        """
-        # No renderizar si la pestaña no está activa
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
         
-        # Mapeo de IDs de organismo a nombres legibles
         organism_map = {'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus', 'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans'}
         
-        # Estado inicial (antes de que se presione 'Run')
         if not stored_data:
             return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
 
-        # Estado de error (si la API falló)
         if stored_data.get('results') is None:
              return dbc.Alert("Error connecting to g:Profiler API.", color="danger"), True, go.Figure()
 
-        # --- Desempaquetar datos del Store ---
-        # (Estos datos fueron guardados por 'run_gprofiler_analysis')
         enrichment_data_list = stored_data.get('results', [])
-        # 'gene_list_validated' es la lista LIMPIA (canónica)
         gene_list_validated = stored_data.get('gene_list_validated', [])
-        # 'gene_list_unrecognized' es la lista de Probes/IDs DESCARTADOS
-        gene_list_unrecognized = stored_data.get('gene_list_unrecognized', [])
-        # 'gene_list_original_count' es el conteo de la lista SUCIA
         gene_list_original_count = stored_data.get('gene_list_original_count', 0)
         
         organism_code = stored_data.get('organism', 'hsapiens')
         organism_selected_name = organism_map.get(organism_code, organism_code)
+        genes_analyzed_count = len(gene_list_validated) 
         
-        # Conteo para el resumen
-        genes_analyzed_count = len(gene_list_validated) # Genes canónicos
-        genes_unrecognized_count = len(gene_list_unrecognized) # Probes descartados
-        
-        # Prepara el string de genes validados para el dcc.Clipboard
         validated_gene_string = " ".join(sorted(gene_list_validated)) if gene_list_validated else ""
 
-        # --- Preparación de Datos y Figuras ---
+        # Dataframes y Figuras
         df = pd.DataFrame(enrichment_data_list)
-        
-        # Valida el umbral de p-value del usuario
         try: val_threshold = float(threshold_value)
         except (TypeError, ValueError): val_threshold = 0.05
         if not (0 < val_threshold <= 1.0): val_threshold = 0.05
             
-        # Manejo de caso: No hay resultados de enriquecimiento
         if df.empty:
             filtered_df = pd.DataFrame()
-            manhattan_fig = create_gprofiler_manhattan_plot(df, threshold_value) # Figura vacía
+            manhattan_fig = create_gprofiler_manhattan_plot(df, threshold_value) 
             display_df = pd.DataFrame()
             filter_message = "No results found."
-        # Caso normal: Sí hay resultados
         else:
-            # Filtra el DataFrame para la tabla (basado en el umbral)
             filtered_df = df[df['p_value'] < val_threshold].copy()
             filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
-            
-            # Crea el Manhattan plot (usa el DataFrame *sin* filtrar)
-            df_plot = df.copy()
-            manhattan_fig = create_gprofiler_manhattan_plot(df_plot, threshold_value)
-            
-            # Prepara el DataFrame para la tabla (ordenado)
+            manhattan_fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
             display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False]) if not filtered_df.empty else pd.DataFrame()
         
-        # Selecciona y ordena las columnas para la tabla
         if not display_df.empty:
              display_df = display_df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
         
-        # --- 🔑 Creación de Mensajes de Resumen (MODIFICADO) ---
+        # --- UI RESUMEN (MODIFICADA) ---
         input_message = f"**Input:** Total Probes/IDs: **{gene_list_original_count}** | Selected Organism: **{organism_selected_name}**"
         
-        # Mensaje de validación
-        validation_message_md = f"**Validation:** Recognized Genes: **{genes_analyzed_count}** | Unrecognized/Discarded: **{genes_unrecognized_count}**"
+        # Eliminado: " | Unrecognized/Discarded: X"
+        validation_message_md = f"**Validation:** Recognized Genes: **{genes_analyzed_count}**"
         
-        # --- 🔑 INICIO DE LA MODIFICACIÓN DE UI ---
-        # Añade el botón de copiar y el desplegable (html.Details)
         validation_card = html.Div([
-            # Columna 1: El Markdown y el Details
             html.Div([
                 dcc.Markdown(validation_message_md, className="mb-0"),
                 html.Details([
@@ -900,48 +774,29 @@ def register_enrichment_callbacks(app):
                                  style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#0d6efd', 'fontSize': '0.9rem', 'display': 'inline-block'}),
                     html.P(', '.join(sorted(gene_list_validated)), className="mt-2 small")
                 ]) if genes_analyzed_count > 0 else None
-            ], style={'flex': '1'}), # Ocupa el espacio
+            ], style={'flex': '1'}),
             
-            # Columna 2: El botón de copiar
             dcc.Clipboard(
                 content=validated_gene_string,
                 id='gprofiler-clipboard-validated-genes',
-                style={
-                    "display": "inline-block",
-                    "color": "#0d6efd",
-                    "fontSize": "1.1rem",
-                    "marginLeft": "10px", # Espacio entre texto y botón
-                },
-                title="Copy validated gene list (space-separated)"
+                style={"display": "inline-block", "color": "#0d6efd", "fontSize": "1.1rem", "marginLeft": "10px"},
+                title="Copy validated gene list"
             ) if genes_analyzed_count > 0 else None
         ], style={'display': 'flex', 'alignItems': 'flex-start', 'justifyContent': 'space-between'})
-        # --- 🔑 FIN DE LA MODIFICACIÓN DE UI ---
         
         if not display_df.empty:
             pathways_message = f"Displaying **{len(display_df)}** terms. {filter_message}"
         else:
              pathways_message = f"No significant pathways found after applying the filter ({val_threshold})."
         
-        # Ensambla el resumen ( pathways_message y input_message son dcc.Markdown )
         summary_content = [
             dcc.Markdown(pathways_message, className="mb-0"),
             dcc.Markdown(input_message, className="mb-0"),
-            validation_card # El componente de validación (que incluye el botón y el desplegable)
+            validation_card
         ]
         
-        # --- Creación del Reporte de Genes No Reconocidos (Colapsable) ---
-        unrecognized_report = None
-        if genes_unrecognized_count > 0:
-            unrecognized_report = dbc.Alert([
-                html.Details([
-                    html.Summary(f"View {genes_unrecognized_count} unrecognized/discarded input IDs", 
-                                 style={'cursor': 'pointer', 'fontWeight': 'bold'}),
-                    # Muestra la lista de probes/IDs que g:Convert descartó
-                    html.P(', '.join(sorted(gene_list_unrecognized)), className="mt-2 small")
-                ])
-            ], color="warning", className="mt-2")
-        
-        # --- Configuración de la Tabla de Resultados (Sin cambios) ---
+        # Eliminado: unrecognized_report (Alerta con Details de genes no reconocidos)
+
         hidden_cols = ['source_order_display'] 
         column_map = {
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
@@ -956,14 +811,10 @@ def register_enrichment_callbacks(app):
         }
         display_columns = [{'name': column_map.get(col, {}).get('name', col.capitalize()), 'id': col, 'type': column_map.get(col, {}).get('type', 'text'), 'format': column_map.get(col, {}).get('format'), 'hideable': True} for col in display_df.columns]
         
-        # --- Ensamblaje Final del Contenido de Resultados ---
         results_content = [
             html.H4("g:Profiler Enrichment Results", className="mb-3"),
-            # Resumen (con formato de tarjeta)
             dbc.Card(dbc.CardBody(summary_content), className="mb-3", style={'whiteSpace': 'pre-line'}),
-            # Añade el reporte de genes no reconocidos (si existe)
-            unrecognized_report if unrecognized_report else None,
-            # La tabla de datos interactiva
+            # Eliminado: unrecognized_report if unrecognized_report else None,
             dash_table.DataTable(
                 id='enrichment-results-table-gprofiler', data=display_df.to_dict('records'), columns=display_columns,
                 hidden_columns=hidden_cols, sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
@@ -973,10 +824,6 @@ def register_enrichment_callbacks(app):
                     {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px', 'maxWidth': '350px', 'textAlign': 'left'},
                     {'if': {'column_id': 'p_value'}, 'width': '8%', 'minWidth': '70px', 'maxWidth': '80px', 'textAlign': 'center'},
                     {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
-                    {'if': {'column_id': 'term_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
-                    {'if': {'column_id': 'precision'}, 'width': '7%', 'minWidth': '50px', 'maxWidth': '65px', 'textAlign': 'center'},
-                    {'if': {'column_id': 'recall'}, 'width': '7%', 'minWidth': '50px', 'maxWidth': '65px', 'textAlign': 'center'},
-                    {'if': {'column_id': 'source'}, 'width': '7%', 'minWidth': '60px', 'maxWidth': '60px', 'textAlign': 'center'},
                 ],
                 style_cell={'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'normal'},
                 style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
@@ -985,22 +832,16 @@ def register_enrichment_callbacks(app):
             )
         ]
         
-        # --- Retorno Final ---
-        if not display_df.empty or genes_unrecognized_count > 0:
-            # Caso normal: hay tabla o hay genes no reconocidos que reportar
+        if not display_df.empty:
             return html.Div(results_content), False, manhattan_fig
         else:
-            # Caso especial: No hay tabla Y no hay genes no reconocidos
             alert_color = "info" if genes_analyzed_count > 0 else "warning"
-            # Si no se validó ningún gen, muestra un mensaje de error más fuerte
             if genes_analyzed_count == 0 and gene_list_original_count > 0:
-                 summary_content.append(dcc.Markdown("\n\n**Action Failed:** No input IDs were validated. Check organism or ID format.", className="text-danger"))
+                 summary_content.append(dcc.Markdown("\n\n**Action Failed:** No input IDs were validated.", className="text-danger"))
             
             return html.Div(dbc.Alert(summary_content, color=alert_color, className="mt-3")), False, manhattan_fig
-    # --- 🔑 FIN DE LA MODIFICACIÓN (CALLBACK #4.5) ---
 
-
-    # 4.6. Limpiar g:Profiler (Sin cambios)
+   # 4.6. Limpiar g:Profiler
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
@@ -1008,94 +849,130 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def clear_gprofiler_results(n_clicks):
-        # ... (código original, líneas 844-856)
-        """
-        Resetea el store de g:Profiler a su estado inicial vacío.
-        """
         if n_clicks and n_clicks > 0:
             empty_data = {
                 'results': [], 
                 'gene_list_validated': [], 
-                'gene_list_unrecognized': [],
                 'gene_list_original_count': 0,
                 'organism': 'hsapiens'
             }
             return empty_data, go.Figure()
         raise PreventUpdate
 
+    # 7. Limpiar Reactome
+    @app.callback(
+        Output('reactome-results-store', 'data', allow_duplicate=True),
+        Input('clear-reactome-results-btn', 'n_clicks'), 
+        prevent_initial_call=True
+    )
+    def clear_reactome_results(n_clicks):
+        if n_clicks and n_clicks > 0:
+            return {
+                'results': [], 
+                'gene_list_original': [], 
+                'gene_list_validated': [], 
+                'organism_selected': 'Homo sapiens'
+            }
+        raise PreventUpdate
 
-   # --- CALLBACK 5: REACTOME (MODIFICADO: CHECKLIST SIMPLE) ---
+
+  # --- CALLBACK UNIFICADO: REACTOME (RUN + CLEAR) ---
+    # Este bloque reemplaza tanto a 'run_reactome_analysis' como a 'clear_reactome_results'
+    # para evitar el error "Duplicate callback outputs".
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
          Output('reactome-spinner-output', 'children')],
-        Input('run-reactome-btn', 'n_clicks'),
+        [Input('run-reactome-btn', 'n_clicks'),
+         Input('clear-reactome-results-btn', 'n_clicks')], # Ambos botones son Inputs
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
          State('reactome-organism-input', 'value'),
-         # --- 💡 NUEVO STATE: Checklist unificada ---
          State('reactome-options-checklist', 'value')],
         prevent_initial_call=True
     )
-    def run_reactome_analysis(n_clicks, selected_indices, items, organism_name, selected_options):
+    def manage_reactome_analysis(run_clicks, clear_clicks, selected_indices, items, organism_name, selected_options):
         """
-        Callback principal para Reactome con opciones simples (Checklist).
+        Callback unificado que maneja tanto la ejecución (Run) como la limpieza (Clear)
+        de los resultados de Reactome.
         """
-        if not n_clicks or not selected_indices:
+        ctx = dash.callback_context
+        if not ctx.triggered:
             raise PreventUpdate
-        
-        # 0. Parsear Opciones
-        # Si selected_options es None (raro), lo tratamos como lista vacía
-        options = selected_options or []
-        projection = 'projection' in options
-        include_disease = 'disease' in options
-        interactors = 'interactors' in options
-        
-        # 1. Recolección de genes (Lógica existente)
-        combined = set()
-        for idx in selected_indices:
-            if idx < len(items):
-                item = items[idx]
-                itype = item.get('type')
-                if itype == 'solution': combined.update(item.get('data', {}).get('selected_genes', []))
-                elif itype == 'solution_set':
-                    for s in item.get('data', {}).get('solutions', []): combined.update(s.get('selected_genes', []))
-                elif itype in ['gene_set', 'combined_gene_group']: combined.update(item.get('data', {}).get('genes', []))
-                elif itype == 'individual_gene': combined.add(item.get('data', {}).get('gene', ''))
-        
-        raw = [g for g in combined if g and isinstance(g, str)]
-        
-        # 2. Validación g:Convert (Lógica existente)
-        val_res = GProfilerService.validate_genes(raw, 'hsapiens', 'HGNC')
-        clean = val_res.get('validated_genes', [])
-        stats = val_res.get('filtering_stats', {})
-        
-        store = {'results': [], 'token': 'ERROR', 'gene_list_validated': clean, 'filtering_stats': stats, 'gene_list_original': raw}
-        
-        if not clean: return store, None
-        
-        # 3. Análisis (Llamada al Servicio con parámetros procesados)
-        try:
-            res = ReactomeService.get_enrichment(
-                clean, 
-                organism_name=organism_name,
-                projection=projection,
-                interactors=interactors,
-                include_disease=include_disease
-            )
-        except Exception as e:
-             logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
-             return store, None
 
-        if res:
-            res['gene_list_original'] = raw
-            res['gene_list_validated'] = clean
-            res['filtering_stats'] = stats 
-            return res, None
-        
-        return store, None
+        # Identificar qué botón disparó el callback
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-    # --- 🔑 INICIO DE LA MODIFICACIÓN (CALLBACK #5.5) ---
-    # 5.5 Mostrar resultados Reactome (MODIFICADO)
+        # --- CASO 1: BOTÓN CLEAR (Limpiar) ---
+        if trigger_id == 'clear-reactome-results-btn':
+            # Retorna estructura vacía y None para el spinner
+            return {
+                'results': [], 
+                'gene_list_original': [], 
+                'gene_list_validated': [], 
+                'organism_selected': 'Homo sapiens'
+            }, None
+
+        # --- CASO 2: BOTÓN RUN (Ejecutar Análisis) ---
+        if trigger_id == 'run-reactome-btn':
+            if not selected_indices:
+                raise PreventUpdate
+            
+            # 0. Parsear Opciones
+            options = selected_options or []
+            projection = 'projection' in options
+            include_disease = 'disease' in options
+            interactors = 'interactors' in options
+            
+            # 1. Recolección de genes
+            combined = set()
+            for idx in selected_indices:
+                if idx < len(items):
+                    item = items[idx]
+                    itype = item.get('type')
+                    if itype == 'solution': combined.update(item.get('data', {}).get('selected_genes', []))
+                    elif itype == 'solution_set':
+                        for s in item.get('data', {}).get('solutions', []): combined.update(s.get('selected_genes', []))
+                    elif itype in ['gene_set', 'combined_gene_group']: combined.update(item.get('data', {}).get('genes', []))
+                    elif itype == 'individual_gene': combined.add(item.get('data', {}).get('gene', ''))
+            
+            raw = [g for g in combined if g and isinstance(g, str)]
+            
+            # 2. Validación
+            # Usamos GProfilerService solo para validar/limpiar nombres, sin calcular descartados
+            val_res = GProfilerService.validate_genes(raw, 'hsapiens', 'HGNC')
+            clean = val_res.get('validated_genes', [])
+            
+            # Store base en caso de fallo o vacío
+            store = {'results': [], 'token': 'ERROR', 'gene_list_validated': clean, 'gene_list_original': raw}
+            
+            if not clean: 
+                return store, None
+            
+            # 3. Análisis (Servicio Reactome)
+            try:
+                res = ReactomeService.get_enrichment(
+                    clean, 
+                    organism_name=organism_name,
+                    projection=projection,
+                    interactors=interactors,
+                    include_disease=include_disease
+                )
+            except Exception as e:
+                 logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
+                 return store, None
+
+            if res:
+                # Agregamos las listas originales al resultado
+                res['gene_list_original'] = raw
+                res['gene_list_validated'] = clean
+                return res, None
+            
+            return store, None
+        
+        # Si no fue ninguno de los botones esperados
+        raise PreventUpdate
+
+    # 5.5 Mostrar resultados Reactome (MODIFICADO: UI Limpia)
     @app.callback(
         [Output('reactome-results-content', 'children'),
         Output('clear-reactome-results-btn', 'disabled'),
@@ -1105,38 +982,26 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
-        """
-        Renderiza la sección de resultados de Reactome (resumen, tabla, fuegos artificiales).
-        """
-        # Placeholders para los iframes
         placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="secondary"), className="p-3")
         placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info"), className="p-3")
         
         if stored_data is None or not isinstance(stored_data, dict):
             raise PreventUpdate
         
-        # --- Desempaqueta los datos del store de Reactome (NUEVOS CAMPOS) ---
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
         organism_used_api = stored_data.get('organism_used_api', 'N/A')
         organism_selected = stored_data.get('organism_selected', 'N/A')
         
-        # Las listas de validación
         gene_list_original = stored_data.get('gene_list_original', [])
         gene_list_validated = stored_data.get('gene_list_validated', [])
-        gene_list_unrecognized = stored_data.get('gene_list_unrecognized', [])
         
-        # Conteos
         genes_original_count = len(set(gene_list_original))
         genes_validated_count = len(set(gene_list_validated))
-        genes_unrecognized_count = len(set(gene_list_unrecognized))
         
-        # Prepara el string de genes validados para el dcc.Clipboard
         validated_gene_string = " ".join(sorted(gene_list_validated)) if gene_list_validated else ""
         
-        # Lógica para mostrar el visualizador de "fuegos artificiales"
         fireworks_content = placeholder_fireworks
-        # Solo se muestra si el análisis fue exitoso y devolvió un token
         if analysis_token and analysis_token not in ['N/A', 'ERROR'] and organism_used_api and len(enrichment_data_list) > 0:
             organism_encoded = organism_used_api.replace(' ', '%20')
             fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={analysis_token}"
@@ -1148,16 +1013,13 @@ def register_enrichment_callbacks(app):
                 tabIndex="-1" 
             )
         
-        # --- 🔑 Mensajes de resumen (MODIFICADOS) ---
+        # --- UI RESUMEN (MODIFICADA) ---
         input_message = f"**Input:** Total Probes/IDs: **{genes_original_count}** | Selected Organism: **{organism_selected}**"
         
-        # Mensaje de validación
-        validation_message_md = f"**Validation:** Recognized Genes: **{genes_validated_count}** | Unrecognized/Discarded: **{genes_unrecognized_count}**"
+        # Eliminado: " | Unrecognized/Discarded: X"
+        validation_message_md = f"**Validation:** Recognized Genes: **{genes_validated_count}**"
         
-        # --- 🔑 INICIO DE LA MODIFICACIÓN DE UI ---
-        # Añade el botón de copiar y el desplegable (html.Details)
         validation_card = html.Div([
-            # Columna 1: El Markdown y el Details
             html.Div([
                 dcc.Markdown(validation_message_md, className="mb-0"),
                 html.Details([
@@ -1167,30 +1029,22 @@ def register_enrichment_callbacks(app):
                 ]) if genes_validated_count > 0 else None
             ], style={'flex': '1'}),
             
-            # Columna 2: El botón de copiar
             dcc.Clipboard(
                 content=validated_gene_string,
                 id='reactome-clipboard-validated-genes',
-                style={
-                    "display": "inline-block",
-                    "color": "#0d6efd",
-                    "fontSize": "1.1rem",
-                    "marginLeft": "10px",
-                },
-                title="Copy validated gene list (space-separated)"
+                style={"display": "inline-block", "color": "#0d6efd", "fontSize": "1.1rem", "marginLeft": "10px"},
+                title="Copy validated gene list"
             ) if genes_validated_count > 0 else None
         ], style={'display': 'flex', 'alignItems': 'flex-start', 'justifyContent': 'space-between'})
-        # --- 🔑 FIN DE LA MODIFICACIÓN DE UI ---
         
         output_message = f"**Analysis:** Validated Organism (API): **{organism_used_api}** | Analysis Token: **{analysis_token}**"
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         
-        # Ensambla el resumen
         summary_content = [
             dcc.Markdown(pathways_message, className="mb-0"),
             html.Hr(style={'margin': '0.5rem 0'}),
             dcc.Markdown(input_message, className="mb-0"),
-            validation_card, # El componente de validación (que incluye el botón y el desplegable)
+            validation_card, 
             html.Hr(style={'margin': '0.5rem 0'}),
             dcc.Markdown(output_message, className="mb-0")
         ]
@@ -1203,23 +1057,20 @@ def register_enrichment_callbacks(app):
                 validation_card,
             ]
         
-        # Si no hay resultados (pero la validación SÍ ocurrió)
         if not enrichment_data_list:
-            # Si el token es N/A, significa que no se corrió (ej. 0 genes validados)
             if analysis_token == 'N/A' and genes_original_count > 0:
                 summary_content.insert(0, dcc.Markdown("No analysis run (0 validated genes).", className="text-warning"))
-            # Si el token SÍ existe, significa que se corrió pero no encontró nada
             elif analysis_token != 'ERROR' and analysis_token != 'N/A':
                  summary_content[0] = dcc.Markdown("No significant pathways found in Reactome.", className="text-info")
 
             results_content = html.Div(dbc.Card(dbc.CardBody(summary_content), className="mt-3", style={'whiteSpace': 'pre-line'}))
             return results_content, False, placeholder_diagram, fireworks_content
 
-        # --- Configuración de la tabla de Reactome (Sin cambios) ---
+        # Tabla Reactome (Sin cambios visuales grandes)
         df = pd.DataFrame(enrichment_data_list).sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
         
-        hidden_cols = ['description'] # 'description' aquí guarda el ST_ID
+        hidden_cols = ['description']
         column_map = {
             'fdr_value': {'name': 'FDR\n(Corrected P-Value)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
@@ -1243,19 +1094,15 @@ def register_enrichment_callbacks(app):
                     {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
                     {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
                     {'if': {'column_id': 'entities_found'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
-                    {'if': {'column_id': 'entities_total'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
                 ],
                 style_cell={'textAlign': 'center', 'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis'},
                 style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
                 style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}],
-                # Usa el ST_ID (en 'description') para el tooltip
                 tooltip_data=[{'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')],
                 tooltip_duration=None,
             )
         ]
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
-    # --- 🔑 FIN DE LA MODIFICACIÓN (CALLBACK #5.5) ---
-
 
     # 6. Visualizar Diagrama Reactome (Sin cambios)
     @app.callback(
@@ -1320,27 +1167,7 @@ def register_enrichment_callbacks(app):
         return diagram_content, None
 
 
-    # 7. Limpiar Reactome (Sin cambios)
-    @app.callback(
-        Output('reactome-results-store', 'data', allow_duplicate=True),
-        Input('clear-reactome-results-btn', 'n_clicks'), 
-        prevent_initial_call=True
-    )
-    def clear_reactome_results(n_clicks):
-        # ... (código original, líneas 1080-1087)
-        """
-        Resetea el store de Reactome a su estado inicial vacío.
-        """
-        if n_clicks and n_clicks > 0:
-            # 🔑 Modificado para incluir los nuevos campos de validación
-            return {
-                'results': [], 
-                'gene_list_original': [], 
-                'gene_list_validated': [], 
-                'gene_list_unrecognized': [],
-                'organism_selected': 'Homo sapiens'
-            }
-        raise PreventUpdate
+    clear_reactome_results
             
             
     # 7.5. Ajuste de tabla (Sin cambios)
