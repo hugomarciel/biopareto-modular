@@ -1,4 +1,4 @@
-# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO CON CLIPBOARD OCULTO)
+# ui/layouts/enrichment_tab.py (CÓDIGO COMPLETO MODIFICADO)
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc
@@ -90,10 +90,25 @@ def create_gprofiler_layout(organism_options):
         
     ], className="mt-3")
 
-# --- Componente de Layout de Reactome (Sin cambios) ---
+# --- Componente de Layout de Reactome (MODIFICADO) ---
+#def # ui/layouts/enrichment_tab.py (SOLO LA FUNCIÓN MODIFICADA)
+
 def create_reactome_layout(organism_options):
+    
+    # Definir opciones del Checklist
+    reactome_options = [
+        {'label': 'Project to Human (Inference)', 'value': 'projection'},
+        {'label': 'Include Disease Pathways', 'value': 'disease'},
+        {'label': 'Include IntAct Interactors', 'value': 'interactors'}
+    ]
+    
+    # Valores por defecto (Proyección=ON, Enfermedad=ON, Interactores=OFF)
+    default_reactome_values = ['projection', 'disease']
+
     return html.Div([
+        # --- FILA 1: Organismo y Botones (Igual que g:Profiler) ---
         dbc.Row([
+            # Columna 1: Selector de Organismo
             dbc.Col([
                 dbc.Label("Select Target Organism:", className="fw-bold"),
                 dcc.Dropdown(
@@ -105,6 +120,7 @@ def create_reactome_layout(organism_options):
                 )
             ], width=5),
             
+            # Columna 2: Botón Run + Spinner
             dbc.Col([
                 html.Div(className="d-flex align-items-center mb-3", style={'height': '38px'}, children=[
                     dbc.Button("🚀 Run Reactome Analysis", id="run-reactome-btn", color="warning", disabled=True, className="me-2"),
@@ -121,13 +137,32 @@ def create_reactome_layout(organism_options):
                 ])
             ], width=5),
             
+            # Columna 3: Botón Clear
             dbc.Col([
                 dbc.Button("🗑️ Clear Results", id="clear-reactome-results-btn", color="light", disabled=True, className="mb-3 w-100"),
             ], width=2)
         ], className="mb-3 align-items-end"),
+
+        # --- FILA 2: Opciones de Análisis (Debajo, ancho completo) ---
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Analysis Options:", className="fw-bold"),
+                dbc.Checklist(
+                    id="reactome-options-checklist",
+                    options=reactome_options,
+                    value=default_reactome_values,
+                    inline=True, # 💡 Muestra las opciones horizontalmente
+                    className="mb-2",
+                    inputClassName="me-2", # Espaciado entre check y texto
+                    style={'gap': '20px'} # Espaciado entre opciones
+                ),
+                #dbc.FormText("Default settings match Reactome Web behavior.", color="muted", className="small")
+            ], width=12),
+        ], className="mb-3"),
         
         html.Hr(),
         
+        # --- Resultados y Visualizaciones (Sin cambios) ---
         dbc.Row([
             dbc.Col([dcc.Loading(html.Div(id="reactome-results-content"), type="default")], width=12),
         ], className="g-4 mb-4"),
@@ -176,7 +211,7 @@ def create_reactome_layout(organism_options):
     ], className="mt-3")
 
 
-# --- Función principal (MODIFICADA) ---
+# --- Función principal (Sin cambios) ---
 def create_enrichment_tab_modified(): 
     try:
         organism_options_gprofiler = get_organisms_from_api() 
@@ -198,31 +233,18 @@ def create_enrichment_tab_modified():
                             html.Div(id='enrichment-visual-selector', children=[html.P("Loading items...", className="text-muted text-center py-4")])
                         ], className="mb-4"),
                         dbc.Row([
-                            
-                            # --- 🔑 INICIO DE LA MODIFICACIÓN ---
-                            # 1. El dcc.Clipboard ya no está aquí
                             dbc.Col([
                                 html.Div(
                                     [
                                         dbc.Button("Clear Selection", id="clear-enrichment-selection-btn", color="secondary", outline=True, size="md", className="me-2"),
-                                        
-                                        # (El dcc.Clipboard fue removido de esta sección)
-                                        
                                     ],
                                     id="clear-enrichment-btn-container",
                                     style={'display': 'none', 'width': 'auto', 'vertical-align': 'middle'} 
                                 ),
                             ], width=12, className="mb-4"), 
-                            # --- 🔑 FIN DE LA MODIFICACIÓN ---
-                            
                         ]),
                         
-                        # 2. El panel dinámico (donde irá el nuevo botón)
                         html.Div(id='enrichment-selection-panel'),
-                        
-                        # 3. Ponemos el Clipboard OCULTO aquí.
-                        # Estará en el layout, pero invisible.
-                        #dcc.Clipboard(id="clipboard-gene-list", style={'display': 'none'}),
                         
                         html.Hr(),
                         html.H5("Select Enrichment Service:", className="mb-3"),

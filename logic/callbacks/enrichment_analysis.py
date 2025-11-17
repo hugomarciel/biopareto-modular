@@ -1024,117 +1024,75 @@ def register_enrichment_callbacks(app):
         raise PreventUpdate
 
 
-    # 5. Ejecutar Reactome (Sin cambios)
+   # --- CALLBACK 5: REACTOME (MODIFICADO: CHECKLIST SIMPLE) ---
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
-         Output('reactome-spinner-output', 'children')], 
-        Input('run-reactome-btn', 'n_clicks'), 
+         Output('reactome-spinner-output', 'children')],
+        Input('run-reactome-btn', 'n_clicks'),
         [State('enrichment-selected-indices-store', 'data'),
-        State('interest-panel-store', 'data'),
-        State('reactome-organism-input', 'value')], # Este es el 'organism_name' (ej. 'Homo sapiens')
+         State('interest-panel-store', 'data'),
+         State('reactome-organism-input', 'value'),
+         # --- 💡 NUEVO STATE: Checklist unificada ---
+         State('reactome-options-checklist', 'value')],
         prevent_initial_call=True
     )
-    def run_reactome_analysis(n_clicks, selected_indices, items, organism_name):
+    def run_reactome_analysis(n_clicks, selected_indices, items, organism_name, selected_options):
         """
-        Callback principal para Reactome.
-        1. Recolecta IDs "sucios" (probes/genes).
-        2. Llama a g:Convert (validate_genes) para sanear la lista.
-        3. Llama a ReactomeService (get_enrichment) con la lista "limpia".
-        4. Guarda todo en el 'reactome-results-store'.
+        Callback principal para Reactome con opciones simples (Checklist).
         """
         if not n_clicks or not selected_indices:
             raise PreventUpdate
-            
-        # Mapa para traducir el nombre de Reactome al ID de g:Profiler
-        REACTOME_TO_GPROFILER_MAP = {
-            'Homo sapiens': 'hsapiens',
-            'Mus musculus': 'mmusculus',
-            'Rattus norvegicus': 'rnorvegicus',
-            'Danio rerio': 'drerio',
-            'Drosophila melanogaster': 'dmelanogaster',
-            'Caenorhabditis elegans': 'celegans'
-        }
-        # Obtiene el ID de organismo para g:Profiler (fallback a 'hsapiens')
-        gprofiler_organism_id = REACTOME_TO_GPROFILER_MAP.get(organism_name, 'hsapiens')
-
-        # --- PASO 1: Recolección de Genes (Lista "Sucia") ---
-        combined_genes_dirty = set()
+        
+        # 0. Parsear Opciones
+        # Si selected_options es None (raro), lo tratamos como lista vacía
+        options = selected_options or []
+        projection = 'projection' in options
+        include_disease = 'disease' in options
+        interactors = 'interactors' in options
+        
+        # 1. Recolección de genes (Lógica existente)
+        combined = set()
         for idx in selected_indices:
-            if idx < len(items): 
+            if idx < len(items):
                 item = items[idx]
-                item_type = item.get('type', '')
-                
-                if item_type == 'solution':
-                    combined_genes_dirty.update(item.get('data', {}).get('selected_genes', []))
-                elif item_type == 'solution_set':
-                    solutions = item.get('data', {}).get('solutions', [])
-                    for sol in solutions:
-                        combined_genes_dirty.update(sol.get('selected_genes', []))
-                elif item_type in ['gene_set', 'combined_gene_group']:
-                    combined_genes_dirty.update(item.get('data', {}).get('genes', []))
-                elif item_type == 'individual_gene':
-                    combined_genes_dirty.add(item.get('data', {}).get('gene', ''))
+                itype = item.get('type')
+                if itype == 'solution': combined.update(item.get('data', {}).get('selected_genes', []))
+                elif itype == 'solution_set':
+                    for s in item.get('data', {}).get('solutions', []): combined.update(s.get('selected_genes', []))
+                elif itype in ['gene_set', 'combined_gene_group']: combined.update(item.get('data', {}).get('genes', []))
+                elif itype == 'individual_gene': combined.add(item.get('data', {}).get('gene', ''))
         
-        gene_list_raw_dirty = [g for g in combined_genes_dirty if g and isinstance(g, str)]
-        gene_list_to_validate = [g for g in gene_list_raw_dirty if g] 
-        gene_list_original_count = len(set(gene_list_to_validate))
-
-        # Prepara un diccionario de error en caso de que algo falle
-        error_data = {
-            'results': [], 'token': 'ERROR', 'organism_used_api': 'N/A', 
-            'organism_selected': organism_name,
-            'gene_list_original': gene_list_to_validate,       # Lista sucia
-            'gene_list_validated': [],                         # Lista limpia
-            'gene_list_unrecognized': []                       # Lista de descartados
-        }
-
-        if not gene_list_to_validate:
-            error_data['token'] = 'N/A'
-            error_data['gene_list_unrecognized'] = []
-            return error_data, None
-
-        # --- 🔑 PASO 2: Validación (g:Convert) ---
-        validation_response = GProfilerService.validate_genes(
-            gene_list_to_validate, 
-            gprofiler_organism_id, 
-            target_namespace='HGNC' # O 'ENSG' si Reactome los prefiere
-        )
+        raw = [g for g in combined if g and isinstance(g, str)]
         
-        clean_gene_list = validation_response.get('validated_genes', [])
-        unrecognized_probes_list = validation_response.get('unrecognized_probes', [])
+        # 2. Validación g:Convert (Lógica existente)
+        val_res = GProfilerService.validate_genes(raw, 'hsapiens', 'HGNC')
+        clean = val_res.get('validated_genes', [])
+        stats = val_res.get('filtering_stats', {})
         
-        # Actualiza el diccionario de error con los datos de validación
-        error_data['gene_list_validated'] = clean_gene_list
-        error_data['gene_list_unrecognized'] = unrecognized_probes_list
+        store = {'results': [], 'token': 'ERROR', 'gene_list_validated': clean, 'filtering_stats': stats, 'gene_list_original': raw}
         
-        # Si la validación no devuelve NINGÚN gen, guarda y termina
-        if not clean_gene_list:
-            error_data['token'] = 'N/A' # No se corrió el análisis
-            return error_data, None
-
-        # --- 🔑 PASO 3: Análisis (Reactome) ---
+        if not clean: return store, None
+        
+        # 3. Análisis (Llamada al Servicio con parámetros procesados)
         try:
-            # Llama al servicio de Reactome con la lista "limpia"
-            service_response = ReactomeService.get_enrichment(clean_gene_list, organism_name)
-
+            res = ReactomeService.get_enrichment(
+                clean, 
+                organism_name=organism_name,
+                projection=projection,
+                interactors=interactors,
+                include_disease=include_disease
+            )
         except Exception as e:
-            logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
-            return error_data, None # Retorna el error_data con la info de validación
+             logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
+             return store, None
 
-        if service_response is None:
-            logger.warning("ReactomeService returned None (handled error).")
-            return error_data, None # Retorna el error_data con la info de validación
+        if res:
+            res['gene_list_original'] = raw
+            res['gene_list_validated'] = clean
+            res['filtering_stats'] = stats 
+            return res, None
         
-        # --- 🔑 PASO 4: Reporte (Guardar en Store) ---
-        # Añade la información de validación a la respuesta del servicio
-        service_response['gene_list_original'] = gene_list_to_validate
-        service_response['gene_list_validated'] = clean_gene_list
-        service_response['gene_list_unrecognized'] = unrecognized_probes_list
-        service_response['organism_selected'] = organism_name
-        
-        # Guarda la respuesta completa en el store de Reactome
-        return service_response, None
-
+        return store, None
 
     # --- 🔑 INICIO DE LA MODIFICACIÓN (CALLBACK #5.5) ---
     # 5.5 Mostrar resultados Reactome (MODIFICADO)

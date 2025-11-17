@@ -1,15 +1,15 @@
-# services/reactome_service.py (CÓDIGO COMPLETO CON LA NUEVA FUNCIÓN DE DESCARGA)
+# services/reactome_service.py (CÓDIGO COMPLETO MODIFICADO)
 
 """
-Reactome Pathway Enrichment Analysis Service
-Añadidos logs de DEBUG para verificar el organismo utilizado por la API.
+Reactome Pathway Enrichment Analysis Service (Usando reactome2py)
+Modificado para aceptar parámetros de Proyección, Enfermedad e Interactores.
 """
 
 import logging
 import json 
 import requests 
 import reactome2py.analysis as analysis 
-import base64 # 🔑 AÑADIDA ESTA IMPORTACIÓN
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +17,13 @@ class ReactomeService:
     """Service to connect with the Reactome Content and Analysis Service API."""
     
     DEFAULT_ORGANISM = "Homo sapiens"
-    
-    # URL para obtener la lista de especies (Content Service - API Directa)
     SPECIES_URL = "https://reactome.org/ContentService/data/species/all"
-    
-    # URL Base para el Diagram Exporter (para generar la imagen coloreada)
     DIAGRAM_EXPORTER_BASE_URL = "https://reactome.org/ContentService/exporter/diagram/"
-
 
     @staticmethod
     def get_reactome_organisms():
         """
         Obtiene la lista completa de organismos disponibles en Reactome.
-        (Esta función se mantiene sin cambios)
         """
         EXTENDED_FALLBACK = [
             {'label': 'Homo sapiens (Human)', 'value': 'Homo sapiens'},
@@ -50,7 +44,6 @@ class ReactomeService:
             
             for species in species_data:
                 display_name = species.get('displayName')
-                
                 if display_name:
                      options.append({'label': display_name, 'value': display_name})
             
@@ -62,21 +55,21 @@ class ReactomeService:
                 logger.warning("Fetched 0 species via direct API. Applying extended fallback.")
                 return EXTENDED_FALLBACK
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error connecting to Reactome API for species list: {str(e)}")
-            logger.warning("Connection error fetching species. Applying extended fallback.")
-            return EXTENDED_FALLBACK
         except Exception as e:
             logger.error(f"Unexpected error processing Reactome species list: {str(e)}")
-            logger.warning("Processing error fetching species. Applying extended fallback.")
             return EXTENDED_FALLBACK
 
-
+    # --- 🔑 MODIFICACIÓN: Nuevos argumentos para la función ---
     @staticmethod
-    def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM):
+    def get_enrichment(gene_list, organism_name=DEFAULT_ORGANISM, 
+                       projection=True, interactors=False, include_disease=False):
         """
-        Ejecuta el análisis de enriquecimiento y extrae el token para la visualización.
-        (Esta función se mantiene sin cambios)
+        Ejecuta el análisis de enriquecimiento usando reactome2py con opciones avanzadas.
+        
+        Argumentos Nuevos:
+        - projection (bool): Default True (Coincide con Web).
+        - interactors (bool): Default False.
+        - include_disease (bool): Default False.
         """
         if not gene_list:
             logger.warning("No gene list provided for Reactome enrichment.")
@@ -91,14 +84,17 @@ class ReactomeService:
         organism_used_api = organism_name
         
         try:
-            logger.info(f"SERVICE INPUT DEBUG: Running enrichment with species parameter: {organism_name} for {len(gene_list)} genes.")
+            logger.info(f"SERVICE INPUT DEBUG: Species={organism_name}, Projection={projection}, Interactors={interactors}, Disease={include_disease}")
             
+            # --- 🔑 MODIFICACIÓN: Pasamos los parámetros a la librería ---
             report_data = analysis.identifiers( 
                 ids=ids_string,              
                 species=organism_name, 
-                projection=False,            
-                page_size='999999',          
-                p_value='1.0'                
+                projection=projection,          # Controlado por UI
+                interactors=interactors,        # Controlado por UI
+                include_disease=include_disease,# Controlado por UI
+                page_size='999999',             # Traer todo
+                p_value='1.0'                   # Traer todo
             )
             
             analysis_token = report_data.get('token', 'N/A')
@@ -111,7 +107,7 @@ class ReactomeService:
             if 'resourceSummary' in report_data and report_data['resourceSummary']:
                 organism_used_api = report_data['resourceSummary'][0].get('speciesName', organism_name)
 
-            logger.info(f"SERVICE OUTPUT DEBUG: API reported using organism: {organism_used_api}. Final Token: {analysis_token}")
+            logger.info(f"SERVICE OUTPUT DEBUG: Token: {analysis_token}")
             
             pathways = report_data.get('pathways', [])
             mapped_results = []
@@ -134,17 +130,12 @@ class ReactomeService:
             }
 
         except Exception as e:
-            logger.error(f"Error executing Reactome enrichment (Stable Identifiers Flow): {str(e)}")
+            logger.error(f"Error executing Reactome enrichment: {str(e)}")
             return None
 
     @staticmethod
     def get_diagram_url(pathway_st_id, analysis_token, file_format="png", quality="7"):
-        """
-        Construye la URL para la imagen del diagrama (esto es rápido).
-        (Esta función se mantiene sin cambios)
-        """
         if not pathway_st_id or not analysis_token or analysis_token.startswith('REF_'):
-            logger.error("Missing valid pathway ID or analysis token to generate diagram URL.")
             return "/assets/reactome_placeholder.png" 
 
         url = (
@@ -152,49 +143,19 @@ class ReactomeService:
             f"{pathway_st_id}.{file_format}?"
             f"token={analysis_token}"
         )
-        
         if file_format in ["png", "jpg"] and quality:
              url += f"&quality={quality}"
-             
-        logger.info(f"Generated Diagram URL for {pathway_st_id} with token.")
         return url
 
-    # 🔑 --- INICIO DE LA NUEVA FUNCIÓN AÑADIDA --- 🔑
     @staticmethod
     def get_diagram_image_base64(pathway_st_id, analysis_token, file_format="png", quality=8):
-        """
-        Descarga la imagen del diagrama y la devuelve como una cadena base64.
-        Esta es una operación SÍNCRONA (lenta) que bloquea el callback.
-        """
-        
-        # 1. Construir la URL (usando la función que ya teníamos)
-        #    Nota: pasamos 'quality' como string, ya que get_diagram_url lo espera así.
-        diagram_url = ReactomeService.get_diagram_url(
-            pathway_st_id, 
-            analysis_token, 
-            file_format, 
-            str(quality)
-        )
-        
-        logger.info(f"Downloading Reactome diagram from: {diagram_url}")
-        
+        diagram_url = ReactomeService.get_diagram_url(pathway_st_id, analysis_token, file_format, str(quality))
         try:
-            # 2. Descargar la imagen (AQUÍ ES DONDE TARDA)
-            response = requests.get(diagram_url, timeout=20) # 20 segundos de timeout
-            
+            response = requests.get(diagram_url, timeout=20)
             if response.status_code == 200:
-                # 3. Codificar la imagen a base64
                 content_type = response.headers.get('Content-Type', 'image/png')
-                image_bytes = response.content
-                encoded_string = base64.b64encode(image_bytes).decode('utf-8')
-                
-                # 4. Retornar la cadena de datos que html.Img puede leer
+                encoded_string = base64.b64encode(response.content).decode('utf-8')
                 return f"data:{content_type};base64,{encoded_string}"
-            else:
-                logger.error(f"Failed to download diagram. Status: {response.status_code}, URL: {diagram_url}")
-                return None
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error downloading Reactome diagram: {e}")
             return None
-    # 🔑 --- FIN DE LA NUEVA FUNCIÓN AÑADIDA --- 🔑
+        except Exception:
+            return None
