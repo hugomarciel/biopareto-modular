@@ -5,7 +5,7 @@ Módulo de Callbacks para la Pestaña de Análisis de Enriquecimiento.
 """
 
 import dash
-from dash import Output, Input, State, dcc, html, ALL, dash_table
+from dash import Output, Input, State, dcc, html, ALL, dash_table, MATCH # <--- MATCH agregado
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -238,14 +238,52 @@ def register_enrichment_callbacks(app):
     Registra todos los callbacks de la pestaña de enriquecimiento en la app principal.
     """
     
+    # --- NUEVO: CLIENTSIDE CALLBACK PARA FEEDBACK VISUAL INSTANTÁNEO (Estilo Tarjeta) ---
+    # Esto cambia el borde y fondo de la tarjeta inmediatamente al hacer clic
+    app.clientside_callback(
+        """
+        function(selected_value) {
+            // selected_value es una lista. Si tiene elementos, está seleccionado.
+            const is_selected = selected_value && selected_value.length > 0;
+            
+            if (is_selected) {
+                return [
+                    {
+                        'transition': 'all 0.2s ease-in-out',
+                        'border': '2px solid #0d6efd',       // Borde Azul Fuerte
+                        'backgroundColor': '#f0f8ff',        // Fondo Azul Pálido
+                        'transform': 'scale(1.02)',          // Efecto Pop sutil
+                        'cursor': 'pointer'
+                    },
+                    "h-100 shadow" // Clase con sombra más fuerte
+                ];
+            } else {
+                return [
+                    {
+                        'transition': 'all 0.2s ease-in-out',
+                        'border': '1px solid rgba(0,0,0,0.125)', // Borde default
+                        'backgroundColor': 'white',
+                        'transform': 'scale(1)',
+                        'cursor': 'pointer'
+                    },
+                    "h-100 shadow-sm hover-shadow" // Clase normal
+                ];
+            }
+        }
+        """,
+        [Output({'type': 'enrichment-card-wrapper', 'index': MATCH}, 'style'),
+         Output({'type': 'enrichment-card-wrapper', 'index': MATCH}, 'className')],
+        Input({'type': 'enrichment-card-checkbox', 'index': MATCH}, 'value'),
+        prevent_initial_call=True
+    )
+    # ---------------------------------------------------------------------------
+
     # --- NUEVOS CALLBACKS UI: Deshabilitar selectores si no hay validación ---
     @app.callback(
         Output('gprofiler-target-namespace', 'disabled'),
         Input('gprofiler-validation-switch', 'value')
     )
     def toggle_gprofiler_namespace_state(use_validation):
-        # Si use_validation es True, disabled es False (habilitado).
-        # Si use_validation es False, disabled es True (deshabilitado).
         return not use_validation
 
     @app.callback(
@@ -304,6 +342,9 @@ def register_enrichment_callbacks(app):
             for front in data_store.get("fronts", []):
                 for sol in front["data"]:
                     all_solutions_dict[sol['solution_id']] = sol
+        
+        if selected_indices_list is None:
+            selected_indices_list = []
 
         cards = []
         for idx, item in enumerate(items):
@@ -353,26 +394,45 @@ def register_enrichment_callbacks(app):
             else:
                 continue
 
-            is_selected = [idx] if idx in selected_indices_list else []
+            # Lógica de Estilo Condicional (Para coincidir con el clientside callback)
+            is_selected_bool = idx in selected_indices_list
+            is_selected_value = [idx] if is_selected_bool else []
             
-            card = dbc.Col(dbc.Card(dbc.CardBody([
-                html.Div(dbc.Checklist(
-                    options=[{"label": "", "value": idx}],
-                    value=is_selected, 
-                    id={'type': 'enrichment-card-checkbox', 'index': idx}, 
-                    switch=True,
-                    style={'transform': 'scale(1.3)'}
-                ), style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
-                html.Div([
-                    html.Div([
-                        html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
-                        dbc.Badge(badge_text, color=badge_color, className="ms-1", style={'fontSize': '0.7rem'})
-                    ], className="d-flex align-items-center mb-1"),
-                    html.Strong(item_name, className="d-block mb-1", style={'fontSize': '0.9rem'}),
-                    html.P(description, className="text-muted small mb-1", style={'fontSize': '0.75rem'}),
-                    html.P(item_comment, className="text-muted small fst-italic mb-0", style={'fontSize': '0.7rem'}) if item_comment else None
-                ], style={'paddingRight': '40px'})
-            ], className="p-2", style={'minHeight': '120px', 'position': 'relative'}), className="h-100 shadow-sm hover-shadow"), width=12, md=6, lg=3, className="mb-3")
+            if is_selected_bool:
+                # ESTILO SELECCIONADO
+                card_style = {'transition': 'all 0.2s ease-in-out', 'border': '2px solid #0d6efd', 'backgroundColor': '#f0f8ff', 'transform': 'scale(1.02)', 'cursor': 'pointer'}
+                card_class_name = "h-100 shadow"
+            else:
+                # ESTILO NORMAL
+                card_style = {'transition': 'all 0.2s ease-in-out', 'border': '1px solid rgba(0,0,0,0.125)', 'backgroundColor': 'white', 'transform': 'scale(1)', 'cursor': 'pointer'}
+                card_class_name = "h-100 shadow-sm hover-shadow"
+
+            card = dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div(dbc.Checklist(
+                            options=[{"label": "", "value": idx}],
+                            value=is_selected_value, 
+                            id={'type': 'enrichment-card-checkbox', 'index': idx}, 
+                            switch=True,
+                            style={'transform': 'scale(1.3)'}
+                        ), style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
+                        html.Div([
+                            html.Div([
+                                html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
+                                dbc.Badge(badge_text, color=badge_color, className="ms-1", style={'fontSize': '0.7rem'})
+                            ], className="d-flex align-items-center mb-1"),
+                            html.Strong(item_name, className="d-block mb-1", style={'fontSize': '0.9rem'}),
+                            html.P(description, className="text-muted small mb-1", style={'fontSize': '0.75rem'}),
+                            html.P(item_comment, className="text-muted small fst-italic mb-0", style={'fontSize': '0.7rem'}) if item_comment else None
+                        ], style={'paddingRight': '40px'})
+                    ], className="p-2", style={'minHeight': '120px', 'position': 'relative'})
+                ], 
+                id={'type': 'enrichment-card-wrapper', 'index': idx}, # ID CLAVE para el clientside callback
+                className=card_class_name,
+                style=card_style)
+            ], width=12, md=6, lg=3, className="mb-3")
+            
             cards.append(card)
 
         if not cards:
