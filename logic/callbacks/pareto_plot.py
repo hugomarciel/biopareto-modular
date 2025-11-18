@@ -294,7 +294,13 @@ def register_pareto_plot_callbacks(app):
      
 
         # --- 7. Layout y Renderizado de Selección --- (Sin cambios)
-        if layout_data:
+        ctx = dash.callback_context
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+        
+        # Si el cambio fue provocado por los ejes, NO aplicamos el zoom antiguo (forzamos reset)
+        is_axis_change = trigger_id in ['x-axis-store', 'y-axis-store', 'swap-axes-btn']
+
+        if layout_data and not is_axis_change: # <--- AÑADIR "and not is_axis_change"
             layout_updates = {}
             if 'xaxis.range[0]' in layout_data:
                 layout_updates['xaxis'] = {'range': [layout_data['xaxis.range[0]'], layout_data['xaxis.range[1]']], 'autorange': False}
@@ -303,7 +309,7 @@ def register_pareto_plot_callbacks(app):
             fig.update_layout(layout_updates)
 
         fig.update_layout(
-            title=f"Pareto Front: {y_axis.replace('_', ' ').title()} vs {x_axis.replace('_', ' ').title()}",
+            title=f"Pareto Front:   {x_axis.replace('_', ' ').title()}  vs  {y_axis.replace('_', ' ').title()}",
             xaxis_title=x_axis.replace('_', ' ').title(),
             yaxis_title=y_axis.replace('_', ' ').title(),
             plot_bgcolor='white', paper_bgcolor='white', font=dict(size=12),
@@ -347,8 +353,8 @@ def register_pareto_plot_callbacks(app):
                             ])
                         ], className="d-flex align-items-center justify-content-between"),
                         html.Small([
-                            f"{x_axis}: {int(sol['x']) if isinstance(sol['x'], (int, float)) and sol['x'] == int(sol['x']) else '{:.3f}'.format(sol['x']) if isinstance(sol['x'], float) else sol['x']}, "
-                            f"{y_axis}: {int(sol['y']) if isinstance(sol['y'], (int, float)) and sol['y'] == int(sol['y']) else '{:.3f}'.format(sol['y']) if isinstance(sol['y'], float) else sol['y']}"
+                            f"{x_axis}: {round(sol['x'], 3) if isinstance(sol['x'], (int, float)) else sol['x']}, "
+                            f"{y_axis}: {round(sol['y'], 3) if isinstance(sol['y'], (int, float)) else sol['y']}"
                         ], className="text-muted d-block mt-1"),
                         
                         html.Details([
@@ -366,7 +372,7 @@ def register_pareto_plot_callbacks(app):
                 ], className="mt-2")
             ])
         
-        plot_title = f"Pareto Front: {y_axis.replace('_', ' ').title()} vs {x_axis.replace('_', ' ').title()}"
+        plot_title = f"Pareto Front:   {x_axis.replace('_', ' ').title()}  vs  {y_axis.replace('_', ' ').title()}"
         return fig, selected_info, plot_title
 
     # --- 5. Callback para abrir/cerrar el modal --- (SIN CAMBIOS)
