@@ -602,7 +602,7 @@ def register_enrichment_callbacks(app):
         return is_disabled, is_disabled
   
     
-    # 4. Ejecutar g:Profiler (MODIFICADO: Sin guardar no reconocidos)
+    # 4. Ejecutar g:Profiler (MODIFICADO: Con Selector de Namespace y Switch)
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
          Output('gprofiler-spinner-output', 'children')], 
@@ -610,14 +610,17 @@ def register_enrichment_callbacks(app):
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
          State('gprofiler-organism-dropdown', 'value'),
-         State('gprofiler-sources-checklist', 'value')],
+         State('gprofiler-sources-checklist', 'value'),
+         # NUEVOS ESTADOS
+         State('gprofiler-target-namespace', 'value'),
+         State('gprofiler-validation-switch', 'value')],
         prevent_initial_call=True
     )
-    def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources):
+    def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources, target_namespace, use_validation):
         if not n_clicks or not selected_indices:
             raise PreventUpdate
         
-        # 1. Recolección
+        # 1. Recolección (Genes "Sucios")
         combined_genes_dirty = set()
         for idx in selected_indices:
             if idx < len(items):
@@ -636,9 +639,17 @@ def register_enrichment_callbacks(app):
         if not gene_list_to_validate:
             return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': 0, 'organism': organism}, None
 
-        # 2. Validación
-        validation_response = GProfilerService.validate_genes(gene_list_to_validate, organism, target_namespace='HGNC')
-        clean_gene_list = validation_response.get('validated_genes', [])
+        # 2. Lógica Condicional: Validación/Traducción vs Raw
+        clean_gene_list = []
+        
+        if use_validation:
+            # Opción A: Usar g:Convert con el Namespace seleccionado
+            # Nota: Pasamos target_namespace (ej. 'HGNC', 'ENSG')
+            validation_response = GProfilerService.validate_genes(gene_list_to_validate, organism, target_namespace=target_namespace)
+            clean_gene_list = validation_response.get('validated_genes', [])
+        else:
+            # Opción B: Usar la lista cruda tal cual
+            clean_gene_list = sorted(list(set(gene_list_to_validate)))
         
         if not clean_gene_list:
             return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None
@@ -649,14 +660,14 @@ def register_enrichment_callbacks(app):
         if full_response is None:
             return {'results': None, 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None 
 
-        # 4. Procesamiento
+        # 4. Procesamiento (Igual que antes)
         enrichment_data_list = full_response.get('result', [])
         metadata = full_response.get('meta', {})
         
+        # Intentar mapear IDs de vuelta si es necesario (Lógica compleja de mapeo se mantiene igual)
         query_key = next(iter(metadata.get('genes_metadata', {}).get('query', {})), None)
         
         if not query_key:
-             validated_genes_set_gost = set(clean_gene_list)
              mapped_ensg_list = []
              ensg_to_input_map = {}
         else:
@@ -677,6 +688,15 @@ def register_enrichment_callbacks(app):
             intersection_genes_input_ids = set()
             intersections_flags = term.get('intersections', [])
             
+            # Si no hubo validación, a veces el mapeo de intersección directo es más seguro
+            # Si se usó validación, usamos la lógica de mapeo de g:Profiler
+            
+            if not mapped_ensg_list and not use_validation:
+                # Fallback simple para modo RAW: no podemos garantizar qué genes intersectan exactamente 
+                # sin el mapeo de ENSG, pero g:Profiler a veces devuelve los nombres directos si coinciden.
+                # (Esta parte es compleja porque g:Profiler siempre devuelve ENSG en intersecciones)
+                pass 
+
             for i, flag in enumerate(intersections_flags):
                 if i < len(mapped_ensg_list) and flag:
                     ensg_id = mapped_ensg_list[i]
@@ -877,34 +897,29 @@ def register_enrichment_callbacks(app):
 
 
   # --- CALLBACK UNIFICADO: REACTOME (RUN + CLEAR) ---
-    # Este bloque reemplaza tanto a 'run_reactome_analysis' como a 'clear_reactome_results'
-    # para evitar el error "Duplicate callback outputs".
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
          Output('reactome-spinner-output', 'children')],
         [Input('run-reactome-btn', 'n_clicks'),
-         Input('clear-reactome-results-btn', 'n_clicks')], # Ambos botones son Inputs
+         Input('clear-reactome-results-btn', 'n_clicks')],
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
          State('reactome-organism-input', 'value'),
-         State('reactome-options-checklist', 'value')],
+         State('reactome-options-checklist', 'value'),
+         # NUEVOS ESTADOS
+         State('reactome-target-namespace', 'value'),
+         State('reactome-validation-switch', 'value')],
         prevent_initial_call=True
     )
-    def manage_reactome_analysis(run_clicks, clear_clicks, selected_indices, items, organism_name, selected_options):
-        """
-        Callback unificado que maneja tanto la ejecución (Run) como la limpieza (Clear)
-        de los resultados de Reactome.
-        """
+    def manage_reactome_analysis(run_clicks, clear_clicks, selected_indices, items, organism_name, selected_options, target_namespace, use_validation):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
 
-        # Identificar qué botón disparó el callback
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-        # --- CASO 1: BOTÓN CLEAR (Limpiar) ---
+        # --- CASO 1: CLEAR ---
         if trigger_id == 'clear-reactome-results-btn':
-            # Retorna estructura vacía y None para el spinner
             return {
                 'results': [], 
                 'gene_list_original': [], 
@@ -912,18 +927,17 @@ def register_enrichment_callbacks(app):
                 'organism_selected': 'Homo sapiens'
             }, None
 
-        # --- CASO 2: BOTÓN RUN (Ejecutar Análisis) ---
+        # --- CASO 2: RUN ---
         if trigger_id == 'run-reactome-btn':
             if not selected_indices:
                 raise PreventUpdate
             
-            # 0. Parsear Opciones
             options = selected_options or []
             projection = 'projection' in options
             include_disease = 'disease' in options
             interactors = 'interactors' in options
             
-            # 1. Recolección de genes
+            # 1. Recolección
             combined = set()
             for idx in selected_indices:
                 if idx < len(items):
@@ -937,18 +951,23 @@ def register_enrichment_callbacks(app):
             
             raw = [g for g in combined if g and isinstance(g, str)]
             
-            # 2. Validación
-            # Usamos GProfilerService solo para validar/limpiar nombres, sin calcular descartados
-            val_res = GProfilerService.validate_genes(raw, 'hsapiens', 'HGNC')
-            clean = val_res.get('validated_genes', [])
+            # 2. Validación / Preparación
+            clean = []
+            if use_validation:
+                # Usamos GProfilerService para convertir a UNIPROT/ENSG antes de enviar a Reactome
+                # Reactome suele requerir mapping a 'hsapiens' para la conversión correcta si el target es UNIPROT
+                val_res = GProfilerService.validate_genes(raw, 'hsapiens', target_namespace=target_namespace)
+                clean = val_res.get('validated_genes', [])
+            else:
+                # Modo Raw: Enviamos tal cual
+                clean = sorted(list(set(raw)))
             
-            # Store base en caso de fallo o vacío
             store = {'results': [], 'token': 'ERROR', 'gene_list_validated': clean, 'gene_list_original': raw}
             
             if not clean: 
                 return store, None
             
-            # 3. Análisis (Servicio Reactome)
+            # 3. Análisis
             try:
                 res = ReactomeService.get_enrichment(
                     clean, 
@@ -962,14 +981,12 @@ def register_enrichment_callbacks(app):
                  return store, None
 
             if res:
-                # Agregamos las listas originales al resultado
                 res['gene_list_original'] = raw
                 res['gene_list_validated'] = clean
                 return res, None
             
             return store, None
         
-        # Si no fue ninguno de los botones esperados
         raise PreventUpdate
 
     # 5.5 Mostrar resultados Reactome (MODIFICADO: UI Limpia)
