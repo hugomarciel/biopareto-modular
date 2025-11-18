@@ -65,7 +65,7 @@ def create_gprofiler_layout(organism_options):
                     html.Div([
                         dbc.Switch(
                             id="gprofiler-validation-switch",
-                            label="Standardize IDs (g:Convert)",
+                            label="Standardize IDs (use g:Convert)",
                             value=True,
                             className="d-inline-block fw-bold text-primary"
                         ),
@@ -197,7 +197,7 @@ def create_reactome_layout(organism_options):
                     html.Div([
                         dbc.Switch(
                             id="reactome-validation-switch",
-                            label="Standardize IDs",
+                            label="Standardize IDs (use g:Convert)",
                             value=True, 
                             className="d-inline-block fw-bold text-warning"
                         ),
