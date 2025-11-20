@@ -165,7 +165,16 @@ def register_pareto_plot_callbacks(app):
                 all_objectives.update(sol_data.keys())
 
             # --- 3. Dibujar Líneas (Traza por cada frente) --- (Sin cambios)
-            df_sorted = df.sort_values(by=[x_axis, y_axis], ascending=True)
+            df['x_round'] = df[x_axis].apply(lambda x: round(x, 3) if isinstance(x, float) else x)
+            df['y_round'] = df[y_axis].apply(lambda x: round(x, 3) if isinstance(x, float) else x)
+            
+            # 2. Eliminar duplicados VISUALES dentro del mismo frente.
+            # 'keep="first"' asegura que la línea pase por el punto que se usa como representante en el marcador.
+            df_line = df.drop_duplicates(subset=['x_round', 'y_round'], keep='first')
+            
+            # 3. Ordenar los datos simplificados
+            df_sorted = df_line.sort_values(by=[x_axis, y_axis], ascending=True)
+            
             fig.add_trace(go.Scatter(
                 x=df_sorted[x_axis],
                 y=df_sorted[y_axis],
@@ -279,7 +288,7 @@ def register_pareto_plot_callbacks(app):
                 customdata=multiple_points_df['solutions_json'],
                 hovertemplate=multiple_points_df['hover'],
                 marker=dict(
-                    color='black', 
+                    color='gold', 
                     size=multiple_points_df['size'],
                     sizemode='diameter',
                     line=dict(
