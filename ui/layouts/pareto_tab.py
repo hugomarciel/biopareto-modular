@@ -43,7 +43,7 @@ def create_pareto_tab():
                             ),
                             
                             dbc.CardBody([
-                                dcc.Graph(id='pareto-plot', style={'height': '500px'}, config={'responsive': True}),
+                                dcc.Graph(id='pareto-plot', style={'height': '500px'}, config={'responsive': True, 'scrollZoom': True}),
                                 html.Hr(),
                                 
                                 # --- INICIO DE DISEÑO MEJORADO DE BARRA DE HERRAMIENTAS ---

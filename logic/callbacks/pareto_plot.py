@@ -69,7 +69,7 @@ def register_pareto_plot_callbacks(app):
     )
     def update_pareto_plot(data_store, selected_solutions, x_axis_value, y_axis_value, main_front_checkboxes, front_name_inputs):
         """
-        Update Pareto plot using EXACT DATA MATCHING (No rounding) and Fuzzy Column Search.
+        Update Pareto plot with FULL EXPLORATION TOOLS enabled (Spikes, Slider, etc).
         """
         if not data_store or not data_store.get("fronts"):
             return {}, "", "Pareto Front"
@@ -82,14 +82,8 @@ def register_pareto_plot_callbacks(app):
         explicit_objectives = data_store.get('explicit_objectives', [])
         objectives = data_store.get('main_objectives') or (explicit_objectives if explicit_objectives else (visible_fronts[0]['objectives'] if visible_fronts else []))
         
-        # Lógica de fallback para ejes
         x_axis = x_axis_value or (explicit_objectives[0] if explicit_objectives else (objectives[0] if objectives else 'num_genes'))
         y_axis = y_axis_value or (explicit_objectives[1] if len(explicit_objectives) > 1 else (objectives[1] if len(objectives) > 1 else 'accuracy'))
-
-        # CORRECCIÓN CRÍTICA: Si el eje seleccionado no está en la lista "oficial" de objetivos,
-        # NO lo fuerces a cambiar. Confía en el store. Esto permite que '1-AUC' funcione aunque la lista diga '1-Auc'.
-        # if x_axis not in objectives: x_axis = objectives[0] <--- ELIMINADO PARA EVITAR CONFLICTOS DE CASING
-        # if y_axis not in objectives: y_axis = objectives[1] <--- ELIMINADO
 
         plot_title = f"Pareto Front:   {x_axis.replace('_', ' ').title()}  vs  {y_axis.replace('_', ' ').title()}"
         ui_revision_key = f"{x_axis}-{y_axis}"
@@ -98,38 +92,27 @@ def register_pareto_plot_callbacks(app):
         colors_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
         selected_unique_ids = {s['unique_id'] for s in (selected_solutions or [])}
 
-        # --- FUNCIÓN HELPER: Normalización de Columnas en el DataFrame ---
+        # --- FUNCIÓN HELPER: Normalización de Columnas ---
         def standardize_df_columns(df, target_x, target_y):
-            """
-            Busca en el DataFrame columnas que coincidan con target_x/y ignorando mayúsculas/guiones
-            y renombra las columnas encontradas al nombre exacto esperado (target_x/y).
-            """
             found_x = False
             found_y = False
-            
-            # Mapa de normalización (ej: '1_auc' -> 'original_col_name')
             col_map = {c.lower().replace('-', '').replace('_', '').replace(' ', ''): c for c in df.columns}
             
-            # Buscar X
             search_x = target_x.lower().replace('-', '').replace('_', '').replace(' ', '')
             if target_x in df.columns:
                 found_x = True
             elif search_x in col_map:
-                real_col = col_map[search_x]
-                df[target_x] = df[real_col] # Crear alias con el nombre esperado
+                df[target_x] = df[col_map[search_x]]
                 found_x = True
                 
-            # Buscar Y
             search_y = target_y.lower().replace('-', '').replace('_', '').replace(' ', '')
             if target_y in df.columns:
                 found_y = True
             elif search_y in col_map:
-                real_col = col_map[search_y]
-                df[target_y] = df[real_col] # Crear alias
+                df[target_y] = df[col_map[search_y]]
                 found_y = True
                 
             return df, found_x, found_y
-        # ---------------------------------------------------------------
 
         # --- 2. Pre-procesar y Agrupar Soluciones ---
         coord_to_solutions = defaultdict(list)
@@ -137,12 +120,9 @@ def register_pareto_plot_callbacks(app):
 
         for idx, front in enumerate(visible_fronts):
             df = pd.DataFrame(front["data"])
-            
-            # --- APLICAR NORMALIZACIÓN ---
             df, has_x, has_y = standardize_df_columns(df, x_axis, y_axis)
             
             if not has_x or not has_y:
-                # Si después de la búsqueda flexible no encontramos los ejes, saltamos este frente
                 continue
             
             color = colors_palette[idx % len(colors_palette)]
@@ -150,9 +130,7 @@ def register_pareto_plot_callbacks(app):
                  color = '#000080'
             
             for _, row in df.iterrows():
-                # Usamos el valor crudo para la agrupación (Identidad estricta)
                 coord = (row[x_axis], row[y_axis])
-                
                 unique_id = f"{row['solution_id']}|{front['name']}"
                 
                 sol_data = row.to_dict()
@@ -165,7 +143,7 @@ def register_pareto_plot_callbacks(app):
                 coord_to_solutions[coord].append(sol_data)
                 all_objectives.update(sol_data.keys())
 
-            # --- 3. Dibujar Líneas (Fondo) ---
+            # --- 3. Dibujar Líneas ---
             df_line = df.drop_duplicates(subset=[x_axis, y_axis], keep='first') 
             df_sorted = df_line.sort_values(by=[x_axis, y_axis], ascending=True)
             
@@ -179,7 +157,7 @@ def register_pareto_plot_callbacks(app):
                 legendgroup=front["name"]
             ))
 
-        # --- 4. Dibujar Puntos (Capa Media y Superior) ---
+        # --- 4. Dibujar Puntos ---
         highlight_traces = [] 
 
         for idx, front in enumerate(visible_fronts):
@@ -273,7 +251,7 @@ def register_pareto_plot_callbacks(app):
         for trace in highlight_traces:
             fig.add_trace(trace)
 
-        # --- 7. Layout Final ---
+        # --- 7. Layout Final (CON HERRAMIENTAS ACTIVADAS) ---
         fig.update_layout(
             title=plot_title,
             xaxis_title=x_axis.replace('_', ' ').title(),
@@ -287,10 +265,34 @@ def register_pareto_plot_callbacks(app):
                 groupclick="togglegroup" 
             ),
             clickmode='event+select', 
-            dragmode='zoom'
+            dragmode='pan', # Herramienta por defecto: Zoom
+            hovermode='closest' # Mejor para Scatter que 'x unified'
         )
-        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
-        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True)
+        
+        # --- ACTIVAR SPIKE LINES Y RANGE SLIDER ---
+        """
+        fig.update_xaxes(
+            showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,
+            # Range Slider (Barra inferior)
+            rangeslider=dict(visible=True),
+            # Spike Lines (Guías visuales)
+            showspikes=True, 
+            spikethickness=1, 
+            spikedash='dot', 
+            spikemode='across', # Línea cruza todo el gráfico
+            spikecolor='#888888'
+        )
+        """
+        
+        fig.update_yaxes(
+            showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,
+            # Spike Lines en Y
+            showspikes=True, 
+            spikethickness=1, 
+            spikedash='dot', 
+            spikemode='across',
+            spikecolor='#888888'
+        )
 
         # --- Generación de información de selección ---
         selected_info = ""
