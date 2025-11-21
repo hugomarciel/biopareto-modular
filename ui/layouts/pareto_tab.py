@@ -3,26 +3,21 @@
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-
 def create_pareto_tab():
     """Create Pareto front tab layout"""
     return dbc.Container([
         
-        # --- AÑADIDO: Stores para los ejes ---
+        # Stores para los ejes
         dcc.Store(id='x-axis-store'),
         dcc.Store(id='y-axis-store'),
         
         dbc.Row([
             dbc.Col([
-                
-                # --- ELIMINADO: Row de Configuración de Ejes ---
-                # La dbc.Row que contenía la Card "Axis Configuration" ha sido eliminada.
-
                 dbc.Row([
                     dbc.Col([
                         dbc.Card([
                             
-                            # --- MODIFICADO: CardHeader con Título y Botón Swap ---
+                            # CardHeader con Título y Botón Swap
                             dbc.CardHeader(
                                 dbc.Row(
                                     [
@@ -39,65 +34,101 @@ def create_pareto_tab():
                                                 size="sm"
                                             ),
                                             width="auto",
-                                            className="ms-auto" # Alinea a la derecha
+                                            className="ms-auto" 
                                         )
                                     ],
                                     align="center",
-                                    justify="between" # Asegura que uno esté a la izq y otro a la der
+                                    justify="between" 
                                 )
                             ),
-                            # --- FIN DE LA MODIFICACIÓN ---
                             
                             dbc.CardBody([
                                 dcc.Graph(id='pareto-plot', style={'height': '500px'}, config={'responsive': True}),
                                 html.Hr(),
+                                
+                                # --- INICIO DE DISEÑO MEJORADO DE BARRA DE HERRAMIENTAS ---
                                 html.Div([
-                                    html.H6("Selection Actions:", className="text-info mb-3"),
+                                    html.Div([
+                                        html.I(className="bi bi-sliders me-2 text-primary"),
+                                        html.H6("Selection Toolkit", className="fw-bold m-0 text-dark")
+                                    ], className="d-flex align-items-center mb-3"),
+
                                     dbc.Row([
+                                        # GRUPO 1: Acciones Principales (Constructivas)
                                         dbc.Col([
-                                            dbc.Button("🗑️ Clear Selection",
-                                                 id="clear-selection-btn",
-                                                 color="danger",
-                                                 size="sm",
-                                                 className="w-100 mb-2"
-                                            ),
-                                        ], width=4),
+                                            dbc.Label("Analysis Actions", className="small text-muted fw-bold text-uppercase mb-1"),
+                                            dbc.Row([
+                                                # Botón Consolidar
+                                                dbc.Col([
+                                                    dbc.Button([
+                                                        html.I(className="bi bi-layers-half me-2"),
+                                                        "Consolidate"
+                                                    ],
+                                                    id="consolidate-selection-btn",
+                                                    color="success", # Verde sólido
+                                                    size="sm",
+                                                    className="w-100 d-flex align-items-center justify-content-center shadow-sm fw-bold",
+                                                    disabled=True,
+                                                    title="Create a new Pareto front from selected solutions"
+                                                    )
+                                                ], width=6),
+                                                
+                                                # Botón Añadir Todos
+                                                dbc.Col([
+                                                    dbc.Button([
+                                                        html.I(className="bi bi-collection-fill me-2"),
+                                                        "Add All"
+                                                    ],
+                                                    id="add-to-interest-btn",
+                                                    color="primary", # Azul sólido
+                                                    size="sm",
+                                                    className="w-100 d-flex align-items-center justify-content-center shadow-sm fw-bold",
+                                                    disabled=True,
+                                                    title="Add all selected solutions to Interest Panel"
+                                                    )
+                                                ], width=6),
+                                            ], className="g-2")
+                                        ], width=12, lg=7, className="mb-3 mb-lg-0 border-end-lg pe-lg-3"), 
+
+                                        # GRUPO 2: Acciones de Gestión (Reset/Clear)
                                         dbc.Col([
-                                            dbc.Button("💾 Consolidate Selection To a New Front",
-                                                 id="consolidate-selection-btn",
-                                                 color="success",
-                                                 size="sm",
-                                                 disabled=True,
-                                                 className="w-100 mb-2"
-                                            ),
-                                        ], width=4),
-                                        dbc.Col([
-                                            dbc.Button("↩️ Restore The Original Load",
-                                                 id="restore-original-btn",
-                                                 color="warning",
-                                                 size="sm",
-                                                 disabled=True,
-                                                 className="w-100 mb-2"
-                                            ),
-                                        ], width=4)
-                                    ], className="mb-3"),
-                                    
-                                    dbc.Button(
-                                        "📌 Add All to Interest Panel",
-                                        id="add-to-interest-btn",
-                                        color="info",
-                                        size="sm",
-                                        disabled=True,
-                                        className="w-100 mb-3"
-                                    ),
-                                    
-                                    html.Hr(),
-                                    
-                                    html.H6("Selected Solutions:", className="text-info mb-3"),
-                                    html.Small("Click on a point to select the solution. Also can use lasso/box to add more.",
-                                             className="text-muted d-block mb-2"),
-                                    html.Div(id="selected-solutions-info")
-                                ])
+                                            dbc.Label("Reset Tools", className="small text-muted fw-bold text-uppercase mb-1"),
+                                            dbc.ButtonGroup([
+                                                # Botón Restaurar
+                                                dbc.Button([
+                                                    html.I(className="bi bi-arrow-counterclockwise me-1"),
+                                                    "Restore"
+                                                ],
+                                                id="restore-original-btn",
+                                                color="secondary",
+                                                outline=True, 
+                                                size="sm",
+                                                disabled=True,
+                                                title="Restore original data load"
+                                                ),
+                                                # Botón Limpiar
+                                                dbc.Button([
+                                                    html.I(className="bi bi-trash3-fill me-1"),
+                                                    "Clear"
+                                                ],
+                                                id="clear-selection-btn",
+                                                color="danger",
+                                                outline=True, 
+                                                size="sm",
+                                                title="Clear current selection"
+                                                ),
+                                            ], className="d-flex w-100 shadow-sm")
+                                        ], width=12, lg=5)
+                                    ], className="align-items-end")
+                                ], className="bg-light p-3 rounded border mb-3"),
+                                # --- FIN DE DISEÑO MEJORADO ---
+                                
+                                html.Hr(),
+                                
+                                html.H6("Selected Solutions:", className="text-info mb-3"),
+                                html.Small("Click on a point to select the solution. Also can use lasso/box to add more.",
+                                         className="text-muted d-block mb-2"),
+                                html.Div(id="selected-solutions-info")
                             ])
                         ])
                     ], width=12)
@@ -105,7 +136,7 @@ def create_pareto_tab():
             ], width=12),
         ]),
         
-        # --- Sin cambios: Store y Modal para puntos múltiples ---
+        # Store y Modal para puntos múltiples
         dcc.Store(id='multi-solution-modal-store'),
         
         dbc.Modal(
@@ -122,6 +153,5 @@ def create_pareto_tab():
             scrollable=True, 
             centered=True,
         )
-        # --- FIN DE LO AÑADIDO ---
 
     ], fluid=True)

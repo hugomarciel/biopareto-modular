@@ -6,11 +6,13 @@ from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from datetime import datetime
 import pandas as pd
+import logging
 
+logger = logging.getLogger(__name__)
 
 def register_consolidation_callbacks(app):
     
-    # 1. Callback para abrir/cerrar modal de confirmación de consolidación
+    # 1. Callback para abrir/cerrar modal de confirmación
     @app.callback(
         [Output('consolidate-modal', 'is_open'),
          Output('consolidate-modal-info', 'children'),
@@ -30,11 +32,9 @@ def register_consolidation_callbacks(app):
         
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
-        # Cierre del modal (Cancel o Confirm)
         if trigger_id in ['consolidate-cancel-btn', 'consolidate-confirm-btn']:
             return False, dash.no_update, dash.no_update
 
-        # Apertura del modal
         if trigger_id == 'consolidate-selection-btn' and consolidate_clicks:
             if not selected_solutions:
                 raise PreventUpdate
@@ -55,16 +55,16 @@ def register_consolidation_callbacks(app):
 
         raise PreventUpdate
 
-    # 2. Callback para realizar la consolidación (MODIFICADO)
+    # 2. Callback para realizar la consolidación (LÓGICA ROBUSTA / VISUAL INJECTION)
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
-         Output('selected-solutions-store', 'data', allow_duplicate=True)], # Limpiar selección
+         Output('selected-solutions-store', 'data', allow_duplicate=True)], 
         Input('consolidate-confirm-btn', 'n_clicks'),
         [State('data-store', 'data'),
          State('selected-solutions-store', 'data'),
          State('consolidate-front-name-input', 'value'),
-         State('x-axis-store', 'data'), # <-- MODIFICADO
-         State('y-axis-store', 'data')], # <-- MODIFICADO
+         State('x-axis-store', 'data'), 
+         State('y-axis-store', 'data')], 
         prevent_initial_call=True
     )
     def perform_consolidation(n_clicks, current_data, selected_solutions, new_front_name, current_x_axis, current_y_axis):
@@ -74,88 +74,84 @@ def register_consolidation_callbacks(app):
             
         updated_data = current_data.copy()
         
-        if not selected_solutions:
-            raise PreventUpdate
-
-        # 1. Determinar objetivos (Deben ser los del frente principal)
+        # 1. Determinar nombres de ejes
         objectives = updated_data.get('main_objectives')
         
-        # --- MODIFICACIÓN: Asegurar que los ejes no sean None ---
+        # Intentar obtener los ejes del store visual primero, si no, de los metadatos
         if not current_x_axis or not current_y_axis:
             if objectives and len(objectives) >= 2:
                 current_x_axis = objectives[0]
                 current_y_axis = objectives[1]
             else:
-                 # Fallback si main_objectives no está, usar explicit_objectives
                  explicit = updated_data.get('explicit_objectives', [])
                  if explicit and len(explicit) >= 2:
                      current_x_axis = explicit[0]
                      current_y_axis = explicit[1]
-                 else:
-                     # Si no hay ejes, no se puede ordenar, pero se continúa
-                     pass
-        # --- FIN MODIFICACIÓN ---
 
-        # 2. Preparar los datos del nuevo frente
-        new_front_data = [sol['full_data'].copy() for sol in selected_solutions]
+        # 2. Preparar datos del nuevo frente
+        new_front_data = []
         
-        # 3. Ordenar las soluciones
-        if objectives:
-            sort_keys = []
-            if current_x_axis and current_x_axis in objectives:
-                sort_keys.append(current_x_axis)
-            if current_y_axis and current_y_axis in objectives:
-                sort_keys.append(current_y_axis)
+        for sol in selected_solutions:
+            # Copia de los datos originales completos
+            original_data = sol['full_data'].copy()
             
-            if not sort_keys:
-                 # Fallback si los ejes actuales no están en los objetivos
-                 explicit_objectives = [obj for obj in objectives if obj not in ['num_genes']]
-                 if len(explicit_objectives) >= 2:
-                     sort_keys = [explicit_objectives[0], explicit_objectives[1]]
-                 elif len(objectives) >= 2:
-                     sort_keys = [objectives[0], objectives[1]]
-                 elif objectives:
-                     sort_keys = [objectives[0]]
+            # --- LÓGICA CRÍTICA: INYECCIÓN VISUAL ---
+            # Tomamos lo que el usuario VEÍA en pantalla (x, y) y lo forzamos 
+            # dentro del diccionario de datos con la etiqueta que el gráfico espera.
+            # Esto arregla el problema de que "1-Auc" no coincida con "1_Auc".
+            
+            visual_x = sol.get('x')
+            visual_y = sol.get('y')
+            
+            if current_x_axis and visual_x is not None:
+                original_data[current_x_axis] = visual_x
                 
-            if sort_keys:
-                # Ordenamiento lambda para asegurar que el frente se dibuje correctamente
-                new_front_data.sort(key=lambda sol: [sol.get(k, 0) for k in sort_keys])
-
-        # 4. Renumerar las soluciones
+            if current_y_axis and visual_y is not None:
+                original_data[current_y_axis] = visual_y
+            
+            new_front_data.append(original_data)
+        
+        # 3. Ordenar (Ahora es seguro porque inyectamos las claves)
+        if current_x_axis and current_y_axis:
+            try:
+                new_front_data.sort(key=lambda s: (s.get(current_x_axis, 0), s.get(current_y_axis, 0)))
+            except TypeError:
+                pass 
+        
+        # 4. Renumerar y nombrar
         final_front_name = new_front_name if new_front_name else f"Consolidated_Front_{datetime.now().strftime('%H%M')}"
         
         for i, sol in enumerate(new_front_data):
+            # Guardamos el ID original por si acaso, pero generamos uno limpio para el gráfico
+            sol['original_solution_id'] = sol.get('solution_id')
             sol['solution_id'] = f"Sol_{i+1}"
             sol['front_name'] = final_front_name
 
-        # 5. Crear el nuevo objeto frente
+        # 5. Crear objeto frente
         new_front_id = f"consolidated_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
         new_front = {
             "id": new_front_id,
             "name": final_front_name,
             "data": new_front_data,
-            "objectives": objectives,
+            "objectives": objectives, 
             "visible": True,
             "is_main": True,
             "is_consolidated": True
         }
         
-        # 6. Deshabilitar is_main en los frentes actuales y guardar el estado en el historial
-        for front in updated_data.get('fronts', []):
-            front['is_main'] = False
-            
-        updated_data.setdefault('fronts_history', []).append(updated_data['fronts'])
+        # 6. Guardar historial para poder restaurar después
+        import copy
+        current_fronts_snapshot = copy.deepcopy(updated_data.get('fronts', []))
+        updated_data.setdefault('fronts_history', []).append(current_fronts_snapshot)
 
-        # 7. Reemplazar los frentes existentes con solo el nuevo frente consolidado
+        # 7. Reemplazar frentes actuales con el consolidado
         updated_data['fronts'] = [new_front]
         
-        # 8. Limpiar la selección actual
-        new_selection = []
-        
-        return updated_data, new_selection
+        # Limpiar selección al finalizar
+        return updated_data, []
 
-    # 3. Callback para habilitar/deshabilitar el botón de restauración
+    # 3. Callback para habilitar botón Restore
     @app.callback(
         Output('restore-original-btn', 'disabled'),
         [Input('data-store', 'data'),
@@ -163,13 +159,10 @@ def register_consolidation_callbacks(app):
         prevent_initial_call=False
     )
     def toggle_restore_button(data_store, active_tab):
-        """Enable/disable Restore Original button based on history size"""
-        if not data_store:
-            return True
-        
+        if not data_store: return True
         return not (data_store.get('fronts_history') and len(data_store['fronts_history']) > 0)
 
-    # 4. Callback para restaurar el estado anterior
+    # 4. Callback para ejecutar Restore
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
          Output('selected-solutions-store', 'data', allow_duplicate=True),
@@ -179,29 +172,24 @@ def register_consolidation_callbacks(app):
         prevent_initial_call=True
     )
     def restore_original_fronts(n_clicks, current_data):
-        """Restores the previous state of the Pareto fronts from history."""
         if not n_clicks or not current_data or not current_data.get('fronts_history'):
             raise PreventUpdate
-            
-        updated_data = current_data.copy()
-
-        # 1. Obtener el estado anterior (el último en el historial)
-        previous_fronts = updated_data['fronts_history'].pop()
         
-        # 2. Restaurar el estado de los frentes
+        updated_data = current_data.copy()
+        
+        # Sacar el último estado del historial (stack pop)
+        previous_fronts = updated_data['fronts_history'].pop()
         updated_data['fronts'] = previous_fronts
         
-        # 3. Determinar los objetivos principales del estado restaurado
+        # Restaurar objetivos principales
         main_objectives = None
         if previous_fronts:
             main_front = next((f for f in previous_fronts if f.get('is_main')), None)
-            if main_front:
+            if main_front: 
                 main_objectives = main_front['objectives']
-            else:
-                previous_fronts[0]['is_main'] = True 
-                main_objectives = previous_fronts[0]['objectives']
+            else: 
+                main_objectives = previous_fronts[0].get('objectives')
 
         updated_data['main_objectives'] = main_objectives
         
-        # 4. Limpiar selección y layout (zoom/pan)
         return updated_data, [], {}
