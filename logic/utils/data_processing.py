@@ -3,12 +3,14 @@
 import dash_bootstrap_components as dbc
 import json
 import base64
+import os  # <--- 1. Import necesario añadido para limpiar extensiones
 from datetime import datetime
 from logic.utils.data_validation import validate_json_structure, validate_objectives_match
 
 def validate_and_process_fronts(contents_list, filename_list, current_data):
     """
     Procesa los archivos JSON subidos, valida, extrae objetivos y crea los objetos de frente.
+    Asigna el nombre del archivo como nombre del frente.
     Retorna (updated_data, status_children, main_objectives).
     """
     updated_data = current_data.copy()
@@ -16,16 +18,17 @@ def validate_and_process_fronts(contents_list, filename_list, current_data):
     new_fronts_count = 0
     errors = []
 
-    # Inicializar estructuras si no existen (copiado de la lógica original de app.py)
+    # Inicializar estructuras si no existen
     if 'fronts' not in updated_data: updated_data['fronts'] = []
     if 'fronts_history' not in updated_data: updated_data['fronts_history'] = []
     if 'main_objectives' not in updated_data: updated_data['main_objectives'] = None
     if 'explicit_objectives' not in updated_data: updated_data['explicit_objectives'] = []
     
+    # Asegurar que sean listas para iterar, incluso si es un solo archivo
     if not isinstance(contents_list, list): contents_list = [contents_list]
     if not isinstance(filename_list, list): filename_list = [filename_list]
 
-    # Procesar cada archivo subido
+    # Procesar cada archivo subido (zip une contenido con su nombre)
     for contents, filename in zip(contents_list, filename_list):
         if not filename.endswith('.json'):
             errors.append(f"{filename}: Only JSON files accepted")
@@ -40,15 +43,21 @@ def validate_and_process_fronts(contents_list, filename_list, current_data):
             errors.append(f"{filename}: Error reading/decoding file - {str(e)}")
             continue
 
-        # 1. Validación de estructura (usando utilidad)
+        # 1. Validación de estructura (usando tu utilidad existente)
         is_valid, msg = validate_json_structure(data)
         if not is_valid:
             errors.append(f"{filename}: {msg}")
             continue
 
-        # 2. Extracción y procesamiento
+        # 2. Extracción y procesamiento de objetivos
         objectives = []
         explicit_objectives = []
+        
+        # Aseguramos que data no esté vacío antes de acceder a data[0]
+        if not data:
+            errors.append(f"{filename}: The file is empty.")
+            continue
+            
         first_solution = data[0]
 
         for key, value in first_solution.items():
@@ -68,7 +77,7 @@ def validate_and_process_fronts(contents_list, filename_list, current_data):
         if any('num_genes' in s for s in data) and 'num_genes' not in objectives:
             objectives.append('num_genes')
 
-        # 3. Validación de consistencia de objetivos (usando utilidad)
+        # 3. Validación de consistencia de objetivos (usando tu utilidad existente)
         if updated_data["main_objectives"] is None or not updated_data["fronts"]: 
             updated_data["main_objectives"] = objectives
             updated_data["explicit_objectives"] = explicit_objectives
@@ -79,13 +88,17 @@ def validate_and_process_fronts(contents_list, filename_list, current_data):
                 errors.append(f"{filename}: Objectives mismatch. Expected {updated_data['main_objectives']}, got {objectives}")
                 continue
 
-        # 4. Agregar nuevo frente
+        # 4. Agregar nuevo frente con NOMBRE DEL ARCHIVO
         front_number = len(updated_data["fronts"]) + 1
-        front_name = f"Front {front_number}"
+        
+        # --- LÓGICA MODIFICADA AQUÍ ---
+        # Extrae el nombre base sin extensión (ej: 'experimento_1.json' -> 'experimento_1')
+        front_name = os.path.splitext(filename)[0]
+        # ------------------------------
         
         new_front = {
-            "id": f"front_{front_number}_{datetime.now().strftime('%H%M%S')}",
-            "name": front_name,
+            "id": f"front_{front_number}_{datetime.now().strftime('%H%M%S')}", # ID interno único sigue usando timestamp
+            "name": front_name, # Nombre visible asignado desde el archivo
             "data": data,
             "objectives": objectives,
             "visible": True,
