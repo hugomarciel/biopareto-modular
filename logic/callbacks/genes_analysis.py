@@ -164,6 +164,7 @@ def register_genes_analysis_callbacks(app):
 
 
     # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CORREGIDO: TIPO DE LOADING) ---
+    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CORREGIDO: Clean Solution Name) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
@@ -181,6 +182,8 @@ def register_genes_analysis_callbacks(app):
         objective_options = []
         categorical_options = []
         
+        # Definimos columnas categóricas. Mantenemos 'unique_solution_id' aquí para que
+        # el dropdown del gráfico la siga reconociendo como opción válida si se desea.
         categorical_cols = ['gene', 'front_name', 'unique_solution_id']
         excluded_cols = categorical_cols + ['solution_id']
         
@@ -195,19 +198,29 @@ def register_genes_analysis_callbacks(app):
 
         table_columns = []
         for col in genes_df.columns:
-            if col == 'solution_id':
+            # --- 💡 CAMBIO 1: Ocultar la columna combinada (Redundante) ---
+            # Aunque la ocultamos de la vista, los datos siguen en el 'data' de la tabla
+            # por lo que el gráfico podrá seguir usándola internamente.
+            if col == 'unique_solution_id':
                 continue 
                 
             column_name = col.replace('_', ' ').title()
-            col_def = {'name': column_name, 'id': col}
             
+            # Configuración base con Toggle habilitado
+            col_def = {'name': column_name, 'id': col, 'hideable': True}
+            
+            # Personalización de nombres de cabecera
             if col == 'front_name':
                 col_def.update({'name': 'Front'})
-            elif col == 'unique_solution_id':
-                col_def.update({'name': 'Solution'})
-            elif col == 'gene':
-                col_def.update({'name': 'Gene'})
             
+            # --- 💡 CAMBIO 2: Mostrar el ID corto pero llamarlo 'Solution' ---
+            elif col == 'solution_id':
+                col_def.update({'name': 'Solution'})
+                
+            elif col == 'gene':
+                col_def.update({'name': 'Gene', 'presentation': 'markdown'}) 
+            
+            # Formateo numérico
             if col in [o['value'] for o in objective_options]:
                 col_def.update({
                     'type': 'numeric',
@@ -260,6 +273,7 @@ def register_genes_analysis_callbacks(app):
             ),
         ])
         
+        # Popover de ayuda (sin cambios)
         filter_help_popover = dbc.Popover(
             [
                 dbc.PopoverHeader("Table Filtering & Sorting Help"), 
@@ -334,7 +348,7 @@ def register_genes_analysis_callbacks(app):
                 dbc.Col(
                     dcc.Loading(
                         id="loading-summary-panel",
-                        type="circle", # 🔑 CORRECCIÓN: Cambiado de "cube" a "circle"
+                        type="circle", 
                         color="#0d6efd", 
                         children=html.Div(id='genes-table-summary-panel')
                     ),
