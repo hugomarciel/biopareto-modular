@@ -266,9 +266,14 @@ def create_reactome_layout(organism_options):
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader(html.Div(className="d-flex align-items-center justify-content-between", children=[
-                        html.H6("Reactome Pathway Visualization", className="fw-bold m-0"), 
-                        dcc.Loading(id="loading-reactome-diagram-spinner", children=html.Div(id="reactome-diagram-spinner-output"), type="circle")
+                    dbc.CardHeader(html.Div(className="d-flex align-items-center", children=[
+                        html.H6("Reactome Pathway Visualization", className="fw-bold m-0 me-4"), 
+                        dcc.Loading(
+                            id="loading-reactome-diagram-spinner", 
+                            children=html.Div(id="reactome-diagram-spinner-output"), 
+                            type="circle",
+                            color="#ffc107" # Opcional: Mismo color amarillo de Reactome para consistencia
+                        )
                     ])), 
                     dbc.CardBody(html.Div(id='reactome-diagram-output', children=[
                         dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-center text-muted border-0")
