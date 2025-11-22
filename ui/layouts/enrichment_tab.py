@@ -16,6 +16,8 @@ COMMON_NAMESPACES = [
     {'label': 'RGD (Rat Only)', 'value': 'RGD'}
 ]
 
+# Reemplaza la función 'create_gprofiler_layout' existente con esta:
+
 def create_gprofiler_layout(organism_options):
     
     gprofiler_source_options = [
@@ -69,7 +71,6 @@ def create_gprofiler_layout(organism_options):
                             value=True,
                             className="d-inline-block fw-bold text-primary"
                         ),
-                        #html.Span(" (Auto-fix gene names)", className="text-muted small ms-2")
                     ])
                 ], width=12, md=5),
 
@@ -78,19 +79,17 @@ def create_gprofiler_layout(organism_options):
                     dbc.Label("Action", className="small text-uppercase text-muted fw-bold d-block"),
                     
                     html.Div([
-                        # --- ICONO CORREGIDO: Usamos gráfico de barras (Estadística) ---
+                        # --- ICONO DE ESTADÍSTICA ---
                         html.Div(
                             dcc.Loading(
                                 id="loading-gprofiler-spinner", 
                                 type="circle", 
-                                color="#198754", # Verde (Success)
+                                color="#198754", 
                                 children=[
-                                    # Objetivo oculto del callback
                                     html.Div(id="gprofiler-spinner-output", style={'display': 'none'}),
-                                    # Icono visible por defecto (Gráfico de barras para análisis estadístico)
                                     html.I(
                                         className="bi bi-bar-chart-line-fill", 
-                                        style={'fontSize': '2rem', 'color': '#198754'}, # Opacidad quitada para mejor visibilidad
+                                        style={'fontSize': '2rem', 'color': '#198754'}, 
                                         title="Statistical Analysis Ready"
                                     )
                                 ]
@@ -144,7 +143,21 @@ def create_gprofiler_layout(organism_options):
                         ], size="sm")
                     ], width=4)
                 ], className="mb-3"),
-                dcc.Loading(dcc.Graph(id='gprofiler-manhattan-plot'), type="default")
+                
+                # --- AQUÍ ESTÁ EL CAMBIO CLAVE: config added ---
+                dcc.Loading(
+                    dcc.Graph(
+                        id='gprofiler-manhattan-plot',
+                        config={
+                            'scrollZoom': True,  # Habilita Zoom con rueda
+                            'responsive': True,  # Ajuste automático
+                            'displayModeBar': True # Barra de herramientas visible
+                        }
+                    ), 
+                    type="default"
+                )
+                # -----------------------------------------------
+                
             ])
         ], className="mt-3 mb-4 shadow-sm"), 
         
@@ -154,7 +167,6 @@ def create_gprofiler_layout(organism_options):
         ], className="mt-3 mb-4 shadow-sm"),
         
     ], className="mt-2")
-
 
 def create_reactome_layout(organism_options):
     

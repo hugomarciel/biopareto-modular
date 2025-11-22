@@ -270,11 +270,11 @@ def register_pareto_plot_callbacks(app):
         )
         
         # --- ACTIVAR SPIKE LINES Y RANGE SLIDER ---
-        """
+        
         fig.update_xaxes(
             showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,
             # Range Slider (Barra inferior)
-            rangeslider=dict(visible=True),
+            rangeslider=dict(visible=False),
             # Spike Lines (Guías visuales)
             showspikes=True, 
             spikethickness=1, 
@@ -282,7 +282,7 @@ def register_pareto_plot_callbacks(app):
             spikemode='across', # Línea cruza todo el gráfico
             spikecolor='#888888'
         )
-        """
+        
         
         fig.update_yaxes(
             showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,

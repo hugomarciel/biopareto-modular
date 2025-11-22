@@ -87,6 +87,8 @@ app.index_string = '''
         {%css%}
         <style>
         /* ... Estilos CSS largos se mantienen aquí ... */
+
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;

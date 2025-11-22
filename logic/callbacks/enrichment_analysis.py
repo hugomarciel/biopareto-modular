@@ -25,6 +25,11 @@ from scipy.spatial.distance import pdist, squareform
 logger = logging.getLogger(__name__)
 
 # --- FUNCIÓN DE MANHATTAN PLOT ---
+
+# Reemplaza la función 'create_gprofiler_manhattan_plot' con esta versión actualizada (Zig-Zag):
+
+# Reemplaza la función 'create_gprofiler_manhattan_plot' con esta versión (Rotación -45°):
+
 def create_gprofiler_manhattan_plot(df, threshold_value):
     line_threshold_value = 0.05 
     try:
@@ -91,16 +96,31 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         hover_data={'term_index': False, '-log10(P-value)': ':.2f', 'term_name': True, 'p_value': ':.2e', 'intersection_size': True, 'source': True, 'is_gold_standard': True}
     )
     
+    # Calcular centros de etiquetas
     source_labels = df_plot.groupby('source', observed=True)['term_index'].agg(['min', 'max']).reset_index() 
     source_labels['center'] = (source_labels['min'] + source_labels['max']) / 2
     
+    # --- CAMBIO: Rotación -45 grados (Más robusto que Zig-Zag) ---
+    # Usamos directamente las fuentes originales, sin saltos de línea <br>
+    
     fig.update_layout(
-        xaxis={'title': "Functional Enrichment Terms (Grouped by Source)", 'tickmode': 'array', 'tickvals': source_labels['center'], 'ticktext': source_labels['source'], 'showgrid': False, 'zeroline': False, 'tickangle': 0},
+        xaxis={
+            'title': "Functional Enrichment Terms (Grouped by Source)", 
+            'tickmode': 'array', 
+            'tickvals': source_labels['center'], 
+            'ticktext': source_labels['source'], # Usamos el texto limpio
+            'showgrid': False, 
+            'zeroline': False, 
+            'tickangle': -45  # <--- ROTACIÓN APLICADA AQUÍ
+        },
         yaxis={'title': '-log10(P-value)', 'automargin': True},
         showlegend=True,
         height=550,
-        margin={'t': 30, 'b': 80, 'l': 50, 'r': 10}, 
-        plot_bgcolor='white'
+        # Aumentamos el margen inferior ('b') para dar espacio al texto rotado
+        margin={'t': 30, 'b': 120, 'l': 50, 'r': 10}, 
+        plot_bgcolor='white',
+        dragmode='pan',      
+        hovermode='closest'  
     )
 
     fig.add_hline(y=y_threshold, line_dash="dot", line_color="red", annotation_text=line_name, annotation_position="top right")
@@ -109,9 +129,26 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         marker=dict(opacity=0.6, line=dict(width=0.5, color='DarkSlateGrey')),
         hovertemplate="<b>Term:</b> %{customdata[0]}<br><b>Source:</b> %{customdata[3]}<br><b>-log10(P-value):</b> %{y:.2f}<br><b>P-value:</b> %{customdata[1]:.2e}<br><b>Genes Matched:</b> %{customdata[2]}<br><b>Gold Standard:</b> %{customdata[4]}<br><extra></extra>"
     )
+
+    fig.update_xaxes(
+        showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,
+        showspikes=True, 
+        spikethickness=1, 
+        spikedash='dot', 
+        spikemode='across', 
+        spikecolor='#888888'
+    )
+    
+    fig.update_yaxes(
+        showgrid=True, gridwidth=1, gridcolor='lightgray', automargin=True,
+        showspikes=True, 
+        spikethickness=1, 
+        spikedash='dot', 
+        spikemode='across',
+        spikecolor='#888888'
+    )
+    
     return fig
-
-
 # --- FUNCIÓN DE HEATMAP ---
 def process_data_for_gene_term_heatmap(stored_data, threshold=0.05, max_terms=50):
     results = stored_data.get('results', [])
