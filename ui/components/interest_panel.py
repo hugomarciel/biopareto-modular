@@ -1,3 +1,4 @@
+#ui/commponents/interest_panel.py
 """
 Interest Panel Component
 """

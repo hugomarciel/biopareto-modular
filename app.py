@@ -197,7 +197,7 @@ def create_interest_panel():
                 html.P("No items added yet", className="text-muted text-center py-4")
             ])
         ], style={'maxHeight': '600px', 'overflowY': 'auto'})
-    ], className="sticky-top")
+    ], className="sticky-top border-3")
 
 # Placeholder para la pestaña Export (A MOVER)
 def create_export_tab():
@@ -715,7 +715,7 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
     prevent_initial_call=True
 )
 def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, single_solution_data, comment, current_items, data_store):
-    """Update interest panel store when modal confirmation occurs"""
+    """Update interest panel store when modal confirmation occurs (Standardized)."""
     if not confirm_clicks:
         raise PreventUpdate
 
@@ -723,7 +723,8 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
         current_items = []
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+    
+    # Recuperar diccionario maestro de soluciones para completar datos faltantes
     all_solutions_dict = {}
     if data_store:
         for front in data_store.get("fronts", []):
@@ -739,7 +740,6 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
     elif selected_solutions and single_solution_data is None: 
         solutions_to_add = [sol['full_data'] for sol in selected_solutions]
     else:
-        # 🔑 CORRECCIÓN: Si no hay data para guardar, limpia y aborta.
         return dash.no_update, None
 
     if not solutions_to_add:
@@ -747,6 +747,7 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
         
     final_solutions = []
     for sol in solutions_to_add:
+        # Asegurar que existan campos críticos
         if 'front_name' not in sol:
             found_front_name = next((f['name'] for f in data_store.get('fronts', []) for s in f['data'] if s.get('solution_id') == sol.get('solution_id')), "Unknown Front")
             sol['front_name'] = found_front_name
@@ -759,29 +760,37 @@ def update_interest_panel_store_from_modal(confirm_clicks, selected_solutions, s
             
         final_solutions.append(sol)
         
-
+    # CREACIÓN DEL ÍTEM ESTANDARIZADO
     if is_single_solution:
         sol = final_solutions[0]
         new_item = {
             'type': 'solution',
             'id': f"sol_{sol.get('solution_id', 'N/A')}_{timestamp}",
-            'name': f"{sol.get('solution_id', 'N/A')} (from {sol.get('front_name', 'N/A')})",
+            'name': f"Solution {sol.get('solution_id', 'N/A')}", # Nombre limpio
             'comment': comment or "",
+            'tool_origin': 'Pareto Plot', # <--- NUEVO CAMPO
             'data': sol,
             'timestamp': timestamp
         }
-        # 🔑 CORRECCIÓN: Limpia el Store Temporal (None) y devuelve el Store principal.
         return current_items + [new_item], None
     else:
+        # Calcular genes únicos para el set
+        all_genes_in_set = set()
+        for s in final_solutions:
+            all_genes_in_set.update(s.get('selected_genes', []))
+            
         new_item = {
             'type': 'solution_set',
             'id': f"set_{len(current_items)}_{timestamp}",
-            'name': f"Solution Set ({len(final_solutions)} solutions)",
+            'name': f"Solution Set ({len(final_solutions)})", # Nombre limpio
             'comment': comment or "",
-            'data': {'solutions': final_solutions},
+            'tool_origin': 'Pareto Plot (Multi-select)', # <--- NUEVO CAMPO
+            'data': {
+                'solutions': final_solutions,
+                'unique_genes_count': len(all_genes_in_set) # Pre-calcular
+            },
             'timestamp': timestamp
         }
-        # 🔑 CORRECCIÓN: Limpia el Store Temporal (None) y devuelve el Store principal.
         return current_items + [new_item], None
 
 @app.callback(
@@ -1011,7 +1020,7 @@ def confirm_gene_group_addition(confirm_clicks, cancel_clicks, temp_data, group_
     prevent_initial_call=True
 )
 def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_group_data, individual_gene_data, comment, current_items):
-    """Confirm and add genes to interest panel from Genes tab, and clear context."""
+    """Confirm and add genes to interest panel (Standardized)."""
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -1022,35 +1031,36 @@ def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_grou
         current_items = []
 
     if trigger_id == 'genes-tab-cancel-btn':
-        # 🔑 CORRECCIÓN MODAL: Cierra modal y limpia stores temporales.
         return dash.no_update, None, None, False, "", ""
 
     if trigger_id == 'genes-tab-confirm-btn':
-
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if gene_group_data:
+            # Determinar origen basado en el nombre o datos
+            origin = 'Gene Frequency Analysis' if 'frequency' in gene_group_data else 'Filtered Table Analysis'
+            
             new_item = {
                 'type': 'gene_set',
                 'id': f"gene_set_{len(current_items)}_{timestamp}",
                 'name': gene_group_data['name'],
-                'comment': comment or gene_group_data.get('frequency', ''),
+                'comment': comment or "",
+                'tool_origin': origin, # <--- NUEVO CAMPO
                 'data': gene_group_data,
                 'timestamp': timestamp
             }
-            # Cierra modal, limpia stores temporales, y guarda item
             return current_items + [new_item], None, None, False, "", ""
 
         elif individual_gene_data:
             new_item = {
                 'type': 'individual_gene',
                 'id': f"gene_{individual_gene_data['gene']}_{timestamp}",
-                'name': f"Gene: {individual_gene_data['gene']}",
-                'comment': comment or f"Gene from {individual_gene_data['source']}",
+                'name': f"{individual_gene_data['gene']}",
+                'comment': comment or "",
+                'tool_origin': 'Genes Tab (Individual)', # <--- NUEVO CAMPO
                 'data': individual_gene_data,
                 'timestamp': timestamp
             }
-            # Cierra modal, limpia stores temporales, y guarda item
             return current_items + [new_item], None, None, False, "", ""
 
     raise PreventUpdate
@@ -1060,7 +1070,7 @@ def confirm_genes_tab_addition_to_panel(confirm_clicks, cancel_clicks, gene_grou
     Input('interest-panel-store', 'data')
 )
 def render_interest_panel_content(items):
-    """Render the visual content of the interest panel based on stored items"""
+    """Render the visual content of the interest panel using Standardized Cards."""
     if not items or len(items) == 0:
         return html.P("No items added yet", className="text-muted text-center py-4")
 
@@ -1069,49 +1079,161 @@ def render_interest_panel_content(items):
         item_type = item.get('type', 'unknown')
         item_name = item.get('name', 'Unknown Item')
         item_comment = item.get('comment', '')
-        item_timestamp = item.get('timestamp', '')
+        item_origin = item.get('tool_origin', 'Manual Selection')
+        
+        # --- LÓGICA DE ESTANDARIZACIÓN VISUAL ---
+        # 1. Definir Colores e Iconos
+        if item_type == 'solution':
+            badge_color, icon = "primary", "🔵"
+            badge_text = "Solution"
+        elif item_type == 'solution_set':
+            badge_color, icon = "info", "📦"
+            badge_text = "Set"
+        elif item_type == 'gene_set':
+            badge_color, icon = "success", "🧬"
+            badge_text = "Gene Group"
+        elif item_type == 'individual_gene':
+            badge_color, icon = "warning", "🔬"
+            badge_text = "Gene"
+        elif item_type == 'combined_gene_group':
+            badge_color, icon = "dark", "🎯"
+            badge_text = "Combined"
+        else:
+            badge_color, icon = "secondary", "❓"
+            badge_text = "Unknown"
+
+        # 2. Construir Línea de Estadísticas (Genes | Fuente)
+        stats_line = None
+        context_line = None
+        
+        data = item.get('data', {})
 
         if item_type == 'solution':
-            badge = dbc.Badge("Solution", color="primary", className="me-2")
+            n_genes = len(data.get('selected_genes', []))
+            source = data.get('front_name', 'Unknown Front')
+            
+            # --- CORRECCIÓN ERROR N/A ---
+            # Solo mostramos la línea de error si el valor existe y no es None
+            error_val = data.get('error_value')
+            if error_val is not None:
+                try:
+                    err = round(float(error_val), 4)
+                    context_line = f"Error: {err}"
+                except (ValueError, TypeError):
+                    context_line = None
+            else:
+                context_line = None
+
+            stats_line = html.Div([
+                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span("|", className="text-muted me-2"),
+                html.Span(f"Source: {source}", className="text-muted")
+            ], className="small mb-1")
+
         elif item_type == 'solution_set':
-            badge = dbc.Badge("Solution Set", color="info", className="me-2")
+            if 'unique_genes_count' in data:
+                n_genes = data['unique_genes_count']
+            else:
+                sols = data.get('solutions', [])
+                all_g = set()
+                for s in sols: all_g.update(s.get('selected_genes', []))
+                n_genes = len(all_g)
+            
+            n_sols = len(data.get('solutions', []))
+            stats_line = html.Div([
+                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span("|", className="text-muted me-2"),
+                html.Span(f"Solutions: {n_sols}", className="text-muted")
+            ], className="small mb-1")
+
         elif item_type == 'gene_set':
-            badge = dbc.Badge("Gene Group", color="success", className="me-2")
-        elif item_type == 'individual_gene':
-            badge = dbc.Badge("Gene", color="warning", className="me-2")
+            n_genes = len(data.get('genes', []))
+            freq = data.get('frequency', None)
+            
+            if freq:
+                right_text = f"Freq: {freq}%"
+            else:
+                right_text = "Source: Table"
+                
+            stats_line = html.Div([
+                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span("|", className="text-muted me-2"),
+                html.Span(right_text, className="text-muted")
+            ], className="small mb-1")
+
         elif item_type == 'combined_gene_group':
-            badge = dbc.Badge("Combined Group", color="success", className="me-2")
-        else:
-            badge = dbc.Badge("Unknown", color="secondary", className="me-2")
+            n_genes = data.get('gene_count', len(data.get('genes', [])))
+            n_sources = len(data.get('source_items', []))
+            stats_line = html.Div([
+                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span("|", className="text-muted me-2"),
+                html.Span(f"Sources: {n_sources}", className="text-muted")
+            ], className="small mb-1")
 
-        extra_info = ""
-        if item_type == 'combined_gene_group':
-            gene_count = item.get('data', {}).get('gene_count', 0)
-            source_count = len(item.get('data', {}).get('source_items', []))
-            extra_info = html.Div([
-                html.P(f"Genes: {gene_count} | Sources: {source_count}",
-                       className="small text-muted mb-1")
-            ])
+        elif item_type == 'individual_gene':
+            gene_id = data.get('gene', 'Unknown')
+            source = data.get('source', 'Unknown')
+            stats_line = html.Div([
+                html.Span(f"ID: {gene_id}", className="fw-bold me-2"),
+                html.Span("|", className="text-muted me-2"),
+                html.Span(f"From: {source}", className="text-muted")
+            ], className="small mb-1")
 
+        # 3. Ensamblar Tarjeta
         item_card = dbc.Card([
+            # Agregamos 'position-relative' al body para que el botón X se posicione respecto a él
             dbc.CardBody([
-                html.Div([
-                    badge,
-                    html.Strong(item_name, className="d-inline-block"),
+                
+                # --- BOTÓN DE ELIMINAR (MEJORADO) ---
+                html.Div(
                     dbc.Button(
                         "×",
                         id={'type': 'remove-interest-item', 'index': idx},
                         color="link",
-                        size="sm",
-                        className="float-end text-danger p-0",
-                        style={'fontSize': '1.5rem', 'lineHeight': '1'}
-                    )
-                ], className="mb-2"),
-                extra_info,
-                html.P(item_comment, className="small text-muted mb-1") if item_comment else None,
-                html.P(f"Added: {item_timestamp}", className="small text-muted mb-0")
-            ])
-        ], className="mb-2")
+                        className="text-muted text-decoration-none p-0 hover-danger",
+                        style={
+                            'fontSize': '1.5rem',     # Más grande
+                            'lineHeight': '0.8',      # Altura de línea compacta
+                            'fontWeight': 'bold'
+                        }
+                    ),
+                    style={
+                        'position': 'absolute',   # Posición absoluta
+                        'top': '5px',             # Pegado arriba
+                        'right': '8px',           # Pegado a la derecha
+                        'zIndex': '10',           # Encima del contenido
+                        'cursor': 'pointer'
+                    },
+                    title="Remove item"
+                ),
+
+                # Header (Con margen a la derecha para no chocar con la X)
+                html.Div([
+                    html.Span(icon, className="me-2"),
+                    dbc.Badge(badge_text, color=badge_color, className="me-2"),
+                    # Título truncado para que no se encime
+                    html.Strong(item_name, style={'fontSize': '0.95rem'}, className="text-truncate d-inline-block w-75"),
+                ], className="d-flex align-items-center mb-2 pe-3"), # Padding-end extra
+                
+                html.Hr(className="my-1"),
+                
+                # Stats Standard Line
+                stats_line,
+                
+                # Extra Context (Solo si existe)
+                html.Div(context_line, className="small text-danger fst-italic mb-1") if context_line else None,
+                
+                # User Comment
+                html.P(f"\"{item_comment}\"", className="small text-muted mb-1 fst-italic bg-light p-1 rounded") if item_comment else None,
+                
+                # Footer (Origin Tool)
+                html.Div([
+                    html.I(className="bi bi-diagram-2 me-1"),
+                    html.Span(f"Added via: {item_origin}")
+                ], className="d-flex justify-content-end text-muted", style={'fontSize': '0.7rem'})
+
+            ], className="p-2 position-relative") # <--- CLAVE: position-relative
+        ], className="mb-2 shadow-sm border-start border-2", style={'borderLeftColor': f"var(--bs-{badge_color})"})
 
         panel_items.append(item_card)
 
