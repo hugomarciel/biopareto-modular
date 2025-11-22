@@ -320,7 +320,7 @@ def register_enrichment_callbacks(app):
         raise PreventUpdate
 
 
-    # 1.5. Callback de Renderizado Real
+    # 1.5. Callback de Renderizado Visual (ESTILO REPLICADO DE GGA)
     @app.callback(
         Output('enrichment-visual-selector', 'children'),
         Input('enrichment-render-trigger-store', 'data'), 
@@ -330,6 +330,9 @@ def register_enrichment_callbacks(app):
          State('data-store', 'data')]
     )
     def render_visual_enrichment_selector(trigger_data, items, selected_indices_list, active_tab, data_store):
+        """
+        Render visual card-based selector matching the Interest Panel standard exactly like Gene Groups Tab.
+        """
         if active_tab != 'enrichment-tab':
              raise PreventUpdate 
 
@@ -337,106 +340,161 @@ def register_enrichment_callbacks(app):
             return html.P("No items available. Add solutions, genes, or gene groups to your Interest Panel first.",
                          className="text-muted text-center py-4")
 
-        all_solutions_dict = {}
-        if data_store:
-            for front in data_store.get("fronts", []):
-                for sol in front["data"]:
-                    all_solutions_dict[sol['solution_id']] = sol
-        
         if selected_indices_list is None:
             selected_indices_list = []
 
         cards = []
         for idx, item in enumerate(items):
             item_type = item.get('type', '')
-            item_name = item.get('name', '')
+            item_name = item.get('name', 'Unknown')
             item_comment = item.get('comment', '')
+            item_origin = item.get('tool_origin', 'Manual Selection')
+            data = item.get('data', {})
 
+            # Filtrar tipos válidos
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
-            
+
+            # --- LÓGICA DE ESTANDARIZACIÓN (IDÉNTICA A GGA / APP.PY) ---
+            # 1. Definir Estilos
             if item_type == 'solution':
-                badge_color, badge_text, icon = "primary", "Solution", "🔵"
-                sol_data = item.get('data', {})
-                sol_id = sol_data.get('id', 'Unknown')
-                genes = sol_data.get('selected_genes', [])
-                if not genes and sol_id in all_solutions_dict:
-                    genes = all_solutions_dict[sol_id].get('selected_genes', [])
-                gene_count = len(genes)
-                front_name = sol_data.get('front_name', 'Unknown')
-                description = f"{gene_count} genes | {front_name}"
+                badge_color, icon, badge_text = "primary", "🔵", "Solution"
             elif item_type == 'solution_set':
-                badge_color, badge_text, icon = "info", "Solution Set", "📦"
-                solutions = item.get('data', {}).get('solutions', [])
-                unique_genes = set()
-                for sol in solutions:
-                    sol_id = sol.get('id', '')
-                    genes = sol.get('selected_genes', [])
-                    if not genes and sol_id in all_solutions_dict:
-                        genes = all_solutions_dict[sol_id].get('selected_genes', [])
-                    unique_genes.update(genes)
-                gene_count = len(unique_genes)
-                description = f"{len(solutions)} solutions | {gene_count} unique genes"
+                badge_color, icon, badge_text = "info", "📦", "Set"
             elif item_type == 'gene_set':
-                badge_color, badge_text, icon = "success", "Gene Group", "🧬"
-                genes = item.get('data', {}).get('genes', [])
-                frequency = item.get('data', {}).get('frequency', 'N/A')
-                description = f"{len(genes)} genes | Freq: {frequency}%"
+                badge_color, icon, badge_text = "success", "🧬", "Gene Group"
             elif item_type == 'individual_gene':
-                badge_color, badge_text, icon = "warning", "Gene", "🔬"
-                gene = item.get('data', {}).get('gene', 'Unknown')
-                description = f"Gene: {gene}"
+                badge_color, icon, badge_text = "warning", "🔬", "Gene"
             elif item_type == 'combined_gene_group':
-                badge_color, badge_text, icon = "success", "Combined Group", "🎯"
-                gene_count = item.get('data', {}).get('gene_count', 0)
-                source_count = len(item.get('data', {}).get('source_items', []))
-                description = f"{gene_count} genes | {source_count} sources"
+                badge_color, icon, badge_text = "dark", "🎯", "Combined"
             else:
-                continue
+                badge_color, icon, badge_text = "secondary", "❓", "Unknown"
 
-            # Lógica de Estilo Condicional (Para coincidir con el clientside callback)
-            is_selected_bool = idx in selected_indices_list
-            is_selected_value = [idx] if is_selected_bool else []
+            # 2. Definir Línea Estadística (Genes | Contexto)
+            stats_text_left = ""
+            stats_text_right = ""
+
+            if item_type == 'solution':
+                genes = data.get('selected_genes', [])
+                # Si faltan genes en el item, intentar buscarlos en el data_store general (fallback)
+                if not genes and data_store:
+                    # Lógica de recuperación auxiliar (opcional pero recomendada)
+                    pass 
+                
+                stats_text_left = f"Genes: {len(genes)}"
+                stats_text_right = f"Source: {data.get('front_name', 'Front?')}"
+                
+            elif item_type == 'solution_set':
+                # Soporte robusto para items antiguos y nuevos
+                n_genes = data.get('unique_genes_count', 0)
+                if n_genes == 0 and 'solutions' in data:
+                     unique_g = set()
+                     for s in data['solutions']: unique_g.update(s.get('selected_genes', []))
+                     n_genes = len(unique_g)
+                
+                stats_text_left = f"Genes: {n_genes}"
+                stats_text_right = f"Solutions: {len(data.get('solutions', []))}"
+
+            elif item_type == 'gene_set':
+                stats_text_left = f"Genes: {len(data.get('genes', []))}"
+                freq = data.get('frequency')
+                stats_text_right = f"Freq: {freq}%" if freq else "Source: Table"
+
+            elif item_type == 'individual_gene':
+                stats_text_left = f"ID: {data.get('gene')}"
+                stats_text_right = f"Src: {data.get('source', 'Unknown')}"
+
+            elif item_type == 'combined_gene_group':
+                stats_text_left = f"Genes: {data.get('gene_count', 0)}"
+                stats_text_right = f"Sources: {len(data.get('source_items', []))}"
+
+            # 3. Estado de Selección
+            is_selected = idx in selected_indices_list
             
-            if is_selected_bool:
-                # ESTILO SELECCIONADO
-                card_style = {'transition': 'all 0.2s ease-in-out', 'border': '2px solid #0d6efd', 'backgroundColor': '#f0f8ff', 'transform': 'scale(1.02)', 'cursor': 'pointer'}
-                card_class_name = "h-100 shadow"
+            # Clases y Estilos dinámicos (Coinciden con el Clientside Callback)
+            if is_selected:
+                card_style = {
+                    'transition': 'all 0.2s ease-in-out', 
+                    'border': '2px solid #0d6efd', 
+                    'backgroundColor': '#f0f8ff', 
+                    'transform': 'scale(1.02)', 
+                    'cursor': 'pointer'
+                }
+                card_class = "h-100 shadow"
             else:
-                # ESTILO NORMAL
-                card_style = {'transition': 'all 0.2s ease-in-out', 'border': '1px solid rgba(0,0,0,0.125)', 'backgroundColor': 'white', 'transform': 'scale(1)', 'cursor': 'pointer'}
-                card_class_name = "h-100 shadow-sm hover-shadow"
+                card_style = {
+                    'transition': 'all 0.2s ease-in-out', 
+                    'border': '1px solid rgba(0,0,0,0.125)', 
+                    'backgroundColor': 'white', 
+                    'transform': 'scale(1)', 
+                    'cursor': 'pointer'
+                }
+                card_class = "h-100 shadow-sm hover-shadow"
 
+            # 4. Construcción de la Tarjeta (Diseño Grid IDÉNTICO A GGA)
             card = dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        html.Div(dbc.Checklist(
-                            options=[{"label": "", "value": idx}],
-                            value=is_selected_value, 
-                            id={'type': 'enrichment-card-checkbox', 'index': idx}, 
-                            switch=True,
-                            style={'transform': 'scale(1.3)'}
-                        ), style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
+                        # Checkbox (Posición Absoluta)
                         html.Div([
+                            dbc.Checklist(
+                                options=[{"label": "", "value": idx}],
+                                value=[idx] if is_selected else [],
+                                id={'type': 'enrichment-card-checkbox', 'index': idx}, # ID Específico de Enrichment
+                                switch=True,
+                                style={'transform': 'scale(1.3)'}
+                            )
+                        ], style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
+
+                        html.Div([
+                            # Header
                             html.Div([
                                 html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
-                                dbc.Badge(badge_text, color=badge_color, className="ms-1", style={'fontSize': '0.7rem'})
-                            ], className="d-flex align-items-center mb-1"),
-                            html.Strong(item_name, className="d-block mb-1", style={'fontSize': '0.9rem'}),
-                            html.P(description, className="text-muted small mb-1", style={'fontSize': '0.75rem'}),
-                            html.P(item_comment, className="text-muted small fst-italic mb-0", style={'fontSize': '0.7rem'}) if item_comment else None
-                        ], style={'paddingRight': '40px'})
-                    ], className="p-2", style={'minHeight': '120px', 'position': 'relative'})
-                ], 
-                id={'type': 'enrichment-card-wrapper', 'index': idx}, # ID CLAVE para el clientside callback
-                className=card_class_name,
+                                dbc.Badge(badge_text, color=badge_color, style={'fontSize': '0.75rem'}),
+                            ], className="d-flex align-items-center mb-2"),
+                            
+                            # Título truncado
+                            html.H6(
+                                item_name, 
+                                className="fw-bold mb-2 text-truncate", 
+                                title=item_name, 
+                                style={'maxWidth': '90%'} 
+                            ),
+                            
+                            html.Hr(className="my-2"),
+                            
+                            # Stats Line
+                            html.Div([
+                                html.Span(stats_text_left, className="fw-bold text-primary"),
+                                html.Span(" | ", className="text-muted mx-1"),
+                                html.Span(stats_text_right, className="text-muted text-truncate", style={'maxWidth': '120px', 'display': 'inline-block', 'verticalAlign': 'bottom'})
+                            ], className="small mb-2"),
+                            
+                            # Comentario
+                            html.P(
+                                item_comment, 
+                                className="text-muted small fst-italic mb-0 text-truncate",
+                                title=item_comment
+                            ) if item_comment else None,
+                                   
+                             # Footer
+                            html.Div([
+                                html.Small(f"Via: {item_origin}", className="text-muted", style={'fontSize': '0.65rem'})
+                            ], className="mt-2 pt-1 border-top")
+
+                        ], style={'paddingRight': '25px'}) 
+                    ], className="p-3")
+                ],
+                id={'type': 'enrichment-card-wrapper', 'index': idx}, # ID para Clientside Callback
+                className=card_class, 
                 style=card_style)
-            ], width=12, md=6, lg=3, className="mb-3")
-            
+            ], width=12, md=6, lg=4, xl=3, className="mb-3") # Grid Adaptativo igual a GGA
+
             cards.append(card)
 
         if not cards:
             return html.P("No compatible items found.", className="text-muted text-center py-4")
+        
         return dbc.Row(cards, className="g-3")
 
 
