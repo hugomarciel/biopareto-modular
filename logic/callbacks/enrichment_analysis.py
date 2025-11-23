@@ -403,7 +403,7 @@ def register_enrichment_callbacks(app):
             elif item_type == 'individual_gene':
                 badge_color, icon, badge_text = "warning", "🔬", "Gene"
             elif item_type == 'combined_gene_group':
-                badge_color, icon, badge_text = "dark", "🎯", "Combined"
+                badge_color, icon, badge_text = "success", "🎯", "Combined"
             else:
                 badge_color, icon, badge_text = "secondary", "❓", "Unknown"
 
