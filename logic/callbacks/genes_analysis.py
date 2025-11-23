@@ -154,7 +154,7 @@ def register_genes_analysis_callbacks(app):
 
         return combined_analysis, genes_df.to_json(orient='split')
 
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CON ESTILO DE FILTROS DESTACADO) ---
+    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (POPOVER ESTILO UNIFICADO) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
@@ -183,9 +183,7 @@ def register_genes_analysis_callbacks(app):
 
         table_columns = []
         for col in genes_df.columns:
-            # Ocultar ID largo
             if col == 'unique_solution_id': continue 
-                
             column_name = col.replace('_', ' ').title()
             col_def = {'name': column_name, 'id': col, 'hideable': True}
             
@@ -198,82 +196,62 @@ def register_genes_analysis_callbacks(app):
             
             table_columns.append(col_def)
             
-        # --- SECCIÓN DE CONTROLES (TOOLBAR) ---
+        # Toolbar
         controls_toolbar = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
-                    # Columna 1: Filtro de Frente
                     dbc.Col([
                         dbc.Label("1. Filter by Front", className="small text-uppercase text-muted fw-bold"),
-                        dcc.Dropdown(
-                            id='genes-global-front-filter',
-                            options=front_filter_options,
-                            value='all',
-                            clearable=False,
-                            className="shadow-sm"
-                        )
+                        dcc.Dropdown(id='genes-global-front-filter', options=front_filter_options, value='all', clearable=False, className="shadow-sm")
                     ], width=12, md=4, className="mb-2 mb-md-0"),
-                    
-                    # Columna 2: Selector de Métrica
                     dbc.Col([
                         dbc.Label("2. Select Metric to Plot", className="small text-uppercase text-muted fw-bold"),
-                        dcc.Dropdown(
-                            id='genes-table-graph-metric-select',
-                            options=metric_options,
-                            value='gene',
-                            className="shadow-sm"
-                        )
+                        dcc.Dropdown(id='genes-table-graph-metric-select', options=metric_options, value='gene', className="shadow-sm")
                     ], width=12, md=5, className="mb-2 mb-md-0"),
-
-                    # Columna 3: Acción
                     dbc.Col([
                         dbc.Label("Action", className="small text-uppercase text-muted fw-bold d-block"),
-                        dbc.Button(
-                            [html.I(className="bi bi-bookmark-plus me-2"), "Save Visible"],
-                            id='save-graph-group-btn',
-                            color="primary",
-                            outline=False,
-                            size="md",
-                            className="w-100 shadow-sm"
-                        )
+                        dbc.Button([html.I(className="bi bi-bookmark-plus me-2"), "Save Visible"], id='save-graph-group-btn', color="primary", size="md", className="w-100 shadow-sm")
                     ], width=12, md=3)
                 ])
             ], className="p-3") 
         ], className="bg-light border-0 mb-3")
 
-        # --- SECCIÓN GRÁFICA ---
-        graph_section = dcc.Loading(
-            id="loading-genes-histogram",
-            type="default",
-            children=dcc.Graph(
-                id='genes-table-histogram',
-                config={'displayModeBar': False},
-                style={'height': '400px'}
-            )
-        )
+        graph_section = dcc.Loading(id="loading-genes-histogram", type="default", children=dcc.Graph(id='genes-table-histogram', config={'displayModeBar': False}, style={'height': '400px'}))
         
-        # --- POPOVER DE AYUDA ---
+        # --- POPOVER UNIFICADO: Table Filtering Help ---
         filter_help_popover = dbc.Popover(
             [
                 dbc.PopoverHeader("Table Filtering & Sorting Help"), 
                 dbc.PopoverBody([
-                    html.P("You can filter and sort each column using filters in the first row of the table:", className="mb-2"),
-                    html.Strong("To Sort:"),
-                    html.Ul([html.Li("Click the arrows (▲/▼) in the column header to sort ascending or descending.")], className="mt-1 mb-3"),
-                    html.Strong("To Filter Text Columns:"), 
-                    html.Ul([
-                        html.Li(["Type a value (e.g., ", html.Code("TP53"), ") for an exact match."]),
-                        html.Li(["Use ", html.Code("contains ..."), " (e.g., ", html.Code("contains TP"), ") to find sub-strings."]),
-                        html.Li(["Use ", html.Code("ne ..."), " or ", html.Code("!= ..."), " to exclude."]),
-                    ], className="mt-1 mb-3"),
-                    html.Strong("To Filter Numeric Columns:"), 
-                    html.Ul([
-                        html.Li(["Use ", html.Code("> 0.8"), ", ", html.Code("<= 10")]),
-                        html.Li(["Use ", html.Code("= 5"), " (ideal for integers)."]),
-                        html.Li(["For decimals (e.g., 0.089), it's safer to use ranges: ", html.Code("> 0.0885"), " or ", html.Code("< 0.0895")]),
-                    ], className="mt-1 mb-3"),
-                    html.P("You can combine filters across multiple columns.", className="mb-0"), 
-                    html.P("Use the 'Clear All Filters' button to reset.", className="mb-0") 
+                    html.Div([
+                        html.Strong("To Sort:"),
+                        html.Span(" Click the arrows (▲/▼) in the column header to sort ascending or descending.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Text Filters:"),
+                        html.Span(" Type a value (e.g., ", className="small text-muted"),
+                        html.Code("TP53", className="small"),
+                        html.Span(") for exact match. Use ", className="small text-muted"),
+                        html.Code("contains TP", className="small"),
+                        html.Span(" or ", className="small text-muted"),
+                        html.Code("!= val", className="small"),
+                        html.Span(" to exclude.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Numeric Filters:"),
+                        html.Span(" Use operators like ", className="small text-muted"),
+                        html.Code("> 0.8", className="small"),
+                        html.Span(", ", className="small text-muted"),
+                        html.Code("<= 10", className="small"),
+                        html.Span(" or ranges.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Tips:"),
+                        html.Span(" Combine filters across columns. Use the 'Clear All Filters' button to reset.", className="small text-muted")
+                    ], className="mb-0"),
                 ])
             ],
             id="filter-help-popover",
@@ -282,7 +260,6 @@ def register_genes_analysis_callbacks(app):
             placement="bottom-start",
         )
         
-        # --- TABLA DE DATOS ---
         table = dash_table.DataTable(
             id='detailed-genes-table',
             data=genes_df.to_dict('records'),
@@ -292,48 +269,23 @@ def register_genes_analysis_callbacks(app):
             page_action='native',
             page_size=15, 
             style_table={'overflowX': 'auto'},
+            style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6'},
+            style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
             style_cell={'textAlign': 'left', 'padding': '8px', 'fontFamily': 'sans-serif', 'fontSize': '0.9rem'},
-            
-            # Estilo de Cabecera
-            style_header={
-                'backgroundColor': '#f8f9fa',
-                'color': '#333',
-                'fontWeight': 'bold',
-                'borderBottom': '2px solid #dee2e6'
-            },
-            
-            # --- 💡 AQUÍ ESTÁ EL CAMBIO: Estilo de Filtros Destacado ---
-            style_filter={
-                'backgroundColor': 'rgb(220, 235, 255)', # Azul claro idéntico al acordeón
-                'border': '1px solid rgb(180, 200, 220)',
-                'fontWeight': 'bold',
-                'color': '#333'
-            },
-            # ----------------------------------------------------------
-            
             style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
         )
 
-        # --- ENSAMBLADO FINAL ---
         return html.Div([
             controls_toolbar,
-            
-            # KPI Cards (Resumen)
             dcc.Loading(html.Div(id='genes-table-summary-panel'), type="circle", color="#0d6efd"),
-            
-            # Gráfico colapsable visualmente
             html.Div(graph_section, className="mb-3 border rounded p-2"),
-            
-            # Cabecera Tabla
             html.Div([
                 html.Div([
                     html.H6("Detailed Data", className="fw-bold m-0"),
                     html.I(id="genes-filter-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'}),
                 ], className="d-flex align-items-center"),
-                
                 dbc.Button("Clear Filters", id='genes-table-clear-filters-btn', size="sm", color="secondary", outline=True)
             ], className="d-flex justify-content-between align-items-center mb-2 mt-4"),
-            
             filter_help_popover,
             table
         ])
@@ -358,26 +310,26 @@ def register_genes_analysis_callbacks(app):
         return filtered_df.to_dict('records')
         
 
-    # --- CALLBACK 4: MOSTRAR DETALLE EXPANDIDO (OPTIMIZADO: SOLO DEPENDE DE CLICKDATA) ---
+    # --- CALLBACK 4: MOSTRAR DETALLE EXPANDIDO (POPOVER ESTILO UNIFICADO) ---
     @app.callback(
         Output('frequency-detail-wrapper', 'children'),
-        [Input('gene-frequency-chart', 'clickData')], # 💡 CAMBIO: Ya no escucha el botón aquí
+        [Input('gene-frequency-chart', 'clickData'),
+         Input({'type': 'close-freq-detail-btn', 'index': ALL}, 'n_clicks')], 
         [State('data-store', 'data')]
     )
-    def display_clicked_genes_expanded(clickData, data):
+    def display_clicked_genes_expanded(clickData, close_clicks_list, data):
         """
         Genera una tarjeta detallada (Accordion Style) debajo del gráfico.
-        Se activa cuando cambia clickData (incluyendo cuando se resetea a None).
         """
-        # Si clickData es None (porque se reseteó), devolvemos vacío (Cerrar)
-        if not clickData or not data:
-            return []
+        ctx = dash.callback_context
+        if not ctx.triggered: return []
+        trigger_id_dict = ctx.triggered_id
+        if trigger_id_dict and isinstance(trigger_id_dict, dict) and trigger_id_dict.get('type') == 'close-freq-detail-btn': return []
+        if not clickData or not data: return []
 
-        # 1. Reconstruir datos
         all_solutions_list = []
         for front in data.get("fronts", []):
-            if front.get("visible", True):
-                all_solutions_list.extend(front["data"])
+            if front.get("visible", True): all_solutions_list.extend(front["data"])
 
         clicked_percentage = clickData['points'][0]['x']
         all_genes = [gene for solution in all_solutions_list for gene in solution.get('selected_genes', [])]
@@ -391,21 +343,33 @@ def register_genes_analysis_callbacks(app):
             if percentage == clicked_percentage:
                 genes_at_percentage.append({'gene': gene, 'count': count, 'frequency': f"{percentage}%"})
 
-        if not genes_at_percentage:
-            return []
-
+        if not genes_at_percentage: return []
         genes_at_percentage.sort(key=lambda x: (-x['count'], x['gene']))
         
-        # 2. Construir Componentes de UI (Con Popover de Ayuda)
+        # --- POPOVER UNIFICADO: Filter Syntax Guide ---
         freq_help_popover = dbc.Popover(
             [
                 dbc.PopoverHeader("Filter Syntax Guide"), 
                 dbc.PopoverBody([
-                    html.Small("Filter the table using these operators:", className="d-block mb-2"),
-                    html.Ul([
-                        html.Li(["Text: ", html.Code("TP53"), " or ", html.Code("contains TP")]),
-                        html.Li(["Numbers: ", html.Code("> 5"), ", ", html.Code("<= 10"), " or ", html.Code("= 20")]),
-                    ], className="ps-3 small mb-0")
+                    html.Div([
+                        html.Strong("Text Filters:"),
+                        html.Span(" Type ", className="small text-muted"),
+                        html.Code("TP53", className="small"),
+                        html.Span(" or ", className="small text-muted"),
+                        html.Code("contains TP", className="small"),
+                        html.Span(".", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Numeric Filters:"),
+                        html.Span(" Use ", className="small text-muted"),
+                        html.Code("> 5", className="small"),
+                        html.Span(", ", className="small text-muted"),
+                        html.Code("<= 10", className="small"),
+                        html.Span(" or ", className="small text-muted"),
+                        html.Code("= 20", className="small"),
+                        html.Span(".", className="small text-muted")
+                    ], className="mb-0")
                 ])
             ],
             id="freq-table-help-popover",
@@ -420,65 +384,28 @@ def register_genes_analysis_callbacks(app):
                     html.I(className="bi bi-diagram-2-fill me-2 text-primary"),
                     f"Group: {clicked_percentage}% Frequency ",
                     dbc.Badge(f"{len(genes_at_percentage)} Genes", color="light", text_color="primary", className="ms-1 border"),
-                    html.I(
-                        id="freq-table-help-icon", 
-                        className="bi bi-question-circle-fill text-muted ms-2", 
-                        style={'cursor': 'pointer', 'fontSize': '1rem'},
-                        title="Click for filter help"
-                    )
+                    html.I(id="freq-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Click for filter help")
                 ], className="m-0 fw-bold d-flex align-items-center")
             ], width=True, className="d-flex align-items-center"),
-            
             dbc.Col([
-                dbc.Button(
-                    [html.I(className="bi bi-bookmark-plus me-2"), "Save Group"],
-                    id={'type': 'genes-tab-add-gene-group-btn', 'index': str(clicked_percentage)},
-                    color="primary",
-                    size="sm",
-                    className="me-2 shadow-sm"
-                ),
-                # Botón Cerrar
-                dbc.Button(
-                    html.I(className="bi bi-x-lg"),
-                    id={'type': 'close-freq-detail-btn', 'index': 'main'},
-                    color="link",
-                    size="sm",
-                    className="text-muted text-decoration-none"
-                )
+                dbc.Button([html.I(className="bi bi-bookmark-plus me-2"), "Save Group"], id={'type': 'genes-tab-add-gene-group-btn', 'index': str(clicked_percentage)}, color="primary", size="sm", className="me-2 shadow-sm"),
+                dbc.Button(html.I(className="bi bi-x-lg"), id={'type': 'close-freq-detail-btn', 'index': 'main'}, color="link", size="sm", className="text-muted text-decoration-none")
             ], width="auto", className="d-flex align-items-center")
         ], className="mb-3 border-bottom pb-2")
 
         data_table = dash_table.DataTable(
             id='frequency-detail-table',
             data=genes_at_percentage,
-            columns=[
-                {'name': 'Gene Name', 'id': 'gene'}, 
-                {'name': 'Occurrence (Count)', 'id': 'count'},
-                {'name': 'Frequency', 'id': 'frequency'}
-            ],
+            columns=[{'name': 'Gene Name', 'id': 'gene'}, {'name': 'Occurrence (Count)', 'id': 'count'}, {'name': 'Frequency', 'id': 'frequency'}],
             page_size=10,
             sort_action='native',
             filter_action='native',
             style_table={'overflowX': 'auto'},
-            style_header={
-                'backgroundColor': '#f8f9fa', 
-                'fontWeight': 'bold',
-                'borderBottom': '2px solid #dee2e6'
-            },
-            style_filter={
-                'backgroundColor': 'rgb(220, 235, 255)',
-                'border': '1px solid rgb(180, 200, 220)',
-                'fontWeight': 'bold',
-                'color': '#333'
-            },
+            style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6'},
+            style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
             style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '0.9rem'},
-            style_data_conditional=[
-                {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'},
-                {'if': {'state': 'active'}, 'backgroundColor': 'rgba(13, 110, 253, 0.1)', 'border': '1px solid #0d6efd'}
-            ],
-            tooltip_data=[
-                {'gene': {'value': 'Click to add individual gene to panel', 'type': 'text'}} for _ in genes_at_percentage
-            ],
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}, {'if': {'state': 'active'}, 'backgroundColor': 'rgba(13, 110, 253, 0.1)', 'border': '1px solid #0d6efd'}],
+            tooltip_data=[{'gene': {'value': 'Click to add individual gene to panel', 'type': 'text'}} for _ in genes_at_percentage],
             tooltip_duration=None
         )
 
@@ -486,15 +413,11 @@ def register_genes_analysis_callbacks(app):
             dbc.CardBody([
                 toolbar,
                 freq_help_popover,
-                html.Div([
-                    dbc.Alert("💡 Tip: Click on any gene cell to add it individually to the panel.", color="info", className="p-1 small mb-2 text-center"),
-                    data_table
-                ])
+                html.Div([dbc.Alert("💡 Tip: Click on any gene cell to add it individually to the panel.", color="info", className="p-1 small mb-2 text-center"), data_table])
             ], className="bg-light bg-opacity-50") 
         ], className="shadow-sm border-primary border-opacity-25 mt-2 animate__animated animate__fadeIn")
 
         return accordion_card
-
     # --- NUEVO CALLBACK: RESETEAR GRÁFICO AL CERRAR (SOLUCIONA EL BUG DE CLIC) ---
     @app.callback(
         Output('gene-frequency-chart', 'clickData'),
