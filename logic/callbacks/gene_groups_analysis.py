@@ -487,7 +487,7 @@ def register_gene_groups_callbacks(app):
             xaxis_tickangle=-45, 
             height=400, 
             margin=dict(l=40, r=20, t=40, b=80), 
-            plot_bgcolor='white',
+            #plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(
                 range=[-0.5, 49.5], 
