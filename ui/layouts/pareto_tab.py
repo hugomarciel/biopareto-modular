@@ -24,7 +24,7 @@ def create_pareto_tab():
                     html.Ul([
                         html.Li("Click Point: Select/Deselect a single solution."),
                         html.Li("Box/Lasso Select: Drag to capture multiple points."),
-                        html.Li("Shift + Click: Add multiple points one by one."),
+                        html.Li("Shift + drag mouse: zoom by sections."),
                     ], className="mb-0 ps-3 small text-muted")
                 ])
             ], style={'maxWidth': '300px'})

@@ -535,10 +535,12 @@ def register_enrichment_callbacks(app):
         return dbc.Row(cards, className="g-3")
 
 
-    # 2. Callback de selección
+    # 2. Callback de selección (ACTUALIZADO PARA VISIBILIDAD)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
-         Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
+         Output('enrichment-selection-panel', 'children', allow_duplicate=True),
+         Output('enrichment-modules-wrapper', 'style'),
+         Output('enrichment-empty-alert', 'style')],
         Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'), 
         State('interest-panel-store', 'data'),
         prevent_initial_call=True
@@ -551,9 +553,16 @@ def register_enrichment_callbacks(app):
         selected_indices = {values[0] for values in list_of_checkbox_values if values}
         selected_indices_list = sorted(list(selected_indices))
         
+        # Estado sin selección
         if not selected_indices_list:
-            return selected_indices_list, html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
+            return (
+                selected_indices_list, 
+                html.Div(), # Panel de selección vacío
+                {'display': 'none'}, # Ocultar Módulos
+                {'display': 'flex'}  # Mostrar Alerta
+            )
 
+        # Estado CON selección
         combined_genes = set()
         for idx in selected_indices_list:
             if idx < len(items):
@@ -608,19 +617,23 @@ def register_enrichment_callbacks(app):
             
         ], color="primary", className="mt-3")
         
-        return selected_indices_list, summary_panel
+        # Retorno: Datos, Panel, Mostrar Módulos, Ocultar Alerta
+        return selected_indices_list, summary_panel, {'display': 'block'}, {'display': 'none'}
     
     
-    # 2.5. Callback de limpiar selección
+    # 2.5. Callback de limpiar selección (ACTUALIZADO PARA VISIBILIDAD)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
-         Output('enrichment-selection-panel', 'children', allow_duplicate=True)],
+         Output('enrichment-selection-panel', 'children', allow_duplicate=True),
+         Output('enrichment-modules-wrapper', 'style', allow_duplicate=True),
+         Output('enrichment-empty-alert', 'style', allow_duplicate=True)],
         Input('clear-enrichment-selection-btn', 'n_clicks'), 
         prevent_initial_call=True
     )
     def clear_enrichment_selection(n_clicks):
         if n_clicks and n_clicks > 0:
-            return [], html.Div(dbc.Alert("No items selected. Select items above to view the combined gene list.", color="info", className="mt-3"))
+            # Al limpiar: Store vacío, Panel vacío, Ocultar Módulos, Mostrar Alerta
+            return [], html.Div(), {'display': 'none'}, {'display': 'flex'}
         raise PreventUpdate
 
     
@@ -757,7 +770,7 @@ def register_enrichment_callbacks(app):
         }, None
 
 
-    # 4.5. Mostrar resultados g:Profiler
+   # 4.5. Display g:Profiler Results (CON AJUSTE DE TEXTO MULTILÍNEA)
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
@@ -772,10 +785,14 @@ def register_enrichment_callbacks(app):
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
         
-        organism_map = {'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 'rnorvegicus': 'Rattus norvegicus', 'drerio': 'Danio rerio', 'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans'}
+        organism_map = {
+            'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 
+            'rnorvegicus': 'Rattus norvegicus', 'drerio': 'Danio rerio', 
+            'dmelanogaster': 'Drosophila melanogaster', 'celegans': 'Caenorhabditis elegans'
+        }
         
         if not stored_data:
-            return html.Div("Click 'Run g:Profiler Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
+            return html.Div("Click 'Run Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
 
         if stored_data.get('results') is None:
              return dbc.Alert("Error connecting to g:Profiler API.", color="danger"), True, go.Figure()
@@ -796,20 +813,20 @@ def register_enrichment_callbacks(app):
         if not (0 < val_threshold <= 1.0): val_threshold = 0.05
             
         if df.empty:
-            filtered_df = pd.DataFrame()
             manhattan_fig = create_gprofiler_manhattan_plot(df, threshold_value) 
             display_df = pd.DataFrame()
-            filter_message = "No results found."
+            pathways_message = "No results found."
+            filter_message = ""
         else:
             filtered_df = df[df['p_value'] < val_threshold].copy()
-            filter_message = f"Filtered results (P-Value corrected < {val_threshold})"
+            filter_message = f"(Filtered P < {val_threshold})"
             manhattan_fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
             display_df = filtered_df.sort_values(by=['p_value', 'intersection_size'], ascending=[True, False]) if not filtered_df.empty else pd.DataFrame()
         
         if not display_df.empty:
              display_df = display_df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
         
-        input_message = f"**Input:** Total Probes/IDs: **{gene_list_original_count}** | Selected Organism: **{organism_selected_name}**"
+        input_message = f"**Input:** Total IDs: **{gene_list_original_count}** | Organism: **{organism_selected_name}**"
         validation_message_md = f"**Validation:** Recognized Genes: **{genes_analyzed_count}**"
         
         validation_card = html.Div([
@@ -833,7 +850,7 @@ def register_enrichment_callbacks(app):
         if not display_df.empty:
             pathways_message = f"Displaying **{len(display_df)}** terms. {filter_message}"
         else:
-             pathways_message = f"No significant pathways found after applying the filter ({val_threshold})."
+             pathways_message = f"No significant pathways found {filter_message}."
         
         summary_content = [
             dcc.Markdown(pathways_message, className="mb-0"),
@@ -841,6 +858,45 @@ def register_enrichment_callbacks(app):
             validation_card
         ]
         
+        # --- Table Help Popover ---
+        table_help_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader("Table Filtering & Sorting Help"),
+                dbc.PopoverBody([
+                    html.Div([
+                        html.Strong("To Sort:"),
+                        html.Span(" Click the arrows (▲/▼) in the column header to sort ascending or descending.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Text Filters:"),
+                        html.Span(" Type a value (e.g., ", className="small text-muted"),
+                        html.Code("TP53", className="small"),
+                        html.Span(") for exact match. Use ", className="small text-muted"),
+                        html.Code("contains TP", className="small"),
+                        html.Span(" or ", className="small text-muted"),
+                        html.Code("!= val", className="small"),
+                        html.Span(" to exclude.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Numeric Filters:"),
+                        html.Span(" Use operators like ", className="small text-muted"),
+                        html.Code("> 0.8", className="small"),
+                        html.Span(", ", className="small text-muted"),
+                        html.Code("<= 10", className="small"),
+                        html.Span(" or ranges.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Tips:"),
+                        html.Span(" Combine filters across columns. Use the 'Clear All Filters' button to reset.", className="small text-muted")
+                    ], className="mb-0"),
+                ])
+            ],
+            id="gprofiler-table-help", target="gprofiler-table-help-icon", trigger="legacy", placement="left"
+        )
+
         hidden_cols = ['source_order_display'] 
         column_map = {
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
@@ -856,21 +912,40 @@ def register_enrichment_callbacks(app):
         display_columns = [{'name': column_map.get(col, {}).get('name', col.capitalize()), 'id': col, 'type': column_map.get(col, {}).get('type', 'text'), 'format': column_map.get(col, {}).get('format'), 'hideable': True} for col in display_df.columns]
         
         results_content = [
-            html.H4("g:Profiler Enrichment Results", className="mb-3"),
-            dbc.Card(dbc.CardBody(summary_content), className="mb-3", style={'whiteSpace': 'pre-line'}),
+            html.Div([
+                html.Div([
+                    html.H5("g:Profiler Enrichment Results", className="fw-bold m-0 text-dark"),
+                    html.I(id="gprofiler-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+                ], className="d-flex align-items-center mb-3"),
+                table_help_popover
+            ]),
+            
+            dbc.Card(dbc.CardBody(summary_content), className="mb-3 shadow-sm border-light bg-light", style={'whiteSpace': 'pre-line'}),
+            
             dash_table.DataTable(
-                id='enrichment-results-table-gprofiler', data=display_df.to_dict('records'), columns=display_columns,
-                hidden_columns=hidden_cols, sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
+                id='enrichment-results-table-gprofiler', 
+                data=display_df.to_dict('records'), 
+                columns=display_columns,
+                hidden_columns=hidden_cols, 
+                sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
                 style_table={'overflowX': 'auto', 'minWidth': '100%'},
+                
+                # --- ESTILOS ACTUALIZADOS PARA MULTILÍNEA ---
+                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal', 'height': 'auto'},
+                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
+                
+                # 💡 CLAVE: whiteSpace: normal permite que el texto salte de línea
+                style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '0.9rem', 'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
+                
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                
                 style_cell_conditional=[
-                    {'if': {'column_id': 'term_name'}, 'width': '15%', 'minWidth': '100px', 'textAlign': 'left'}, 
-                    {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '150px', 'maxWidth': '350px', 'textAlign': 'left'},
-                    {'if': {'column_id': 'p_value'}, 'width': '8%', 'minWidth': '70px', 'maxWidth': '80px', 'textAlign': 'center'},
-                    {'if': {'column_id': 'intersection_size'}, 'width': '5%', 'minWidth': '45px', 'maxWidth': '65px', 'textAlign': 'center'},
+                    {'if': {'column_id': 'term_name'}, 'width': '20%', 'minWidth': '120px'}, 
+                    # He ajustado el width para dar espacio, el texto ahora bajará si es necesario
+                    {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '200px'}, 
+                    {'if': {'column_id': 'p_value'}, 'width': '10%', 'textAlign': 'center'},
+                    {'if': {'column_id': 'intersection_size'}, 'width': '8%', 'textAlign': 'center'},
                 ],
-                style_cell={'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'whiteSpace': 'normal'},
-                style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
-                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}],
                 tooltip_duration=None,
             )
         ]
@@ -882,7 +957,7 @@ def register_enrichment_callbacks(app):
             if genes_analyzed_count == 0 and gene_list_original_count > 0:
                  summary_content.append(dcc.Markdown("\n\n**Action Failed:** No input IDs were validated.", className="text-danger"))
             
-            return html.Div(dbc.Alert(summary_content, color=alert_color, className="mt-3")), False, manhattan_fig
+            return html.Div(dbc.Alert(summary_content, color=alert_color, className="mt-3 shadow-sm")), False, manhattan_fig
 
    # 4.6. Limpiar g:Profiler
     @app.callback(
@@ -1003,7 +1078,7 @@ def register_enrichment_callbacks(app):
         
         raise PreventUpdate
 
-    # 5.5 Mostrar resultados Reactome
+    # 5.5 Display Reactome Results (CORREGIDO: Typo en variable de retorno)
     @app.callback(
         [Output('reactome-results-content', 'children'),
         Output('clear-reactome-results-btn', 'disabled'),
@@ -1013,8 +1088,8 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def display_reactome_results(stored_data):
-        placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="secondary"), className="p-3")
-        placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="info"), className="p-3")
+        placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-muted text-center border-0"), className="p-1")
+        placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-muted text-center border-0"), className="p-1")
         
         if stored_data is None or not isinstance(stored_data, dict):
             raise PreventUpdate
@@ -1032,19 +1107,16 @@ def register_enrichment_callbacks(app):
         
         validated_gene_string = " ".join(sorted(gene_list_validated)) if gene_list_validated else ""
         
-        fireworks_content = placeholder_fireworks
+        # --- Fireworks Logic (DEFINICIÓN CORRECTA) ---
+        fireworks_content = placeholder_fireworks 
+        
         if analysis_token and analysis_token not in ['N/A', 'ERROR'] and organism_used_api and len(enrichment_data_list) > 0:
             organism_encoded = organism_used_api.replace(' ', '%20')
             fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={analysis_token}"
-            
-            fireworks_content = html.Iframe(
-                src=fireworks_url, 
-                style={"width": "100%", "height": "500px", "border": "none"}, 
-                title=f"Reactome Fireworks for {organism_used_api}", 
-                tabIndex="-1" 
-            )
+            fireworks_content = html.Iframe(src=fireworks_url, style={"width": "100%", "height": "500px", "border": "none"}, title=f"Reactome Fireworks")
         
-        input_message = f"**Input:** Total Probes/IDs: **{genes_original_count}** | Selected Organism: **{organism_selected}**"
+        # --- Summary Card ---
+        input_message = f"**Input:** Total IDs: **{genes_original_count}** | Organism: **{organism_selected}**"
         validation_message_md = f"**Validation:** Recognized Genes: **{genes_validated_count}**"
         
         validation_card = html.Div([
@@ -1052,46 +1124,35 @@ def register_enrichment_callbacks(app):
                 dcc.Markdown(validation_message_md, className="mb-0"),
                 html.Details([
                     html.Summary(f"View {genes_validated_count} Validated Genes", 
-                                 style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#0d6efd', 'fontSize': '0.9rem', 'display': 'inline-block'}),
+                                 style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#0d6efd', 'fontSize': '0.9rem'}),
                     html.P(', '.join(sorted(gene_list_validated)), className="mt-2 small")
                 ]) if genes_validated_count > 0 else None
             ], style={'flex': '1'}),
             
-            dcc.Clipboard(
-                content=validated_gene_string,
-                id='reactome-clipboard-validated-genes',
-                style={"display": "inline-block", "color": "#0d6efd", "fontSize": "1.1rem", "marginLeft": "10px"},
-                title="Copy validated gene list"
-            ) if genes_validated_count > 0 else None
+            dcc.Clipboard(content=validated_gene_string, id='reactome-clipboard-validated-genes', style={"display": "inline-block", "color": "#0d6efd", "fontSize": "1.1rem", "marginLeft": "10px"}, title="Copy validated gene list") if genes_validated_count > 0 else None
         ], style={'display': 'flex', 'alignItems': 'flex-start', 'justifyContent': 'space-between'})
         
-        output_message = f"**Analysis:** Validated Organism (API): **{organism_used_api}** | Analysis Token: **{analysis_token}**"
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         
         summary_content = [
             dcc.Markdown(pathways_message, className="mb-0"),
             html.Hr(style={'margin': '0.5rem 0'}),
             dcc.Markdown(input_message, className="mb-0"),
-            validation_card, 
-            html.Hr(style={'margin': '0.5rem 0'}),
-            dcc.Markdown(output_message, className="mb-0")
+            validation_card
         ]
 
         if analysis_token == 'ERROR':
-            summary_content = [
-                dbc.Alert("An error occurred connecting to the Reactome service.", color="danger"),
-                html.Hr(style={'margin': '0.5rem 0'}),
-                dcc.Markdown(input_message, className="mb-0"),
-                validation_card,
-            ]
+            summary_content = [dbc.Alert("An error occurred connecting to Reactome.", color="danger")]
         
         if not enrichment_data_list:
             if analysis_token == 'N/A' and genes_original_count > 0:
                 summary_content.insert(0, dcc.Markdown("No analysis run (0 validated genes).", className="text-warning"))
             elif analysis_token != 'ERROR' and analysis_token != 'N/A':
-                 summary_content[0] = dcc.Markdown("No significant pathways found in Reactome.", className="text-info")
+                 summary_content[0] = dcc.Markdown("No significant pathways found.", className="text-info")
 
-            results_content = html.Div(dbc.Card(dbc.CardBody(summary_content), className="mt-3", style={'whiteSpace': 'pre-line'}))
+            results_content = html.Div(dbc.Card(dbc.CardBody(summary_content), className="mt-3 shadow-sm bg-light border-light"))
+            
+            # RETORNO CORREGIDO: 'fireworks_content' (con 't')
             return results_content, False, placeholder_diagram, fireworks_content
 
         df = pd.DataFrame(enrichment_data_list).sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
@@ -1099,7 +1160,7 @@ def register_enrichment_callbacks(app):
         
         hidden_cols = ['description']
         column_map = {
-            'fdr_value': {'name': 'FDR\n(Corrected P-Value)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'fdr_value': {'name': 'FDR\n(Corrected P)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
             'entities_found': {'name': 'Genes\nMatched', 'type': 'numeric'},
             'entities_total': {'name': 'Pathway\nSize', 'type': 'numeric'},
@@ -1108,27 +1169,59 @@ def register_enrichment_callbacks(app):
         }
         display_columns = [{'name': column_map.get(col, {}).get('name', col.capitalize()), 'id': col, 'type': column_map.get(col, {}).get('type', 'text'), 'format': column_map.get(col, {}).get('format'), 'hideable': True} for col in display_df.columns]
 
+        # --- Table Help Popover ---
+        table_help_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader("Table Filtering & Sorting Help"),
+                dbc.PopoverBody([
+                    html.Div([html.Strong("To Sort:"), html.Span(" Click arrows (▲/▼) in header.", className="small text-muted")], className="mb-2"),
+                    html.Div([html.Strong("Numeric Filters:"), html.Span(" Use ", className="small text-muted"), html.Code("< 0.05", className="small"), html.Span(".", className="small text-muted")], className="mb-0"),
+                ])
+            ],
+            id="reactome-table-help", target="reactome-table-help-icon", trigger="legacy", placement="left"
+        )
+
+        # --- Results Content ---
         results_content = [
-            html.H4("Reactome Enrichment Results", className="mb-3"), 
-            dbc.Card(dbc.CardBody(summary_content), className="mb-3", style={'whiteSpace': 'pre-line'}),
+            html.Div([
+                html.Div([
+                    html.H5("Reactome Enrichment Results", className="fw-bold m-0 text-dark"),
+                    html.I(id="reactome-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+                ], className="d-flex align-items-center mb-3"),
+                table_help_popover
+            ]),
+            
+            dbc.Card(dbc.CardBody(summary_content), className="mb-3 shadow-sm border-light bg-light", style={'whiteSpace': 'pre-line'}),
+            
             dash_table.DataTable(
-                id='enrichment-results-table-reactome', data=display_df.to_dict('records'), columns=display_columns,
-                hidden_columns=hidden_cols, row_selectable='single', selected_rows=[],
+                id='enrichment-results-table-reactome', 
+                data=display_df.to_dict('records'), 
+                columns=display_columns,
+                hidden_columns=hidden_cols, 
+                row_selectable='single', selected_rows=[],
                 sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=10,
                 style_table={'overflowX': 'auto', 'minWidth': '100%'}, 
+                
+                # --- ESTILOS ACTUALIZADOS PARA MULTILÍNEA ---
+                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
+                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
+                
+                # 💡 CLAVE: whiteSpace: normal para permitir saltos de línea
+                style_cell={'textAlign': 'center', 'padding': '8px', 'fontSize': '0.9rem', 'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
+                
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                
                 style_cell_conditional=[
                     {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
-                    {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
-                    {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '70px', 'maxWidth': '90px'},
-                    {'if': {'column_id': 'entities_found'}, 'width': '10%', 'minWidth': '50px', 'maxWidth': '70px'},
+                    {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '80px'},
+                    {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '80px'},
                 ],
-                style_cell={'textAlign': 'center', 'padding': '8px', 'overflow': 'hidden', 'textOverflow': 'ellipsis'},
-                style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
-                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}],
                 tooltip_data=[{'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')],
                 tooltip_duration=None,
             )
         ]
+        
+        # RETORNO FINAL CORREGIDO
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
     # 6. Visualizar Diagrama Reactome

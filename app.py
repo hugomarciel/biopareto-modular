@@ -212,10 +212,7 @@ def create_genes_frequency_chart_for_pdf(pareto_data):
     return BytesIO()
 
 
-# Layout principal (se mantiene aquí)
-# Layout principal (se mantiene aquí)
-# Layout principal (se mantiene aquí)
-# app.py (Línea 187)
+
 app.layout = dbc.Container([
     # STORES (se mantienen en app.py)
     dcc.Store(id='add-all-trigger-store', data=0), 
@@ -365,8 +362,7 @@ app.layout = dbc.Container([
             # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
         }),
 
-        # app.py (Línea 341)
-        # --- 💡 INICIO: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
+       
         html.Div(
             # Se usa un Div normal para apilar verticalmente
             [
