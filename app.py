@@ -955,10 +955,7 @@ def handle_genes_tab_individual_gene_button(n_clicks_list, is_open):
     [Output('interest-panel-store', 'data', allow_duplicate=True),
      Output('gene-groups-analysis-tab-temp-store', 'data', allow_duplicate=True),
      Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True),
-     
-     # Output('save-combined-group-btn-top', 'n_clicks', allow_duplicate=True)
      ], 
-     
     [Input('gene-groups-analysis-tab-confirm-btn', 'n_clicks'),
      Input('gene-groups-analysis-tab-cancel-btn', 'n_clicks')],
     [State('gene-groups-analysis-tab-temp-store', 'data'),
@@ -977,20 +974,28 @@ def confirm_gene_group_addition(confirm_clicks, cancel_clicks, temp_data, group_
 
     # 1. Manejo del Cancelar (Cierre del modal sin guardar)
     if trigger_id == 'gene-groups-analysis-tab-cancel-btn':
-        # Esto permite que cada clic incremente naturalmente (1,2,3...) y Dash detecte el cambio
         return dash.no_update, dash.no_update, False
 
     # 2. Manejo del Confirmar (Guardar y Cierre)
     if trigger_id == 'gene-groups-analysis-tab-confirm-btn' and confirm_clicks:
         if not temp_data or not temp_data.get('genes'):
             return dash.no_update, None, False
-
         
+        # Determinar origen para el texto "Added via..."
+        meta_type = temp_data.get('meta_type', '')
+        if meta_type == 'combined_selection':
+            origin_text = "Union/Combined Analysis"
+        elif meta_type == 'single_intersection':
+            origin_text = "Intersection/Venn Analysis"
+        else:
+            origin_text = "Gene Groups Analysis"
+
         new_item = {
             'type': 'combined_gene_group',
             'id': f"group_{datetime.now().strftime('%Y%m%d%H%M%S')}",
             'name': group_name or "Unnamed Combined Group",
             'comment': group_comment or "",
+            'tool_origin': origin_text, # <--- AQUI SE CORRIGE LA LEYENDA "Added via"
             'data': {
                 'genes': temp_data['genes'],
                 'gene_count': len(temp_data['genes']),
@@ -1098,7 +1103,8 @@ def render_interest_panel_content(items):
             badge_color, icon = "warning", "🔬"
             badge_text = "Gene"
         elif item_type == 'combined_gene_group':
-            badge_color, icon = "dark", "🎯"
+            # --- CAMBIO REALIZADO AQUÍ: Color cambiado a 'success' (Verde) ---
+            badge_color, icon = "success", "🎯" 
             badge_text = "Combined"
         else:
             badge_color, icon = "secondary", "❓"
@@ -1114,8 +1120,6 @@ def render_interest_panel_content(items):
             n_genes = len(data.get('selected_genes', []))
             source = data.get('front_name', 'Unknown Front')
             
-            # --- CORRECCIÓN ERROR N/A ---
-            # Solo mostramos la línea de error si el valor existe y no es None
             error_val = data.get('error_value')
             if error_val is not None:
                 try:
@@ -1183,10 +1187,8 @@ def render_interest_panel_content(items):
 
         # 3. Ensamblar Tarjeta
         item_card = dbc.Card([
-            # Agregamos 'position-relative' al body para que el botón X se posicione respecto a él
             dbc.CardBody([
                 
-                # --- BOTÓN DE ELIMINAR (MEJORADO) ---
                 html.Div(
                     dbc.Button(
                         "×",
@@ -1194,38 +1196,33 @@ def render_interest_panel_content(items):
                         color="link",
                         className="text-muted text-decoration-none p-0 hover-danger",
                         style={
-                            'fontSize': '1.5rem',     # Más grande
-                            'lineHeight': '0.8',      # Altura de línea compacta
+                            'fontSize': '1.5rem',
+                            'lineHeight': '0.8',
                             'fontWeight': 'bold'
                         }
                     ),
                     style={
-                        'position': 'absolute',   # Posición absoluta
-                        'top': '5px',             # Pegado arriba
-                        'right': '8px',           # Pegado a la derecha
-                        'zIndex': '10',           # Encima del contenido
+                        'position': 'absolute',
+                        'top': '5px',
+                        'right': '8px',
+                        'zIndex': '10',
                         'cursor': 'pointer'
                     },
                     title="Remove item"
                 ),
 
-                # Header (Con margen a la derecha para no chocar con la X)
                 html.Div([
                     html.Span(icon, className="me-2"),
                     dbc.Badge(badge_text, color=badge_color, className="me-2"),
-                    # Título truncado para que no se encime
                     html.Strong(item_name, style={'fontSize': '0.95rem'}, className="text-truncate d-inline-block w-75"),
-                ], className="d-flex align-items-center mb-2 pe-3"), # Padding-end extra
+                ], className="d-flex align-items-center mb-2 pe-3"),
                 
                 html.Hr(className="my-1"),
                 
-                # Stats Standard Line
                 stats_line,
                 
-                # Extra Context (Solo si existe)
                 html.Div(context_line, className="small text-danger fst-italic mb-1") if context_line else None,
                 
-                # User Comment
                 html.P(f"\"{item_comment}\"", className="small text-muted mb-1 fst-italic bg-light p-1 rounded") if item_comment else None,
                 
                 # Footer (Origin Tool)
@@ -1234,7 +1231,7 @@ def render_interest_panel_content(items):
                     html.Span(f"Added via: {item_origin}")
                 ], className="d-flex justify-content-end text-muted", style={'fontSize': '0.7rem'})
 
-            ], className="p-2 position-relative") # <--- CLAVE: position-relative
+            ], className="p-2 position-relative")
         ], className="mb-2 shadow-sm border-start border-2", style={'borderLeftColor': f"var(--bs-{badge_color})"})
 
         panel_items.append(item_card)

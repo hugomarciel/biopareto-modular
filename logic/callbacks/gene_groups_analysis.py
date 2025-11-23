@@ -1,18 +1,16 @@
 # logic/callbacks/gene_groups_analysis.py
 
 import dash
-from dash import Output, Input, State, dcc, html, dash_table, ALL, MATCH # <--- IMPORTANTE: Se agregó MATCH
+from dash import Output, Input, State, dcc, html, dash_table, ALL, MATCH
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import pandas as pd
-import json
-from collections import defaultdict
 import plotly.express as px
-from datetime import datetime
 import numpy as np
 import io 
+from collections import defaultdict
 
-# Imports para Venn (si están disponibles)
+# Imports for Venn (if available)
 try:
     from matplotlib_venn import venn2, venn3
     import matplotlib.pyplot as plt
@@ -23,48 +21,27 @@ except ImportError:
 
 def register_gene_groups_callbacks(app):
 
-    # --- NUEVO: CLIENTSIDE CALLBACK PARA FEEDBACK INSTANTÁNEO ---
-    # Este callback se ejecuta en el navegador (JS) inmediatamente al hacer clic,
-    # sin esperar al servidor Python. Elimina el "lag" visual.
-    app.clientside_callback(
-        """
-        function(selected_value) {
-            // selected_value es una lista. Si tiene elementos, está seleccionado.
-            const is_selected = selected_value && selected_value.length > 0;
-            
-            if (is_selected) {
-                return [
-                    {
-                        'transition': 'all 0.2s ease-in-out',
-                        'border': '2px solid #0d6efd',       // Borde Azul Fuerte
-                        'backgroundColor': '#f0f8ff',        // Fondo Azul Pálido
-                        'transform': 'scale(1.02)',          // Efecto Pop sutil
-                        'cursor': 'pointer'
-                    },
-                    "h-100 shadow" // Clase con sombra más fuerte
-                ];
-            } else {
-                return [
-                    {
-                        'transition': 'all 0.2s ease-in-out',
-                        'border': '1px solid rgba(0,0,0,0.125)', // Borde default
-                        'backgroundColor': 'white',
-                        'transform': 'scale(1)',
-                        'cursor': 'pointer'
-                    },
-                    "h-100 shadow-sm hover-shadow" // Clase normal
-                ];
-            }
-        }
-        """,
+    # --- SERVER-SIDE CALLBACK (Visual Feedback) ---
+    @app.callback(
         [Output({'type': 'gene-group-card-wrapper', 'index': MATCH}, 'style'),
          Output({'type': 'gene-group-card-wrapper', 'index': MATCH}, 'className')],
         Input({'type': 'gene-group-card-checkbox', 'index': MATCH}, 'value'),
         prevent_initial_call=True
     )
-    # -----------------------------------------------------------
+    def update_card_visual_feedback(selected_value):
+        is_selected = selected_value and len(selected_value) > 0
+        if is_selected:
+            return (
+                {'transition': 'all 0.2s ease-in-out', 'border': '2px solid #0d6efd', 'backgroundColor': '#f0f8ff', 'transform': 'scale(1.02)', 'cursor': 'pointer'},
+                "h-100 shadow"
+            )
+        else:
+            return (
+                {'transition': 'all 0.2s ease-in-out', 'border': '1px solid rgba(0,0,0,0.125)', 'backgroundColor': 'white', 'transform': 'scale(1)', 'cursor': 'pointer'},
+                "h-100 shadow-sm hover-shadow"
+            )
 
-   # 1. Callback para renderizar el selector visual de Gene Groups (ESTANDARIZADO)
+    # 1. Render Visual Selector (Standardized)
     @app.callback(
         Output('gene-groups-visual-selector', 'children'),
         [Input('interest-panel-store', 'data'),
@@ -72,10 +49,11 @@ def register_gene_groups_callbacks(app):
         State('data-store', 'data')
     )
     def render_visual_gene_groups_selector(items, selected_indices_list, data_store):
-        """Render visual card-based selector matching the Interest Panel standard."""
         if not items:
-            return html.P("No items available. Add items to your Interest Panel first.",
-                         className="text-muted text-center py-4")
+            return dbc.Alert([
+                html.I(className="bi bi-exclamation-circle me-2"),
+                "No items available. Add items to your Interest Panel first."
+            ], color="warning", className="d-flex align-items-center")
 
         if selected_indices_list is None:
             selected_indices_list = []
@@ -91,8 +69,7 @@ def register_gene_groups_callbacks(app):
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
 
-            # --- LÓGICA DE ESTANDARIZACIÓN (IDÉNTICA A APP.PY) ---
-            # 1. Definir Estilos
+            # Standardized Styles & Icons
             if item_type == 'solution':
                 badge_color, icon, badge_text = "primary", "🔵", "Solution"
             elif item_type == 'solution_set':
@@ -102,72 +79,47 @@ def register_gene_groups_callbacks(app):
             elif item_type == 'individual_gene':
                 badge_color, icon, badge_text = "warning", "🔬", "Gene"
             elif item_type == 'combined_gene_group':
-                badge_color, icon, badge_text = "dark", "🎯", "Combined"
+                badge_color, icon, badge_text = "succes", "🎯", "Combined"
             else:
                 badge_color, icon, badge_text = "secondary", "❓", "Unknown"
 
-            # 2. Definir Línea Estadística (Genes | Contexto)
+            # Stats Text Logic
             stats_text_left = ""
             stats_text_right = ""
 
             if item_type == 'solution':
                 genes = data.get('selected_genes', [])
                 stats_text_left = f"Genes: {len(genes)}"
-                stats_text_right = f"Source: {data.get('front_name', 'Front?')}"
-                
+                stats_text_right = f"Src: {data.get('front_name', '?')}"
             elif item_type == 'solution_set':
-                # Soporte para items antiguos y nuevos
                 n_genes = data.get('unique_genes_count', 0)
                 if n_genes == 0 and 'solutions' in data:
                      unique_g = set()
                      for s in data['solutions']: unique_g.update(s.get('selected_genes', []))
                      n_genes = len(unique_g)
-                
                 stats_text_left = f"Genes: {n_genes}"
-                stats_text_right = f"Solutions: {len(data.get('solutions', []))}"
-
+                stats_text_right = f"Sols: {len(data.get('solutions', []))}"
             elif item_type == 'gene_set':
                 stats_text_left = f"Genes: {len(data.get('genes', []))}"
                 freq = data.get('frequency')
-                stats_text_right = f"Freq: {freq}%" if freq else "Source: Table"
-
+                stats_text_right = f"Freq: {freq}%" if freq else "Table"
             elif item_type == 'individual_gene':
                 stats_text_left = f"ID: {data.get('gene')}"
                 stats_text_right = f"Src: {data.get('source')}"
-
             elif item_type == 'combined_gene_group':
                 stats_text_left = f"Genes: {data.get('gene_count', 0)}"
-                stats_text_right = f"Sources: {len(data.get('source_items', []))}"
+                stats_text_right = f"Srcs: {len(data.get('source_items', []))}"
 
-            # 3. Estado de Selección
             is_selected = idx in selected_indices_list
             
-            # Clases y Estilos dinámicos
-            # Usamos las mismas clases que el clientside callback para consistencia
-            if is_selected:
-                card_style = {
-                    'transition': 'all 0.2s ease-in-out', 
-                    'border': '2px solid #0d6efd', 
-                    'backgroundColor': '#f0f8ff', 
-                    'transform': 'scale(1.02)', 
-                    'cursor': 'pointer'
-                }
-                card_class = "h-100 shadow"
-            else:
-                card_style = {
-                    'transition': 'all 0.2s ease-in-out', 
-                    'border': '1px solid rgba(0,0,0,0.125)', 
-                    'backgroundColor': 'white', 
-                    'transform': 'scale(1)', 
-                    'cursor': 'pointer'
-                }
-                card_class = "h-100 shadow-sm hover-shadow"
+            # Card Styles
+            card_style = {'transition': 'all 0.2s ease-in-out', 'border': '2px solid #0d6efd', 'backgroundColor': '#f0f8ff', 'transform': 'scale(1.02)', 'cursor': 'pointer'} if is_selected else \
+                         {'transition': 'all 0.2s ease-in-out', 'border': '1px solid rgba(0,0,0,0.125)', 'backgroundColor': 'white', 'transform': 'scale(1)', 'cursor': 'pointer'}
+            card_class = "h-100 shadow" if is_selected else "h-100 shadow-sm hover-shadow"
 
-            # 4. Construcción de la Tarjeta (Diseño Grid)
             card = dbc.Col([
                 dbc.Card([
                     dbc.CardBody([
-                        # Checkbox (Igual)
                         html.Div([
                             dbc.Checklist(
                                 options=[{"label": "", "value": idx}],
@@ -179,57 +131,30 @@ def register_gene_groups_callbacks(app):
                         ], style={'position': 'absolute', 'top': '10px', 'right': '10px', 'zIndex': '10'}),
 
                         html.Div([
-                            # Header CORREGIDO
                             html.Div([
                                 html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
                                 dbc.Badge(badge_text, color=badge_color, style={'fontSize': '0.75rem'}),
                             ], className="d-flex align-items-center mb-2"),
                             
-                            # Título forzado a una línea
-                            html.H6(
-                                item_name, 
-                                className="fw-bold mb-2 text-truncate", 
-                                title=item_name, # Tooltip nativo
-                                style={'maxWidth': '90%'} # Asegura espacio para el switch
-                            ),
-                            
+                            html.H6(item_name, className="fw-bold mb-2 text-truncate", title=item_name, style={'maxWidth': '90%'}),
                             html.Hr(className="my-2"),
-                            
-                            # Stats Line
                             html.Div([
                                 html.Span(stats_text_left, className="fw-bold text-primary"),
                                 html.Span(" | ", className="text-muted mx-1"),
                                 html.Span(stats_text_right, className="text-muted text-truncate", style={'maxWidth': '120px', 'display': 'inline-block', 'verticalAlign': 'bottom'})
                             ], className="small mb-2"),
-                            
-                            # Comentario / Contexto (Truncado limpio)
-                            html.P(
-                                item_comment, 
-                                className="text-muted small fst-italic mb-0 text-truncate",
-                                title=item_comment # Tooltip para leer todo
-                            ) if item_comment else None,
-                                   
-                             # Footer
-                            html.Div([
-                                html.Small(f"Via: {item_origin}", className="text-muted", style={'fontSize': '0.65rem'})
-                            ], className="mt-2 pt-1 border-top")
-
+                            html.P(item_comment, className="text-muted small fst-italic mb-0 text-truncate", title=item_comment) if item_comment else None,
+                            html.Div([html.Small(f"Via: {item_origin}", className="text-muted", style={'fontSize': '0.65rem'})], className="mt-2 pt-1 border-top")
                         ], style={'paddingRight': '25px'}) 
                     ], className="p-3")
-                ],
-                id={'type': 'gene-group-card-wrapper', 'index': idx}, 
-                className=card_class, 
-                style=card_style)
-            ], width=12, md=6, lg=4, xl=3, className="mb-3") # Layout Grid adaptativo
+                ], id={'type': 'gene-group-card-wrapper', 'index': idx}, className=card_class, style=card_style)
+            ], width=12, md=6, lg=4, xl=3, className="mb-3")
 
             cards.append(card)
 
-        if not cards:
-            return html.P("No compatible items found in Interest Panel.", className="text-muted text-center py-4")
-
         return dbc.Row(cards, className="g-3")
 
-    # 2. Callback principal para analizar la selección visual
+    # 2. Analyze Selection (Main Callback)
     @app.callback(
         [Output('combined-genes-analysis-results', 'children'),
          Output('gene-groups-analysis-tab-temp-store', 'data'),
@@ -241,16 +166,20 @@ def register_gene_groups_callbacks(app):
         prevent_initial_call=True
     )
     def analyze_combined_genes_auto_visual(checkbox_values, items, data_store):
-        """Automatically analyze and display combined genes when visual selection changes."""
-        
         selected_indices = []
         for values in checkbox_values:
             if values and len(values) > 0:
                 selected_indices.extend(values) 
 
         if not selected_indices or not items:
-            return html.Div("Select items to analyze.", className="alert alert-info mt-4"), None, [], []
+            return html.Div([
+                dbc.Alert([
+                    html.I(className="bi bi-arrow-up-circle me-2"),
+                    "Please select at least one item from the selection panel above to start the analysis."
+                ], color="info", className="d-flex align-items-center border-0 shadow-sm")
+            ], className="mt-3"), None, [], []
 
+        # Data processing logic
         all_solutions_dict = {}
         if data_store:
             for front in data_store.get("fronts", []):
@@ -266,10 +195,10 @@ def register_gene_groups_callbacks(app):
                 item = items[idx]
                 item_name_base = item.get('name', f'Item {idx}')
                 item_type = item.get('type', '')
-                
                 current_genes_set = set()
                 current_display_key = ""
 
+                # Extracción de genes según tipo...
                 if item_type == 'solution':
                     sol_data = item.get('data', {})
                     sol_id = sol_data.get('solution_id', 'Unknown')
@@ -279,7 +208,6 @@ def register_gene_groups_callbacks(app):
                         genes = all_solutions_dict[sol_id].get('selected_genes', [])
                     current_genes_set = set(genes)
                     current_display_key = f"{sol_id} ({front_name})"
-
                 elif item_type == 'solution_set':
                     solutions = item.get('data', {}).get('solutions', [])
                     genes_in_set = set()
@@ -291,12 +219,10 @@ def register_gene_groups_callbacks(app):
                         genes_in_set.update(genes)
                     current_genes_set = genes_in_set
                     current_display_key = item_name_base
-
                 elif item_type in ['gene_set', 'combined_gene_group']:
                     genes_list = item.get('data', {}).get('genes', [])
                     current_genes_set = set(genes_list)
                     current_display_key = item_name_base
-
                 elif item_type == 'individual_gene':
                     gene = item.get('data', {}).get('gene', '')
                     current_genes_set = {gene} if gene else set()
@@ -308,46 +234,73 @@ def register_gene_groups_callbacks(app):
                     while unique_key in item_gene_sets:
                         unique_key = f"{current_display_key} ({key_counter})"
                         key_counter += 1
-                    
                     item_gene_sets[unique_key] = current_genes_set
                     ordered_source_names.append(unique_key)
-                    
                     for gene in current_genes_set:
                         gene_sources.setdefault(gene, []).append(unique_key)
 
         unique_genes = set(gene_sources.keys())
         num_items = len(item_gene_sets)
         
-        summary_stats = dbc.Card([
-            dbc.CardHeader(html.H5("Summary Statistics", className="mb-0")),
+        # --- LAYOUT DE RESULTADOS ---
+        
+        buttons_row = dbc.Card([
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        html.H3(len(unique_genes), className="text-primary mb-0"),
-                        html.P("Unique Genes", className="text-muted small")
-                    ], width=4),
-                    dbc.Col([
-                        html.H3(num_items, className="text-info mb-0"),
-                        html.P("Items Compared", className="text-muted small")
-                    ], width=4),
-                    dbc.Col([
-                        html.H3(sum(len(v) for v in gene_sources.values()), className="text-success mb-0"),
-                        html.P("Total Gene Instances", className="text-muted small")
-                    ], width=4)
+                        dbc.Button([html.I(className="bi bi-layers-fill me-2"), "Save Combined Group (Union)"], 
+                                   id="save-combined-group-btn-top", color="success", className="me-2 shadow-sm fw-bold"),
+                        dbc.Button([html.I(className="bi bi-trash3 me-2"), "Clear Selection"], 
+                                   id="clear-gene-groups-selection-btn", color="secondary", outline=True, className="shadow-sm")
+                    ], width=12)
                 ])
-            ])
-        ], className="mb-4")
+            ], className="p-3")
+        ], className="mb-4 shadow-sm border-0")
+
+        summary_stats = dbc.Row([
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div([
+                    html.Div(html.I(className="bi bi-dna fs-3 text-primary"), className="me-3"),
+                    html.Div([html.H3(len(unique_genes), className="mb-0 text-primary fw-bold"), html.Small("Total Unique Genes", className="text-muted fw-bold text-uppercase")])
+                ], className="d-flex align-items-center")
+            ]), className="h-100 shadow-sm border-start border-primary border-5"), width=12, md=4, className="mb-3"),
+            
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div([
+                    html.Div(html.I(className="bi bi-collection fs-3 text-info"), className="me-3"),
+                    html.Div([html.H3(num_items, className="mb-0 text-info fw-bold"), html.Small("Items Compared", className="text-muted fw-bold text-uppercase")])
+                ], className="d-flex align-items-center")
+            ]), className="h-100 shadow-sm border-start border-info border-5"), width=12, md=4, className="mb-3"),
+            
+            dbc.Col(dbc.Card(dbc.CardBody([
+                html.Div([
+                    html.Div(html.I(className="bi bi-asterisk fs-3 text-success"), className="me-3"),
+                    html.Div([html.H3(sum(len(v) for v in gene_sources.values()), className="mb-0 text-success fw-bold"), html.Small("Total Occurrences", className="text-muted fw-bold text-uppercase")])
+                ], className="d-flex align-items-center")
+            ]), className="h-100 shadow-sm border-start border-success border-5"), width=12, md=4, className="mb-3"),
+        ])
 
         visual_section = None
         intersection_data_list = []
         
-        # CASO A: Diagrama de Venn (2-3 items)
+        intersections_help_popover = dbc.Popover([
+            dbc.PopoverHeader("Intersection Logic"),
+            dbc.PopoverBody([
+                html.Div([html.Span("■", style={'color': '#6f42c1', 'fontSize': '1.2rem'}), " Purple: Core genes shared by ALL sources (Highest Priority)."], className="mb-2 small"),
+                html.Div([html.Span("■", style={'color': '#0dcaf0', 'fontSize': '1.2rem'}), " Cyan: Genes shared by a subset of sources."], className="mb-2 small"),
+                html.Div([html.Span("■", style={'color': 'gray', 'fontSize': '1.2rem'}), " Gray: Genes unique to a single source."], className="mb-2 small"),
+                html.Hr(className="my-2"),
+                html.Div([html.I(className="bi bi-plus-circle me-1"), "Click 'Add' to save any specific intersection subset to your panel."], className="small text-primary fw-bold")
+            ])
+        ], target="intersection-help-icon", trigger="legacy", placement="left")
+
+        # --- CASO A: VENN (2-3 items) ---
         if 2 <= num_items <= 3:
             try:
+                # (Lógica Venn igual a la anterior...)
                 sets_list = list(item_gene_sets.values())
                 labels_list = list(item_gene_sets.keys())
                 VENN_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c'] 
-                
                 COLOR_INTERSECTION_ALL = '#6f42c1' 
                 COLOR_INTERSECTION_SECONDARY = '#0dcaf0' 
 
@@ -367,6 +320,7 @@ def register_gene_groups_callbacks(app):
                 img_base64 = base64.b64encode(buf.read()).decode('utf-8')
                 plt.close(fig)
 
+                # Legend...
                 legend_items = []
                 for i, label in enumerate(labels_list):
                     display_label = label if len(label) < 30 else label[:27] + '...' 
@@ -375,195 +329,294 @@ def register_gene_groups_callbacks(app):
                         html.Span(display_label, title=label, style={'fontSize': '0.85rem'})
                     ], className="d-flex align-items-center me-3 mb-2"))
 
+                # Intersection Data Logic...
                 def create_intersection_entry(name, genes, color_hex, sources):
                     return {'name': name, 'genes': sorted(list(genes)), 'count': len(genes), 'color': color_hex, 'source_sets': sources}
 
                 if len(sets_list) == 2:
                     int_all = sets_list[0] & sets_list[1]
                     if int_all: intersection_data_list.append(create_intersection_entry("Intersection (Both)", int_all, COLOR_INTERSECTION_ALL, [0, 1]))
-                    
                     int_a = sets_list[0] - sets_list[1]
                     if int_a: intersection_data_list.append(create_intersection_entry(f"Unique to {labels_list[0]}", int_a, VENN_COLORS[0], [0]))
-                    
                     int_b = sets_list[1] - sets_list[0]
                     if int_b: intersection_data_list.append(create_intersection_entry(f"Unique to {labels_list[1]}", int_b, VENN_COLORS[1], [1]))
 
                 elif len(sets_list) == 3:
                     int_all = sets_list[0] & sets_list[1] & sets_list[2]
                     if int_all: intersection_data_list.append(create_intersection_entry("Intersection (All 3)", int_all, COLOR_INTERSECTION_ALL, [0,1,2]))
-
                     int_01 = (sets_list[0] & sets_list[1]) - sets_list[2]
                     if int_01: intersection_data_list.append(create_intersection_entry(f"{labels_list[0]} & {labels_list[1]} only", int_01, COLOR_INTERSECTION_SECONDARY, [0,1]))
-                    
                     int_02 = (sets_list[0] & sets_list[2]) - sets_list[1]
                     if int_02: intersection_data_list.append(create_intersection_entry(f"{labels_list[0]} & {labels_list[2]} only", int_02, COLOR_INTERSECTION_SECONDARY, [0,2]))
-                    
                     int_12 = (sets_list[1] & sets_list[2]) - sets_list[0]
                     if int_12: intersection_data_list.append(create_intersection_entry(f"{labels_list[1]} & {labels_list[2]} only", int_12, COLOR_INTERSECTION_SECONDARY, [1,2]))
-
                     int_0 = sets_list[0] - (sets_list[1] | sets_list[2])
                     if int_0: intersection_data_list.append(create_intersection_entry(f"Unique to {labels_list[0]}", int_0, VENN_COLORS[0], [0]))
-
                     int_1 = sets_list[1] - (sets_list[0] | sets_list[2])
                     if int_1: intersection_data_list.append(create_intersection_entry(f"Unique to {labels_list[1]}", int_1, VENN_COLORS[1], [1]))
-
                     int_2 = sets_list[2] - (sets_list[0] | sets_list[1])
                     if int_2: intersection_data_list.append(create_intersection_entry(f"Unique to {labels_list[2]}", int_2, VENN_COLORS[2], [2]))
 
+                # Cards...
                 int_cards = []
                 for idx, d in enumerate(intersection_data_list):
                     int_cards.append(dbc.Card([
                         dbc.CardBody([
                             html.Div([
-                                html.Span(f"{d['count']}", className="badge me-2", style={'backgroundColor': d['color'], 'fontSize': '0.9rem'}),
+                                html.Span(f"{d['count']}", className="badge me-2 rounded-pill", style={'backgroundColor': d['color'], 'fontSize': '0.9rem'}),
                                 html.Strong(d['name'], style={'fontSize':'0.9rem'})
                             ], className="d-flex align-items-center mb-2"),
-                            html.Div(', '.join(d['genes'][:15]) + ('...' if d['count']>15 else ''), className="text-muted small mb-2"),
-                            dbc.Button("Add to Panel", id={'type': 'add-intersection-btn', 'index': idx}, size="sm", outline=True, color="primary")
+                            html.Div(', '.join(d['genes'][:15]) + ('...' if d['count']>15 else ''), className="text-muted small mb-2 fst-italic"),
+                            dbc.Button([html.I(className="bi bi-plus-lg me-1"), "Add"], id={'type': 'add-intersection-btn', 'index': idx}, size="sm", outline=True, color="primary", className="w-100")
                         ], className="p-2")
-                    ], className="mb-2"))
+                    ], className="mb-2 border-light bg-light"))
 
-                visual_section = dbc.Row([
-                    dbc.Col([
-                        html.H5("Venn Diagram", className="mb-3"),
-                        html.Div(legend_items, className="d-flex flex-wrap mb-2"),
-                        html.Img(src=f"data:image/png;base64,{img_base64}", style={'maxWidth': '100%', 'height': 'auto'})
-                    ], width=12, lg=6),
-                    dbc.Col([
-                        html.H5("Intersections", className="mb-3"),
-                        html.Div(int_cards, style={'maxHeight': '450px', 'overflowY': 'auto'})
-                    ], width=12, lg=6)
-                ])
+                visual_section = dbc.Card([
+                    dbc.CardHeader([
+                        html.Div([
+                            html.I(className="bi bi-intersect me-2"),
+                            html.H6("Overlap Analysis (Venn)", className="d-inline-block m-0 fw-bold"),
+                            html.I(id="intersection-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'})
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom"),
+                    dbc.CardBody([
+                        intersections_help_popover,
+                        dbc.Row([
+                            dbc.Col([
+                                html.Div(legend_items, className="d-flex flex-wrap mb-3 justify-content-center"),
+                                html.Div(html.Img(src=f"data:image/png;base64,{img_base64}", style={'maxWidth': '100%', 'height': 'auto'}), className="text-center")
+                            ], width=12, lg=6, className="border-end"),
+                            dbc.Col([
+                                html.H6("Ranked Intersections", className="text-muted small fw-bold text-uppercase mb-3"),
+                                html.Div(int_cards, style={'maxHeight': '400px', 'overflowY': 'auto', 'paddingRight': '5px'})
+                            ], width=12, lg=6)
+                        ])
+                    ])
+                ], className="shadow-sm border-0 mb-4")
 
             except Exception as e:
-                visual_section = html.Div(f"Error generating Venn: {e}", className="text-danger")
+                visual_section = dbc.Alert(f"Error generating Venn: {e}", color="danger")
 
-        # CASO B: Matrix Cards (4+ items)
+        # --- CASO B: MATRIX (4+ items) ---
         elif num_items >= 4:
-            
+            # (Lógica Matrix igual a la anterior...)
             intersection_map = defaultdict(list)
             for gene, sources in gene_sources.items():
                 signature = tuple(sorted(sources))
                 intersection_map[signature].append(gene)
-            
-            sorted_intersections = sorted(
-                intersection_map.items(), 
-                key=lambda x: (len(x[0]), len(x[1])),
-                reverse=True
-            )
+            sorted_intersections = sorted(intersection_map.items(), key=lambda x: (len(x[0]), len(x[1])), reverse=True)
 
             matrix_cards = []
-            matrix_header = dbc.Row([
-                dbc.Col(html.Strong("Count", className="small text-muted"), width=2),
-                dbc.Col(html.Strong("Source Matrix", className="small text-muted"), width=8),
-                dbc.Col(html.Strong("Action", className="small text-muted"), width=2),
-            ], className="mb-2 border-bottom pb-1 mx-1 g-0")
-            matrix_cards.append(matrix_header)
-            
             count_idx = 0
             for signature, genes in sorted_intersections:
                 count = len(genes)
-                intersection_data_list.append({
-                    'name': f"Intersection: {len(signature)} sources",
-                    'genes': sorted(genes),
-                    'count': count,
-                    'source_sets': [] 
-                })
+                intersection_data_list.append({'name': f"Intersection: {len(signature)} sources", 'genes': sorted(genes), 'count': count, 'source_sets': []})
                 
                 dots_row = []
                 for source in ordered_source_names:
                     is_present = source in signature
-                    tooltip_id = f"tooltip-src-{count_idx}-{ordered_source_names.index(source)}"
+                    dot_color = '#198754' if is_present else '#e9ecef' # Green vs Gray
                     dot = html.Div([
-                        html.Span("●" if is_present else "○", id=tooltip_id,
-                                  style={'color': '#28a745' if is_present else '#dee2e6', 'fontSize': '1.4rem', 'cursor': 'help', 'marginRight': '6px', 'lineHeight': '1'}),
-                        dbc.Tooltip(source, target=tooltip_id, placement="top")
-                    ], className="d-inline-block")
+                        html.Div(style={'width': '12px', 'height': '12px', 'borderRadius': '50%', 'backgroundColor': dot_color, 'marginRight': '4px', 'display': 'inline-block'}),
+                    ], title=source, className="d-inline-block")
                     dots_row.append(dot)
 
-                badge_type = dbc.Badge("ALL", color="success", className="me-2") if len(signature) == num_items else \
-                             (dbc.Badge("UNIQUE", color="primary", className="me-2") if len(signature) == 1 else \
-                              dbc.Badge("MIX", color="warning", text_color="dark", className="me-2"))
+                badge_type = dbc.Badge("ALL", color="purple", className="me-2") if len(signature) == num_items else \
+                             (dbc.Badge("UNIQUE", color="secondary", className="me-2") if len(signature) == 1 else \
+                              dbc.Badge("MIX", color="info", text_color="dark", className="me-2"))
 
-                preview_text = f"Preview: {', '.join(genes[:20])}{'...' if len(genes)>20 else ''}"
-
+                # --- 💡 MODIFICACIÓN: Borde más visible (border border-secondary) ---
                 card = dbc.Card([
                     dbc.CardBody([
                         dbc.Row([
                             dbc.Col([
                                 html.H4(count, className="mb-0 text-dark fw-bold"),
                                 html.Small("genes", className="text-muted"),
-                                html.Div(badge_type, className="mt-1")
                             ], width=2, className="d-flex flex-column align-items-center justify-content-center border-end"),
                             
                             dbc.Col([
-                                html.Div(dots_row, className="d-flex flex-wrap align-items-center mb-1"),
-                                html.Div(
-                                    html.Small(preview_text, className="text-muted fst-italic"),
-                                    style={'whiteSpace': 'nowrap', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'width': '100%', 'display': 'block'}
-                                )
-                            ], width=8, className="d-flex flex-column justify-content-center ps-3"),
+                                html.Div(badge_type, className="mb-1"),
+                                html.Div(dots_row, className="mb-1"),
+                                html.Small(f"{', '.join(genes[:10])}...", className="text-muted fst-italic")
+                            ], width=8, className="ps-3"),
                             
                             dbc.Col([
-                                dbc.Button("Add Group", id={'type': 'add-intersection-btn', 'index': count_idx}, color="outline-dark", size="sm", className="w-100")
-                            ], width=2, className="d-flex align-items-center pe-3")
+                                dbc.Button([html.I(className="bi bi-plus-lg")], id={'type': 'add-intersection-btn', 'index': count_idx}, color="outline-primary", size="sm")
+                            ], width=2, className="d-flex align-items-center justify-content-end pe-3")
                         ], className="g-0 align-items-center")
                     ], className="p-2")
-                ], className="mb-2 shadow-sm")
+                ], className="mb-2 shadow-sm border border-secondary border-2") # <-- CAMBIO APLICADO AQUÍ
+                
                 matrix_cards.append(card)
                 count_idx += 1
 
-            visual_section = html.Div([
-                html.Div([html.H5(f"Detailed Intersection Analysis", className="mb-0"), html.P("Visual matrix showing gene overlap patterns (Sorted by Complexity).", className="text-muted small")], className="mb-3"),
-                html.Div([html.Span("● Present", className="text-success fw-bold me-3"), html.Span("○ Absent", className="text-muted fw-bold")], className="mb-3 small border p-2 rounded bg-light d-inline-block"),
-                html.Div(matrix_cards, style={'maxHeight': '600px', 'overflowY': 'auto'})
-            ])
+            visual_section = dbc.Card([
+                 dbc.CardHeader([
+                    html.Div([
+                        html.I(className="bi bi-grid-3x3-gap me-2"),
+                        html.H6("Overlap Analysis (Matrix)", className="d-inline-block m-0 fw-bold"),
+                        html.I(id="intersection-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'})
+                    ], className="d-flex align-items-center text-primary")
+                ], className="bg-white border-bottom"),
+                dbc.CardBody([
+                    intersections_help_popover,
+                    html.P("Ordered by complexity. Top cards show genes present in the most sources.", className="text-muted small mb-3"),
+                    html.Div(matrix_cards, style={'maxHeight': '500px', 'overflowY': 'auto'})
+                ])
+            ], className="shadow-sm border-0 mb-4")
 
+        # --- FREQUENCY CHART ---
         gene_frequency = []
         for gene, sources in gene_sources.items():
-            gene_frequency.append({'Gene': gene, 'Frequency': len(sources), 'Sources': ', '.join(sources[:3]) + ('...' if len(sources) > 3 else '')})
-        
+            # CORRECCIÓN: Restauro la columna 'Sources' (comma separated)
+            gene_frequency.append({
+                'Gene': gene, 
+                'Frequency': len(sources),
+                'Sources': ", ".join(sources) # <--- AÑADIDO
+            })
         gene_freq_df = pd.DataFrame(gene_frequency).sort_values('Frequency', ascending=False)
         gene_freq_df.insert(0, 'N°', range(1, len(gene_freq_df) + 1))
 
-        default_items_to_show = 50
-        fig_bar = px.bar(gene_freq_df, x='Gene', y='Frequency', title=f'Gene Frequency (Top {default_items_to_show} shown)', labels={'Frequency': 'Number of Sources'}, color='Frequency', color_continuous_scale='Blues')
-        max_range = min(default_items_to_show, len(gene_freq_df))
-        fig_bar.update_layout(xaxis_tickangle=-45, height=400, xaxis_range=[-0.5, max_range - 0.5], xaxis_rangeslider=dict(visible=True, thickness=0.1))
-
-        table = dash_table.DataTable(
-            data=gene_freq_df.to_dict('records'),
-            columns=[{"name": i, "id": i} for i in gene_freq_df.columns],
-            page_size=100,
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left', 'padding': '10px', 'fontFamily': 'sans-serif'},
-            style_header={'fontWeight': 'bold', 'backgroundColor': '#f8f9fa'},
-            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}]
+        fig_bar = px.bar(gene_freq_df, x='Gene', y='Frequency', 
+                         title=f'Gene Frequency (All {len(gene_freq_df)} genes)', 
+                         labels={'Frequency': 'Source Count'}, 
+                         color='Frequency', 
+                         color_continuous_scale='Blues')
+        
+        fig_bar.update_layout(
+            xaxis_tickangle=-45, 
+            height=400, 
+            margin=dict(l=40, r=20, t=40, b=80), 
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(
+                range=[-0.5, 49.5], 
+                rangeslider=dict(visible=True)
+            )
         )
 
-        buttons_row = dbc.Row([
-            dbc.Col([
-                dbc.Button("Save Combined Group (Union)", id="save-combined-group-btn-top", color="success", className="me-2"),
-                dbc.Button("Clear Selection", id="clear-gene-groups-selection-btn", color="secondary", outline=True)
-            ], className="mb-3")
-        ])
+        chart_help_popover = dbc.Popover([
+            dbc.PopoverHeader("Chart Navigation"),
+            dbc.PopoverBody([
+                html.Div("Shows gene frequency across selected sources."),
+                html.Div([html.Strong("Navigation:"), " Use the slider bar below the X-axis to scroll through all genes."]),
+                html.Div("Taller bars and brighter colors indicate higher consensus (present in more sources).", className="small text-muted mt-2")
+            ])
+        ], target="chart-help-icon", trigger="legacy", placement="left")
+
+        chart_section = dbc.Card([
+            dbc.CardHeader([
+                html.Div([
+                    html.I(className="bi bi-bar-chart-fill me-2"),
+                    html.H6("Gene Frequency Chart", className="d-inline-block m-0 fw-bold"),
+                    html.I(id="chart-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'})
+                ], className="d-flex align-items-center text-primary")
+            ], className="bg-white border-bottom"),
+            dbc.CardBody([
+                chart_help_popover,
+                dcc.Graph(figure=fig_bar, config={'displayModeBar': False})
+            ])
+        ], className="shadow-sm border-0 mb-4")
+
+        # --- DATA TABLE (Modified with Filters and Help) ---
+        
+        # 1. Popover de Ayuda de Tabla (Copiado de genes_analysis.py)
+        table_help_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader("Table Filtering & Sorting Help"),
+                dbc.PopoverBody([
+                    html.Div([
+                        html.Strong("To Sort:"),
+                        html.Span(" Click the arrows (▲/▼) in the column header to sort ascending or descending.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Text Filters:"),
+                        html.Span(" Type a value (e.g., ", className="small text-muted"),
+                        html.Code("TP53", className="small"),
+                        html.Span(") for exact match. Use ", className="small text-muted"),
+                        html.Code("contains TP", className="small"),
+                        html.Span(" or ", className="small text-muted"),
+                        html.Code("!= val", className="small"),
+                        html.Span(" to exclude.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Numeric Filters:"),
+                        html.Span(" Use operators like ", className="small text-muted"),
+                        html.Code("> 0.8", className="small"),
+                        html.Span(", ", className="small text-muted"),
+                        html.Code("<= 10", className="small"),
+                        html.Span(" or ranges.", className="small text-muted")
+                    ], className="mb-2"),
+
+                    html.Div([
+                        html.Strong("Tips:"),
+                        html.Span(" Combine filters across columns. Use the 'Clear All Filters' button to reset.", className="small text-muted")
+                    ], className="mb-0"),
+                ])
+            ],
+            id="gga-table-filter-help-popover",
+            target="gga-table-filter-help-icon",
+            trigger="legacy",
+            placement="bottom-start",
+        )
+
+        # 2. Controls Row (Detailed Data + Icon + Clear Button)
+        table_controls = html.Div([
+            html.Div([
+                html.H6("Detailed Data", className="fw-bold m-0"),
+                html.I(id="gga-table-filter-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'}),
+            ], className="d-flex align-items-center"),
+            dbc.Button("Clear Filters", id='gga-table-clear-filters-btn', size="sm", color="secondary", outline=True)
+        ], className="d-flex justify-content-between align-items-center mb-2 mt-2")
+
+        table_section = dbc.Card([
+            dbc.CardHeader([
+                html.Div([
+                    html.I(className="bi bi-table me-2"),
+                    html.H6("Complete Gene List", className="d-inline-block m-0 fw-bold")
+                ], className="d-flex align-items-center text-primary")
+            ], className="bg-white border-bottom"),
+            dbc.CardBody([
+                table_help_popover,
+                table_controls,
+                dash_table.DataTable(
+                    id='gga-genes-table', # Added ID
+                    data=gene_freq_df.to_dict('records'),
+                    columns=[{"name": i, "id": i} for i in gene_freq_df.columns],
+                    page_size=20,
+                    style_table={'overflowX': 'auto'},
+                    style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6'},
+                    style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
+                    style_cell={'textAlign': 'left', 'padding': '8px', 'fontFamily': 'sans-serif', 'fontSize': '0.9rem'},
+                    style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                    # CORRECCIÓN: Ajuste de anchos de columna según imagen
+                    style_cell_conditional=[
+                        {'if': {'column_id': 'N°'}, 'width': '100px'},
+                        {'if': {'column_id': 'Frequency'}, 'width': '100px'},
+                        {'if': {'column_id': 'Gene'}, 'width': '300px'}, # El resto del espacio
+                        {'if': {'column_id': 'Sources'}, 'width': 'auto'}
+                    ],
+                    filter_action="native",
+                    sort_action="native"
+                )
+            ])
+        ], className="shadow-sm border-0 mb-4")
 
         final_layout = [buttons_row]
-        if num_items == 1:
-            final_layout.append(html.H5("Gene Frequency Table", className="mt-4 mb-3"))
-            final_layout.append(table)
-        elif num_items >= 2:
+        if num_items >= 2:
             final_layout.append(summary_stats)
             if visual_section: final_layout.append(visual_section)
-            final_layout.append(html.H5("Gene Frequency Chart", className="mt-4 mb-3"))
-            final_layout.append(dcc.Graph(figure=fig_bar))
-            final_layout.append(html.Div([html.H5("Complete Gene List (Paginated)", className="mt-4 mb-3"), table]))
+            final_layout.append(chart_section)
+        
+        final_layout.append(table_section)
 
         store_data = {'genes': list(unique_genes), 'sources': list(item_gene_sets.keys())}
         
         return html.Div(final_layout), store_data, intersection_data_list, selected_indices
 
-    # 3. Callback para limpiar (Sin cambios)
+    # 3. Callback Clear (Sin Cambios)
     @app.callback(
         [Output({'type': 'gene-group-card-checkbox', 'index': ALL}, 'value'),
          Output('selected-gene-group-indices-store', 'data', allow_duplicate=True)],
@@ -575,7 +628,7 @@ def register_gene_groups_callbacks(app):
         if not n_clicks: raise PreventUpdate
         return [[] for _ in current_values], []
 
-    # 4. Callback Modal Union (Sin cambios)
+    # 4. Callback Union Modal (Sin Cambios)
     @app.callback(
         [Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True),
          Output('gene-groups-analysis-tab-modal-info', 'children', allow_duplicate=True),
@@ -596,7 +649,7 @@ def register_gene_groups_callbacks(app):
             return True, modal_info, f"Combined Group - {gene_count} Genes", f"Combined from {len(sources)} sources.", genes_store_data
         raise PreventUpdate
 
-    # 5. Callback Modal Intersección (Sin cambios)
+    # 5. Callback Intersection Modal (Sin Cambios)
     @app.callback(
         [Output('gene-groups-analysis-tab-modal', 'is_open', allow_duplicate=True),
          Output('gene-groups-analysis-tab-modal-info', 'children', allow_duplicate=True),
@@ -625,4 +678,15 @@ def register_gene_groups_callbacks(app):
                 group_data = {'genes': intersection['genes'], 'sources': [intersection['name']], 'meta_type': 'single_intersection', 'name': intersection['name']}
                 return True, modal_info, intersection['name'], f"Intersection group with {intersection['count']} genes.", group_data
 
+        raise PreventUpdate
+
+    # 6. Callback for Clearing Table Filters
+    @app.callback(
+        Output('gga-genes-table', 'filter_query'),
+        Input('gga-table-clear-filters-btn', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def clear_gga_table_filters(n_clicks):
+        if n_clicks:
+            return ""
         raise PreventUpdate
