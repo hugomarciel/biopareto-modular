@@ -92,6 +92,7 @@ def register_data_management_callbacks(app):
                                     id={'type': 'front-name-input', 'index': front['id']},
                                     value=front['name'],
                                     placeholder="Enter front name",
+                                    debounce=True,
                                     disabled=front.get('is_consolidated', False)
                                 )
                             ], size="sm")
