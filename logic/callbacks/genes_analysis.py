@@ -1,7 +1,7 @@
 # logic/callbacks/genes_analysis.py
 
 import dash
-from dash import Output, Input, State, dcc, html, dash_table, ctx
+from dash import Output, Input, State, dcc, html, dash_table, ctx, ALL
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
@@ -13,7 +13,7 @@ from datetime import datetime
 
 def register_genes_analysis_callbacks(app):
 
-    # --- CALLBACK 1: PROCESAR DATOS Y ANÁLISIS COMÚN (SIN CAMBIOS) ---
+    # --- CALLBACK 1: PROCESAR DATOS Y ANÁLISIS COMÚN (CON PREPARACIÓN PARA EXPANSIÓN) ---
     @app.callback(
         [Output('common-genes-analysis', 'children'),
          Output('genes-analysis-internal-store', 'data')],
@@ -21,7 +21,7 @@ def register_genes_analysis_callbacks(app):
     )
     def prepare_data_and_common_analysis(data):
         if not data:
-            return "", None
+            return dbc.Alert("No data loaded. Please upload a file and select a range.", color="warning"), None
 
         all_solutions_list = []
         available_objectives = []
@@ -57,7 +57,7 @@ def register_genes_analysis_callbacks(app):
                     genes_data.append(row)
 
         if not all_solutions_list:
-            return "", None
+            return dbc.Alert("No solutions visible in the selected range.", color="info"), None
             
         genes_df = pd.DataFrame(genes_data)
 
@@ -67,53 +67,43 @@ def register_genes_analysis_callbacks(app):
         genes_100_percent = gene_counts[gene_counts == total_solutions]
         genes_under_100 = gene_counts[gene_counts < total_solutions]
 
+        # --- SECCIÓN 1.1: GENES 100% ---
         genes_100_content = []
         if len(genes_100_percent) > 0:
             genes_100_content = [
-                html.Div([
-                    html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3"),
-                    dbc.Button(
-                        [html.I(className="bi bi-bookmark-plus me-2"), "Save 100% Group"],
-                        id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
-                        color="info",
-                        size="sm"
-                    )
-                ], className="d-flex justify-content-between align-items-center mb-3"),
                 dbc.Card([
                     dbc.CardBody([
-                        html.P(f"Found {len(genes_100_percent)} genes that appear in all {total_solutions} solutions:",
-                               className="text-muted mb-3"),
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Button(
-                                    gene,
-                                    id={'type': 'add-gene-individual-btn', 'gene_name': gene, 'source': '100pct'},
-                                    color="success",
-                                    size="sm",
-                                    className="me-2 mb-2",
-                                    style={'fontSize': '14px', 'padding': '8px 12px'}
-                                )
-                                for gene in sorted(genes_100_percent.index)
-                            ])
-                        ])
+                        html.Div([
+                            html.Div([
+                                html.H6("🎯 Conserved Genes (100% Frequency)", className="fw-bold text-success mb-1"),
+                                html.Small(f"These {len(genes_100_percent)} genes appear in all {total_solutions} solutions.", className="text-muted")
+                            ]),
+                            dbc.Button(
+                                [html.I(className="bi bi-bookmark-plus me-2"), "Save Group"],
+                                id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
+                                color="success",
+                                outline=True,
+                                size="sm"
+                            )
+                        ], className="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2"),
+                        
+                        html.Div([
+                            dbc.Badge(
+                                gene,
+                                id={'type': 'add-gene-individual-btn', 'gene_name': gene, 'source': '100pct'},
+                                color="success",
+                                className="me-1 mb-1 p-2",
+                                style={'cursor': 'pointer', 'fontSize': '0.85rem'}
+                            )
+                            for gene in sorted(genes_100_percent.index)
+                        ], className="d-flex flex-wrap")
                     ])
-                ], className="mb-4")
+                ], className="mb-4 bg-light border-success border-opacity-25 shadow-sm")
             ]
         else:
-            genes_100_content = [
-                html.Div([
-                    html.H5("🎯 Genes Present in 100% of Solutions", className="text-success mb-3"),
-                    dbc.Button(
-                        [html.I(className="bi bi-bookmark-plus me-2"), "Save 100% Group"],
-                        id={'type': 'genes-tab-add-gene-group-btn', 'index': '100pct'},
-                        color="info",
-                        size="sm",
-                        style={'display': 'none'}
-                    )
-                ], className="d-flex justify-content-between align-items-center mb-3"),
-                dbc.Alert("No genes appear in 100% of the solutions.", color="info", className="mb-4")
-            ]
+            genes_100_content = [dbc.Alert("No genes appear in 100% of the solutions.", color="light", className="mb-4 small")]
         
+        # --- SECCIÓN 1.2: GRÁFICO DE FRECUENCIA ---
         genes_under_100_content = []
         if len(genes_under_100) > 0:
             percentage_groups = {}
@@ -124,54 +114,54 @@ def register_genes_analysis_callbacks(app):
                 percentage_groups[percentage].append(gene)
             percentages = sorted(percentage_groups.keys())
             gene_counts_per_percentage = [len(percentage_groups[p]) for p in percentages]
+            
             fig = go.Figure(data=[
                 go.Bar(
                     x=percentages,
                     y=gene_counts_per_percentage,
-                    marker=dict(color='rgb(70, 130, 180)', line=dict(color='rgb(50, 110, 160)', width=1)),
+                    marker=dict(color='#0d6efd', opacity=0.8),
                     text=gene_counts_per_percentage,
                     textposition='outside',
                     hovertemplate='<b>%{x}% frequency</b><br>Number of genes: %{y}<extra></extra>'
                 )
             ])
             fig.update_layout(
-                title={'text': f'📊 Gene Frequency Distribution ({len(genes_under_100)} genes under 100%)', 'x': 0.5, 'xanchor': 'center', 'font': {'size': 16, 'color': 'rgb(70, 130, 180)'}},
-                xaxis_title='Frequency (%)', yaxis_title='Number of Genes', height=400,
-                margin=dict(l=60, r=60, t=60, b=60), plot_bgcolor='white', paper_bgcolor='white', font=dict(size=12),
-                xaxis=dict(gridcolor='rgb(230, 230, 230)', showgrid=True, tickmode='array', tickvals=percentages, ticktext=[f'{p}%' for p in percentages]),
-                yaxis=dict(gridcolor='rgb(230, 230, 230)', showgrid=True)
+                title={'text': f'Variable Gene Distribution ({len(genes_under_100)} genes < 100%)', 'font': {'size': 14}},
+                xaxis_title='Frequency (%)', 
+                yaxis_title='Gene Count', 
+                height=350,
+                margin=dict(l=40, r=20, t=40, b=40), 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, tickmode='array', tickvals=percentages, ticktext=[f'{p}%' for p in percentages]),
+                yaxis=dict(showgrid=True, gridcolor='#e9ecef')
             )
             genes_under_100_content = [
-                html.H5("📈 Gene Frequency Distribution", className="text-primary mb-3"),
                 dcc.Graph(
                     id='gene-frequency-chart',
                     figure=fig,
-                    config={'displayModeBar': True, 'displaylogo': True, 'modeBarButtonsToRemove': ['pan2d', 'lasso2d', 'select2d']}
-                ),
-                html.P(f"Distribution showing {len(genes_under_100)} genes across {len(percentages)} different frequency levels. Click on bars to see gene lists.",
-                       className="text-muted mt-2", style={'fontSize': '12px'}),
-                html.Div(id='clicked-genes-display', className="mt-3")
+                    config={'displayModeBar': False}
+                )
             ]
         else:
-            genes_under_100_content = [
-                html.H5("📈 Gene Frequency Distribution", className="text-primary mb-3"),
-                dbc.Alert("All genes appear in 100% of the solutions.", color="info")
-            ]
+            genes_under_100_content = [dbc.Alert("All genes are 100% conserved (no variation).", color="info")]
 
-        combined_analysis = genes_100_content + genes_under_100_content
+        # --- SECCIÓN 1.3: CONTENEDOR EXPANDIBLE (ACORDEÓN) ---
+        # Este div estará vacío inicialmente y se llenará al hacer clic en el gráfico
+        expansion_placeholder = html.Div(id='frequency-detail-wrapper', className="mt-3")
+
+        combined_analysis = genes_100_content + genes_under_100_content + [expansion_placeholder]
 
         return combined_analysis, genes_df.to_json(orient='split')
 
-
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CORREGIDO: TIPO DE LOADING) ---
-    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CORREGIDO: Clean Solution Name) ---
+    # --- CALLBACK 2: CONSTRUIR LAYOUT DETALLADO (CON ESTILO DE FILTROS DESTACADO) ---
     @app.callback(
         Output('genes-table-container', 'children'),
         Input('genes-analysis-internal-store', 'data')
     )
     def build_detailed_layout(data_json):
         if not data_json:
-            return dbc.Alert("No data loaded.", color="info")
+            return dbc.Alert("No data available for detailed analysis.", color="secondary")
             
         genes_df = pd.read_json(StringIO(data_json), orient='split')
         
@@ -180,16 +170,11 @@ def register_genes_analysis_callbacks(app):
                                [{'label': name, 'value': name} for name in front_names]
         
         objective_options = []
-        categorical_options = []
-        
-        # Definimos columnas categóricas. Mantenemos 'unique_solution_id' aquí para que
-        # el dropdown del gráfico la siga reconociendo como opción válida si se desea.
         categorical_cols = ['gene', 'front_name', 'unique_solution_id']
         excluded_cols = categorical_cols + ['solution_id']
         
         for col in genes_df.columns:
-            if col in excluded_cols:
-                continue
+            if col in excluded_cols: continue
             if pd.api.types.is_numeric_dtype(genes_df[col]):
                 objective_options.append({'label': col.replace('_', ' ').title(), 'value': col})
 
@@ -198,82 +183,76 @@ def register_genes_analysis_callbacks(app):
 
         table_columns = []
         for col in genes_df.columns:
-            # --- 💡 CAMBIO 1: Ocultar la columna combinada (Redundante) ---
-            # Aunque la ocultamos de la vista, los datos siguen en el 'data' de la tabla
-            # por lo que el gráfico podrá seguir usándola internamente.
-            if col == 'unique_solution_id':
-                continue 
+            # Ocultar ID largo
+            if col == 'unique_solution_id': continue 
                 
             column_name = col.replace('_', ' ').title()
-            
-            # Configuración base con Toggle habilitado
             col_def = {'name': column_name, 'id': col, 'hideable': True}
             
-            # Personalización de nombres de cabecera
-            if col == 'front_name':
-                col_def.update({'name': 'Front'})
+            if col == 'front_name': col_def.update({'name': 'Front'})
+            elif col == 'solution_id': col_def.update({'name': 'Solution'})
+            elif col == 'gene': col_def.update({'name': 'Gene', 'presentation': 'markdown'}) 
             
-            # --- 💡 CAMBIO 2: Mostrar el ID corto pero llamarlo 'Solution' ---
-            elif col == 'solution_id':
-                col_def.update({'name': 'Solution'})
-                
-            elif col == 'gene':
-                col_def.update({'name': 'Gene', 'presentation': 'markdown'}) 
-            
-            # Formateo numérico
             if col in [o['value'] for o in objective_options]:
-                col_def.update({
-                    'type': 'numeric',
-                    'format': {'specifier': '.3f'} if genes_df[col].dtype == 'float64' else None
-                })
+                col_def.update({'type': 'numeric', 'format': {'specifier': '.3f'} if genes_df[col].dtype == 'float64' else None})
             
             table_columns.append(col_def)
             
-        new_graph_section = html.Div([
-            html.H5("📊 Analysis of Filtered Table Data", className="text-secondary mb-3"),
-            html.P("This graph updates dynamically as you filter the table below.", className="text-muted small"),
-            
-            dbc.Row([
-                dbc.Col([
-                    dbc.Label("Filter by Front:", className="fw-bold"),
-                    dcc.Dropdown(
-                        id='genes-global-front-filter',
-                        options=front_filter_options,
-                        value='all',
-                        clearable=False
-                    )
-                ], width=12, lg=4, className="mb-2 mb-lg-0"),
-                
-                dbc.Col([
-                    dbc.Label("Select metric to plot:"),
-                    dcc.Dropdown(
-                        id='genes-table-graph-metric-select',
-                        options=metric_options,
-                        value='gene'
-                    )
-                ], width=12, lg=5, className="mb-2 mb-lg-0"),
+        # --- SECCIÓN DE CONTROLES (TOOLBAR) ---
+        controls_toolbar = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    # Columna 1: Filtro de Frente
+                    dbc.Col([
+                        dbc.Label("1. Filter by Front", className="small text-uppercase text-muted fw-bold"),
+                        dcc.Dropdown(
+                            id='genes-global-front-filter',
+                            options=front_filter_options,
+                            value='all',
+                            clearable=False,
+                            className="shadow-sm"
+                        )
+                    ], width=12, md=4, className="mb-2 mb-md-0"),
+                    
+                    # Columna 2: Selector de Métrica
+                    dbc.Col([
+                        dbc.Label("2. Select Metric to Plot", className="small text-uppercase text-muted fw-bold"),
+                        dcc.Dropdown(
+                            id='genes-table-graph-metric-select',
+                            options=metric_options,
+                            value='gene',
+                            className="shadow-sm"
+                        )
+                    ], width=12, md=5, className="mb-2 mb-md-0"),
 
-                dbc.Col([
-                    dbc.Button(
-                        [html.I(className="bi bi-bookmark-plus me-2"), "Save Visible Group"],
-                        id='save-graph-group-btn',
-                        color="info",
-                        size="sm",
-                        className="w-100",
-                        style={'display': 'block'}
-                    )
-                ], width=12, lg=3, className="d-flex align-items-end")
+                    # Columna 3: Acción
+                    dbc.Col([
+                        dbc.Label("Action", className="small text-uppercase text-muted fw-bold d-block"),
+                        dbc.Button(
+                            [html.I(className="bi bi-bookmark-plus me-2"), "Save Visible"],
+                            id='save-graph-group-btn',
+                            color="primary",
+                            outline=False,
+                            size="md",
+                            className="w-100 shadow-sm"
+                        )
+                    ], width=12, md=3)
+                ])
+            ], className="p-3") 
+        ], className="bg-light border-0 mb-3")
 
-            ], className="mb-3"),
-            
-            dcc.Loading(
-                id="loading-genes-histogram",
-                type="default",
-                children=dcc.Graph(id='genes-table-histogram')
-            ),
-        ])
+        # --- SECCIÓN GRÁFICA ---
+        graph_section = dcc.Loading(
+            id="loading-genes-histogram",
+            type="default",
+            children=dcc.Graph(
+                id='genes-table-histogram',
+                config={'displayModeBar': False},
+                style={'height': '400px'}
+            )
+        )
         
-        # Popover de ayuda (sin cambios)
+        # --- POPOVER DE AYUDA ---
         filter_help_popover = dbc.Popover(
             [
                 dbc.PopoverHeader("Table Filtering & Sorting Help"), 
@@ -303,70 +282,59 @@ def register_genes_analysis_callbacks(app):
             placement="bottom-start",
         )
         
+        # --- TABLA DE DATOS ---
         table = dash_table.DataTable(
             id='detailed-genes-table',
             data=genes_df.to_dict('records'),
             columns=table_columns,
             sort_action='native',
             filter_action='native',
-            filter_query="",
             page_action='native',
-            page_size=20,
-            style_cell={'textAlign': 'left', 'padding': '10px'},
+            page_size=15, 
+            style_table={'overflowX': 'auto'},
+            style_cell={'textAlign': 'left', 'padding': '8px', 'fontFamily': 'sans-serif', 'fontSize': '0.9rem'},
+            
+            # Estilo de Cabecera
             style_header={
-                'backgroundColor': 'rgb(70, 130, 180)',
-                'color': 'white',
+                'backgroundColor': '#f8f9fa',
+                'color': '#333',
                 'fontWeight': 'bold',
-                'fontSize': '14px',
-                'border': '1px solid rgb(50, 110, 160)'
+                'borderBottom': '2px solid #dee2e6'
             },
+            
+            # --- 💡 AQUÍ ESTÁ EL CAMBIO: Estilo de Filtros Destacado ---
             style_filter={
-                'backgroundColor': 'rgb(220, 235, 255)',
-                'border': '1px solid rgb(70, 130, 180)',
-                'fontWeight': 'bold'
+                'backgroundColor': 'rgb(220, 235, 255)', # Azul claro idéntico al acordeón
+                'border': '1px solid rgb(180, 200, 220)',
+                'fontWeight': 'bold',
+                'color': '#333'
             },
-            style_data_conditional=[
-                {'if': {'row_index': 'odd'}, 'backgroundColor': 'rgb(248, 248, 248)'}
-            ],
-            tooltip_duration=None,
+            # ----------------------------------------------------------
+            
+            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
         )
 
+        # --- ENSAMBLADO FINAL ---
         return html.Div([
-            html.Hr(),
-            new_graph_section,
-            html.Hr(),
-            html.H5([
-                "📋 Detailed Gene Table by Solution",
-                html.I( 
-                    id="genes-filter-help-icon", 
-                    className="fa fa-question-circle ms-2", 
-                    style={'cursor': 'pointer', 'fontSize': '16px', 'color': 'var(--bs-info)'}
-                )
-            ], className="text-secondary mb-3 d-flex align-items-center"),
+            controls_toolbar,
+            
+            # KPI Cards (Resumen)
+            dcc.Loading(html.Div(id='genes-table-summary-panel'), type="circle", color="#0d6efd"),
+            
+            # Gráfico colapsable visualmente
+            html.Div(graph_section, className="mb-3 border rounded p-2"),
+            
+            # Cabecera Tabla
+            html.Div([
+                html.Div([
+                    html.H6("Detailed Data", className="fw-bold m-0"),
+                    html.I(id="genes-filter-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer'}),
+                ], className="d-flex align-items-center"),
+                
+                dbc.Button("Clear Filters", id='genes-table-clear-filters-btn', size="sm", color="secondary", outline=True)
+            ], className="d-flex justify-content-between align-items-center mb-2 mt-4"),
+            
             filter_help_popover,
-            dbc.Row([
-                dbc.Col(
-                    dcc.Loading(
-                        id="loading-summary-panel",
-                        type="circle", 
-                        color="#0d6efd", 
-                        children=html.Div(id='genes-table-summary-panel')
-                    ),
-                    width=12, lg=9, xl=10, className="mb-2 mb-lg-0"
-                ),
-                dbc.Col(
-                    dbc.Button(
-                        [html.I(className="bi bi-eraser me-2"), "Clear All Filters"],
-                        id='genes-table-clear-filters-btn',
-                        color="secondary",
-                        outline=True,
-                        size="sm",
-                        className="w-100"
-                    ),
-                    width=12, lg=3, xl=2,
-                    className="d-flex align-items-center"
-                )
-            ], className="mb-3", align="center"),
             table
         ])
     
@@ -390,75 +358,211 @@ def register_genes_analysis_callbacks(app):
         return filtered_df.to_dict('records')
         
 
-    # --- CALLBACK 4: MOSTRAR GENES AL CLICAR EN GRÁFICO DE FRECUENCIA (SIN CAMBIOS) ---
+    # --- CALLBACK 4: MOSTRAR DETALLE EXPANDIDO (OPTIMIZADO: SOLO DEPENDE DE CLICKDATA) ---
     @app.callback(
-        Output('clicked-genes-display', 'children'),
-        [Input('gene-frequency-chart', 'clickData')],
+        Output('frequency-detail-wrapper', 'children'),
+        [Input('gene-frequency-chart', 'clickData')], # 💡 CAMBIO: Ya no escucha el botón aquí
         [State('data-store', 'data')]
     )
-    def display_clicked_genes(clickData, data):
+    def display_clicked_genes_expanded(clickData, data):
+        """
+        Genera una tarjeta detallada (Accordion Style) debajo del gráfico.
+        Se activa cuando cambia clickData (incluyendo cuando se resetea a None).
+        """
+        # Si clickData es None (porque se reseteó), devolvemos vacío (Cerrar)
         if not clickData or not data:
-            return ""
+            return []
 
+        # 1. Reconstruir datos
         all_solutions_list = []
         for front in data.get("fronts", []):
             if front.get("visible", True):
                 all_solutions_list.extend(front["data"])
 
-        if not all_solutions_list:
-            return ""
-
         clicked_percentage = clickData['points'][0]['x']
-
         all_genes = [gene for solution in all_solutions_list for gene in solution.get('selected_genes', [])]
         gene_counts = pd.Series(all_genes).value_counts()
         total_solutions = len(all_solutions_list)
         
         genes_under_100 = gene_counts[gene_counts < total_solutions]
-        gene_counts_filtered = genes_under_100
-
         genes_at_percentage = []
-        for gene, count in gene_counts_filtered.items():
+        for gene, count in genes_under_100.items():
             percentage = round((count / total_solutions) * 100, 1)
             if percentage == clicked_percentage:
-                genes_at_percentage.append(gene)
+                genes_at_percentage.append({'gene': gene, 'count': count, 'frequency': f"{percentage}%"})
 
         if not genes_at_percentage:
-            return ""
+            return []
 
-        genes_at_percentage.sort(key=lambda x: (-gene_counts[x], x))
-
-        return dbc.Card([
-            dbc.CardHeader([
-                html.Div([
-                    html.H6(f"Genes with {clicked_percentage}% frequency", className="mb-0 text-primary"),
-                    dbc.Button(
-                        [html.I(className="bi bi-bookmark-plus me-2"), "Save Group"],
-                        id={'type': 'genes-tab-add-gene-group-btn', 'index': str(clicked_percentage)},
-                        color="info",
-                        size="sm"
-                    )
-                ], className="d-flex align-items-center justify-content-between")
-            ]),
-            dbc.CardBody([
-                html.P(f"Found {len(genes_at_percentage)} genes appearing in {gene_counts[genes_at_percentage[0]]} out of {total_solutions} solutions:",
-                       className="text-muted mb-3"),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.Button(
-                            f"{gene} ({gene_counts[gene]})",
-                            id={'type': 'add-gene-individual-btn', 'gene_name': gene, 'source': f"freq_{clicked_percentage}"},
-                            color="primary",
-                            size="sm",
-                            className="me-2 mb-2",
-                            style={'fontSize': '14px', 'padding': '8px 12px'}
-                        )
-                        for gene in genes_at_percentage
-                    ], width=12)
+        genes_at_percentage.sort(key=lambda x: (-x['count'], x['gene']))
+        
+        # 2. Construir Componentes de UI (Con Popover de Ayuda)
+        freq_help_popover = dbc.Popover(
+            [
+                dbc.PopoverHeader("Filter Syntax Guide"), 
+                dbc.PopoverBody([
+                    html.Small("Filter the table using these operators:", className="d-block mb-2"),
+                    html.Ul([
+                        html.Li(["Text: ", html.Code("TP53"), " or ", html.Code("contains TP")]),
+                        html.Li(["Numbers: ", html.Code("> 5"), ", ", html.Code("<= 10"), " or ", html.Code("= 20")]),
+                    ], className="ps-3 small mb-0")
                 ])
-            ])
-        ], className="mt-3")
+            ],
+            id="freq-table-help-popover",
+            target="freq-table-help-icon",
+            trigger="legacy", 
+            placement="right",
+        )
 
+        toolbar = dbc.Row([
+            dbc.Col([
+                html.H6([
+                    html.I(className="bi bi-diagram-2-fill me-2 text-primary"),
+                    f"Group: {clicked_percentage}% Frequency ",
+                    dbc.Badge(f"{len(genes_at_percentage)} Genes", color="light", text_color="primary", className="ms-1 border"),
+                    html.I(
+                        id="freq-table-help-icon", 
+                        className="bi bi-question-circle-fill text-muted ms-2", 
+                        style={'cursor': 'pointer', 'fontSize': '1rem'},
+                        title="Click for filter help"
+                    )
+                ], className="m-0 fw-bold d-flex align-items-center")
+            ], width=True, className="d-flex align-items-center"),
+            
+            dbc.Col([
+                dbc.Button(
+                    [html.I(className="bi bi-bookmark-plus me-2"), "Save Group"],
+                    id={'type': 'genes-tab-add-gene-group-btn', 'index': str(clicked_percentage)},
+                    color="primary",
+                    size="sm",
+                    className="me-2 shadow-sm"
+                ),
+                # Botón Cerrar
+                dbc.Button(
+                    html.I(className="bi bi-x-lg"),
+                    id={'type': 'close-freq-detail-btn', 'index': 'main'},
+                    color="link",
+                    size="sm",
+                    className="text-muted text-decoration-none"
+                )
+            ], width="auto", className="d-flex align-items-center")
+        ], className="mb-3 border-bottom pb-2")
+
+        data_table = dash_table.DataTable(
+            id='frequency-detail-table',
+            data=genes_at_percentage,
+            columns=[
+                {'name': 'Gene Name', 'id': 'gene'}, 
+                {'name': 'Occurrence (Count)', 'id': 'count'},
+                {'name': 'Frequency', 'id': 'frequency'}
+            ],
+            page_size=10,
+            sort_action='native',
+            filter_action='native',
+            style_table={'overflowX': 'auto'},
+            style_header={
+                'backgroundColor': '#f8f9fa', 
+                'fontWeight': 'bold',
+                'borderBottom': '2px solid #dee2e6'
+            },
+            style_filter={
+                'backgroundColor': 'rgb(220, 235, 255)',
+                'border': '1px solid rgb(180, 200, 220)',
+                'fontWeight': 'bold',
+                'color': '#333'
+            },
+            style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '0.9rem'},
+            style_data_conditional=[
+                {'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'},
+                {'if': {'state': 'active'}, 'backgroundColor': 'rgba(13, 110, 253, 0.1)', 'border': '1px solid #0d6efd'}
+            ],
+            tooltip_data=[
+                {'gene': {'value': 'Click to add individual gene to panel', 'type': 'text'}} for _ in genes_at_percentage
+            ],
+            tooltip_duration=None
+        )
+
+        accordion_card = dbc.Card([
+            dbc.CardBody([
+                toolbar,
+                freq_help_popover,
+                html.Div([
+                    dbc.Alert("💡 Tip: Click on any gene cell to add it individually to the panel.", color="info", className="p-1 small mb-2 text-center"),
+                    data_table
+                ])
+            ], className="bg-light bg-opacity-50") 
+        ], className="shadow-sm border-primary border-opacity-25 mt-2 animate__animated animate__fadeIn")
+
+        return accordion_card
+
+    # --- NUEVO CALLBACK: RESETEAR GRÁFICO AL CERRAR (SOLUCIONA EL BUG DE CLIC) ---
+    @app.callback(
+        Output('gene-frequency-chart', 'clickData'),
+        Input({'type': 'close-freq-detail-btn', 'index': ALL}, 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def reset_frequency_graph_clickdata(n_clicks_list):
+        """
+        Resetea el clickData del gráfico a None cuando se pulsa cerrar.
+        Esto permite volver a hacer clic en la misma barra inmediatamente.
+        """
+        if any(n_clicks_list):
+            return None
+        raise PreventUpdate
+
+
+    # --- CALLBACK EXTRA: MANEJAR CLIC EN LA TABLA DEL ACORDEÓN ---
+    @app.callback(
+        [Output('genes-graph-action-modal', 'is_open', allow_duplicate=True),
+         Output('genes-graph-modal-title', 'children', allow_duplicate=True),
+         Output('genes-graph-modal-body', 'children', allow_duplicate=True),
+         Output('genes-graph-modal-footer', 'children', allow_duplicate=True),
+         Output('genes-graph-temp-store', 'data', allow_duplicate=True)],
+        Input('frequency-detail-table', 'active_cell'), 
+        State('frequency-detail-table', 'data'),
+        prevent_initial_call=True
+    )
+    def handle_accordion_table_click(active_cell, table_data):
+        if not active_cell or not table_data:
+            raise PreventUpdate
+
+        # Obtenemos la fila correcta (considerando sort/filter nativo)
+        # Nota: table_data ya viene filtrado/ordenado por el frontend de Dash DataTable
+        row_index = active_cell['row']
+        
+        if row_index >= len(table_data):
+            raise PreventUpdate
+
+        selected_row = table_data[row_index]
+        gene_name = selected_row['gene']
+        freq = selected_row['frequency']
+
+        # Reutilizamos el modal de "Añadir Gen"
+        title = "Add Gene to Interest Panel"
+        body = html.Div([
+            html.P([html.Strong("Type: "), html.Span("🔬 Individual Gene", className="text-info")]),
+            html.P([html.Strong("Gene: "), html.Code(gene_name, className="text-primary")]),
+            html.P([html.Strong("Source: "), html.Span(f"Frequency Analysis ({freq})", className="text-muted")]),
+            dbc.Label("Add a comment:", className="fw-bold mt-3"),
+            dbc.Textarea(
+                id='genes-graph-modal-comment-input',
+                value=f"Individual gene {gene_name} identified at {freq} frequency.",
+                style={'height': '100px'}
+            )
+        ])
+        
+        footer = html.Div([
+            dbc.Button("Cancel", id='genes-graph-modal-cancel-btn', color="secondary", className="me-2"),
+            dbc.Button("Add to Panel", id="genes-graph-modal-confirm-btn", color="primary")
+        ])
+
+        temp_data = {
+            'type': 'individual_gene',
+            'gene': gene_name,
+            'source': f"Frequency {freq}"
+        }
+
+        return True, title, body, footer, temp_data
 
     # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (MODIFICADO: TAMAÑO DE TARJETAS) ---
     @app.callback(

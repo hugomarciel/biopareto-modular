@@ -3,38 +3,60 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc 
 
-
 def create_genes_tab():
-    """Create selected genes tab layout"""
+    """Create selected genes tab layout with In-Place Expansion (Accordion Style)"""
     return dbc.Container([
+        
+        # --- SECCIÓN 1: GLOBAL OVERVIEW (100% & Frequency) ---
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H4("Selected Genes by Solution", className="text-primary mb-0")
-                    ]),
-                    dbc.CardBody([
                         html.Div([
-                            html.Div(id="common-genes-analysis") # Contiene el gráfico y los botones 100%
-                        ]),
-                        html.Hr(),
-                        html.Div(id="genes-table-container") # Contiene el Filtro Global, el Gráfico y la Tabla
+                            html.I(className="bi bi-bar-chart-line-fill me-2"),
+                            html.H5("Gene Frequency Overview", className="d-inline-block m-0 fw-bold")
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom"),
+                    
+                    dbc.CardBody([
+                        html.P("Overview of genes identified across all selected solutions. Click a bar to view detailed gene list below.", 
+                               className="text-muted small mb-4"),
+                        
+                        # Aquí se renderizará:
+                        # 1. Los Badges del 100%
+                        # 2. El Gráfico de Frecuencia
+                        # 3. EL NUEVO CONTENEDOR EXPANDIBLE (frequency-detail-wrapper)
+                        html.Div(id="common-genes-analysis") 
                     ])
-                ])
+                ], className="shadow-sm border-0 mb-4")
             ], width=12),
         ]),
         
-        # Store para el dataframe maestro
+        # --- SECCIÓN 2: DETAILED EXPLORER (Table & Filter Graph) ---
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.Div([
+                            html.I(className="bi bi-table me-2"),
+                            html.H5("Solution Explorer & Data Table", className="d-inline-block m-0 fw-bold")
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom"),
+                    
+                    dbc.CardBody([
+                         html.P("Interactive exploration of specific solutions and gene metrics. Use the controls below to filter data.", 
+                               className="text-muted small mb-3"),
+                        html.Div(id="genes-table-container")
+                    ])
+                ], className="shadow-sm border-0")
+            ], width=12),
+        ]),
+        
+        # --- STORES Y MODALES ---
         dcc.Store(id='genes-analysis-internal-store'),
-        
-        # --- 🔑 INICIO DEL CAMBIO ---
-        
-        # 1. Almacén temporal para este modal
         dcc.Store(id='genes-graph-temp-store'),
-        
-        # 2. El Store 'genes-graph-click-counter' se ha eliminado.
 
-        # 3. Modal genérico para todas las acciones del gráfico
+        # Modal Acciones Gráfico
         dbc.Modal(
             [
                 dbc.ModalHeader(dbc.ModalTitle(id='genes-graph-modal-title')),
@@ -45,6 +67,5 @@ def create_genes_tab():
             is_open=False,
             centered=True,
         )
-        # --- FIN DEL CAMBIO ---
         
-    ], fluid=True)
+    ], fluid=True, className="py-3")
