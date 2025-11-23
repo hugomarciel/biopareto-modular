@@ -500,38 +500,39 @@ def transfer_add_all_click(n_clicks):
 )
 def toggle_interest_panel_visibility(active_tab, ui_state):
     """
-    Controla la visibilidad y posición del Panel de Interés.
+    Controla la visibilidad y posición del Panel de Interés (MODO OVERLAY).
+    El panel flota sobre el contenido sin empujarlo, eliminando el lag de redibujado.
     """
     
-    # 1. Definir el estilo base del panel (MODIFICADO PARA NUEVO DISEÑO)
+    # 1. Estilo base del Panel (Flotante / Overlay)
     panel_style = {
         'position': 'fixed',
-        'top': '110px',       # Bajamos un poco para dar aire respecto al Navbar
+        'top': '110px',       
         'width': '400px',
-        'height': 'calc(100vh - 130px)', # Altura fija para que el scroll sea interno
-        'zIndex': '1040',     # Nivel de capa: Debajo de modales (1050) pero encima del contenido
-        'transition': 'right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)', # Transición suave
-        # Eliminamos 'overflowY' de aquí porque ahora lo maneja el componente interno
+        'height': 'calc(100vh - 130px)', 
+        'zIndex': '1040',     # Capa alta para flotar sobre gráficos y tablas
+        'transition': 'right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)', # Animación suave
     }
     
-    # 2. Definir el estilo base del contenido principal
+    # 2. Estilo base del Contenido Principal
+    # IMPORTANTE: Ya no usamos transición en el margen porque el margen no cambiará.
     content_style = {
-        'transition': 'margin-right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
+        'marginRight': '0px' # El contenido siempre ocupa todo el ancho
     }
 
     # 3. Lógica de visibilidad
     is_hidden_tab = active_tab in ["upload-tab", "export-tab"]
-    # El estado por defecto es True (visible)
     is_manually_hidden = not ui_state.get('panel_visible', True) if ui_state else False
 
     if is_hidden_tab or is_manually_hidden:
-        # OCULTO: Lo movemos a la derecha fuera de la pantalla
-        panel_style['right'] = '-450px' # Un poco más ancho para ocultar la sombra
-        content_style['marginRight'] = '0px'
+        # OCULTO: Panel fuera de la pantalla a la derecha
+        panel_style['right'] = '-450px' 
     else:
-        # VISIBLE: Lo posicionamos en su lugar
-        panel_style['right'] = '20px' # Margen derecho estético
-        content_style['marginRight'] = '440px' # Espacio reservado en el contenido principal
+        # VISIBLE: Panel entra en la pantalla (Overlay)
+        panel_style['right'] = '20px' 
+        
+        # NOTA: En modo Overlay, NO cambiamos el content_style['marginRight'].
+        # Esto evita que los gráficos se redibujen (reflow), eliminando el lag.
 
     return panel_style, content_style
 
