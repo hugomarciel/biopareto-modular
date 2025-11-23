@@ -344,22 +344,58 @@ app.layout = dbc.Container([
         #'display': 'block'
     }),
 
+    # --- PESTAÑAS PRINCIPALES MEJORADAS (CORREGIDO) ---
+    # --- PESTAÑAS PRINCIPALES MEJORADAS (TEXT ONLY TO FIX ERROR) ---
     dbc.Container([
         dbc.Tabs([
-            dbc.Tab(label="📁 Load Data", tab_id="upload-tab"),
-            dbc.Tab(label="📊 Pareto Front", tab_id="pareto-tab"),
-            dbc.Tab(label="🧬 Genes", tab_id="genes-tab"),
-            dbc.Tab(label=" 🧪 Gene Groups Analysis", tab_id="gene-groups-tab"),
-            dbc.Tab(label="🔬 Biological Analysis", tab_id="enrichment-tab"),
-            #dbc.Tab(label="📤 Export", tab_id="export-tab"),
-        ], id="main-tabs", active_tab="upload-tab"),
+            # Pestaña 1: Carga (Use Emojis for icons to be string-safe)
+            dbc.Tab(
+                label="📂 Load Data", 
+                tab_id="upload-tab",
+                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            ),
+            
+            # Pestaña 2: Pareto
+            dbc.Tab(
+                label="📊 Pareto Front", 
+                tab_id="pareto-tab",
+                id="tab-pareto-control",
+                disabled=True,
+                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            ),
+            
+            # Pestaña 3: Genes
+            dbc.Tab(
+                label="🧬 Genes Analysis", 
+                tab_id="genes-tab",
+                id="tab-genes-control",
+                disabled=True,
+                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            ),
+            
+            # Pestaña 4: GGA
+            dbc.Tab(
+                label="🧪 Gene Groups", 
+                tab_id="gene-groups-tab",
+                id="tab-gga-control",
+                disabled=True,
+                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            ),
+            
+            # Pestaña 5: Enrichment
+            dbc.Tab(
+                label="🔬 Biological Analysis", 
+                tab_id="enrichment-tab",
+                id="tab-enrichment-control",
+                disabled=True,
+                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            ),
+            
+        ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-3 border-bottom border-primary border-2 shadow-sm bg-white rounded-top"),
         
-
         html.Div(id="tab-content", className="mt-4", style={
-            # --- 💡 INICIO DE LA MODIFICACIÓN 💡 ---
-            'marginRight': '0px', # # Estado inicial Oculto
+            'marginRight': '0px', 
             'transition': 'margin-right 0.4s ease-in-out'
-            # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
         }),
 
        
@@ -1422,6 +1458,42 @@ def reset_badge_animation(n_intervals):
     """
     # Quita la clase de animación y deshabilita el intervalo
     return "", True
+
+
+# --- 💡 NUEVO CALLBACK: CONTROL DE ESTADO DE PESTAÑAS 💡 ---
+@app.callback(
+    [Output("tab-pareto-control", "disabled"),
+     Output("tab-genes-control", "disabled"),
+     Output("tab-gga-control", "disabled"),
+     Output("tab-enrichment-control", "disabled")],
+    [Input("data-store", "data"),
+     Input("interest-panel-store", "data")]
+)
+def update_tabs_disabled_state(data_store, interest_items):
+    """
+    Habilita/Deshabilita pestañas según el estado de los datos.
+    - Pareto/Genes: Habilitados si hay frentes cargados.
+    - GGA/Enrichment: Habilitados si hay items en el panel de interés.
+    """
+    # 1. Verificar si hay datos cargados (Frentes)
+    has_data = False
+    if data_store and data_store.get('fronts') and len(data_store['fronts']) > 0:
+        has_data = True
+    
+    # 2. Verificar si hay items en el panel de interés
+    has_interest_items = False
+    if interest_items and len(interest_items) > 0:
+        has_interest_items = True
+    
+    # Lógica de deshabilitación (Disabled = not Enabled)
+    pareto_disabled = not has_data
+    genes_disabled = not has_data
+    
+    gga_disabled = not has_interest_items
+    enrichment_disabled = not has_interest_items
+    
+    return pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled
+# --- 💡 FIN DEL CALLBACK 💡 ---
 
 # --- 💡 FIN: NUEVOS CALLBACKS 💡 ---
 
