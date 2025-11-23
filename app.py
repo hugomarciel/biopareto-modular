@@ -7,7 +7,7 @@ Desarrollado por Hugo Marciel - USACH 2025
 
 import os
 import dash
-from dash import dcc, html, dash_table, Input, Output, State, callback_context, ALL, MATCH
+from dash import dcc, html, dash_table, Input, Output, State, callback_context, ALL, MATCH, ClientsideFunction
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.express as px
@@ -235,20 +235,18 @@ app.layout = dbc.Container([
     dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
     dcc.Store(id='gprofiler-results-store', data=[]), 
     dcc.Store(id='reactome-results-store', data=None),
-    
-    # NUEVO TRIGGER STORE (PARA ESTABILIZAR ENRICHMENT)
     dcc.Store(id='enrichment-render-trigger-store', data=None), 
-    
-    # --- 💡 MODIFICACIÓN (STORE DE VISIBILIDAD) 💡 ---
     dcc.Store(id='ui-state-store', data={'panel_visible': True}, storage_type='session'),
-    # --- 💡 NUEVO STORE DUMMY PARA SCROLL 💡 ---
     dcc.Store(id='scroll-to-top-dummy-store'),
-    # --- 💡 NUEVO INTERVALO PARA ANIMACIÓN 💡 ---
     dcc.Interval(id='badge-animation-interval', interval=1000, n_intervals=0, disabled=True),
-    # --- 💡 FIN DE LA MODIFICACIÓN 💡 ---
 
+    # --- 💡 NUEVOS STORES PARA AUTO-HIDE 💡 ---
+    # Configura aquí el tiempo en milisegundos (5000 ms = 5 segundos)
+    dcc.Store(id='auto-hide-config-store', data=5000), 
+    dcc.Store(id='auto-hide-setup-dummy'), # Store técnico para el output del callback JS
+    # -------------------------------------------
 
-    # MODALES (se mantienen en app.py)
+    # MODALES
     dbc.Modal([
         dbc.ModalHeader(dbc.ModalTitle("Add to Interest Panel")),
         dbc.ModalBody([
@@ -330,6 +328,7 @@ app.layout = dbc.Container([
 
     create_navbar(),
 
+    # --- CONTENEDOR DEL PANEL (Flotante) ---
     html.Div([
         create_interest_panel()
     ], id="interest-panel-wrapper", style={
@@ -341,21 +340,15 @@ app.layout = dbc.Container([
         'overflowY': 'auto',
         'zIndex': '1000',
         'transition': 'right 0.4s ease-in-out'
-        #'display': 'block'
     }),
 
-    # --- PESTAÑAS PRINCIPALES MEJORADAS (CORREGIDO) ---
-    # --- PESTAÑAS PRINCIPALES MEJORADAS (TEXT ONLY TO FIX ERROR) ---
     dbc.Container([
         dbc.Tabs([
-            # Pestaña 1: Carga (Use Emojis for icons to be string-safe)
             dbc.Tab(
                 label="📂 Load Data", 
                 tab_id="upload-tab",
                 label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
             ),
-            
-            # Pestaña 2: Pareto
             dbc.Tab(
                 label="📊 Pareto Front", 
                 tab_id="pareto-tab",
@@ -363,8 +356,6 @@ app.layout = dbc.Container([
                 disabled=True,
                 label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
             ),
-            
-            # Pestaña 3: Genes
             dbc.Tab(
                 label="🧬 Genes Analysis", 
                 tab_id="genes-tab",
@@ -372,8 +363,6 @@ app.layout = dbc.Container([
                 disabled=True,
                 label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
             ),
-            
-            # Pestaña 4: GGA
             dbc.Tab(
                 label="🧪 Gene Groups", 
                 tab_id="gene-groups-tab",
@@ -381,8 +370,6 @@ app.layout = dbc.Container([
                 disabled=True,
                 label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
             ),
-            
-            # Pestaña 5: Enrichment
             dbc.Tab(
                 label="🔬 Biological Analysis", 
                 tab_id="enrichment-tab",
@@ -390,7 +377,6 @@ app.layout = dbc.Container([
                 disabled=True,
                 label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
             ),
-            
         ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-3 border-bottom border-primary border-2 shadow-sm bg-white rounded-top"),
         
         html.Div(id="tab-content", className="mt-4", style={
@@ -398,11 +384,9 @@ app.layout = dbc.Container([
             'transition': 'margin-right 0.4s ease-in-out'
         }),
 
-       
+        # Controles Flotantes
         html.Div(
-            # Se usa un Div normal para apilar verticalmente
             [
-                # 1. Botón de Scroll (Corregido)
                 dbc.Button(
                     html.I(className="bi bi-arrow-up-circle fs-5"), 
                     id="scroll-to-top-btn", 
@@ -410,61 +394,44 @@ app.layout = dbc.Container([
                     outline=True, 
                     title="Scroll to Top",
                     className="mb-2",
-                    style={'width': '100%'} # <-- 💡 ESTA LÍNEA AÑADIDA SOLUCIONA EL TAMAÑO
+                    style={'width': '100%'} 
                 ),
                 
-                # 2. Contenedor del Botón de Panel + Insignia
                 html.Div(
                     [
-                        # El botón de Ocultar/Mostrar
                         dbc.Button(
                             html.I(className="bi bi-layout-sidebar-inset fs-5"), 
                             id="floating-toggle-panel-btn", 
                             color="primary", 
                             outline=True, 
                             title="Toggle Interest Panel",
-                            style={'width': '100%'} # Asegura que ocupe el espacio
+                            style={'width': '100%'}
                         ),
                         
-                        # La Insignia (Badge) de notificación
                         dbc.Badge(
                             "0", 
                             id="interest-panel-item-count-badge",
                             color="danger", 
                             pill=True, 
                             text_color="white",
-                            # Estilo para posicionarlo en la esquina
                             style={
                                 "position": "absolute",
                                 "top": "0",
                                 "right": "0",
                                 "transform": "translate(40%, -40%)",
-                                "zIndex": "1051", # Encima del botón
-                                "display": "none" # Oculto por defecto
+                                "zIndex": "1051", 
+                                "display": "none" 
                             }
                         )
                     ],
-                    style={
-                        "position": "relative", # Clave para el posicionamiento del Badge
-                        "display": "inline-block",
-                        "width": "100%"
-                    }
+                    style={"position": "relative", "display": "inline-block", "width": "100%"}
                 )
             ],
-            style={
-                'position': 'fixed',
-                'bottom': '30px',
-                'right': '30px',
-                'zIndex': '1050', # Más alto que el panel de interés
-                'width': '58px' # Ancho fijo (basado en 'size="lg"')
-            }
+            style={'position': 'fixed', 'bottom': '30px', 'right': '30px', 'zIndex': '1050', 'width': '58px'}
         ),
-        # --- 💡 FIN: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
-        # --- 💡 FIN: CONTROLES FLOTANTES (MODIFICADO) 💡 ---
 
     ], fluid=True),
 
-    # Footer
     html.Footer([
         dbc.Container([
             html.Hr(),
@@ -556,7 +523,7 @@ def toggle_panel_store(n_clicks, current_state):
 # --- 💡 FIN DEL CALLBACK MODIFICADO 💡 ---
 
 # --- 💡 INICIO: NUEVO CALLBACK (CLIENTSIDE) PARA SCROLL-TO-TOP 💡 ---
-app.clientside_callback(
+#app.clientside_callback(
     """
     function(n_clicks) {
         // n_clicks será 1 o más, ya que prevent_initial_call=True
@@ -569,11 +536,11 @@ app.clientside_callback(
         // en lugar de 'dash.no_update' (Python)
         return window.dash_clientside.no_update;
     }
-    """,
-    Output('scroll-to-top-dummy-store', 'data'), # Salida dummy
-    Input('scroll-to-top-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
+    """
+    #Output('scroll-to-top-dummy-store', 'data'), # Salida dummy
+    #Input('scroll-to-top-btn', 'n_clicks'),
+    #prevent_initial_call=True
+#)
 # --- 💡 FIN: NUEVO CALLBACK 💡 ---
 
 # Callback para renderizar el contenido de la pestaña
@@ -1393,75 +1360,7 @@ def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, 
         
     raise PreventUpdate
 
-# app.py (Añadir al final del archivo)
-
-# --- 💡 INICIO: NUEVOS CALLBACKS PARA LA INSIGNIA (BADGE) 💡 ---
-
-@app.callback(
-    [Output('interest-panel-item-count-badge', 'children'),
-     Output('interest-panel-item-count-badge', 'style'),
-     Output('interest-panel-item-count-badge', 'className'),
-     Output('badge-animation-interval', 'disabled')],
-    Input('interest-panel-store', 'data'),
-    State('interest-panel-item-count-badge', 'children'),
-    prevent_initial_call=True
-)
-def update_item_count_badge(items, current_count_str):
-    """
-    Actualiza el número en la insignia (badge) y dispara la animación 
-    solo si se ha añadido un nuevo ítem.
-    """
-    if items is None:
-        count = 0
-    else:
-        count = len(items)
-
-    try:
-        current_count = int(current_count_str)
-    except (ValueError, TypeError):
-        current_count = 0
-
-    # Estilo base para la insignia
-    badge_style = {
-        "position": "absolute",
-        "top": "0",
-        "right": "0",
-        "transform": "translate(40%, -40%)",
-        "zIndex": "1051"
-    }
-
-    # Ocultar la insignia si el conteo es 0
-    if count == 0:
-        badge_style['display'] = 'none'
-        return "0", badge_style, "", True # Sin animación, Intervalo deshabilitado
-    
-    # Mostrar la insignia si el conteo > 0
-    badge_style['display'] = 'block'
-    
-    # Comprobar si se *añadió* un ítem (conteo actual > conteo anterior)
-    if count > current_count:
-        # Disparar la animación y habilitar el intervalo para resetearla
-        return count, badge_style, "pulse-animation", False
-    else:
-        # Si se borró un ítem o no hubo cambio, solo actualiza el número
-        return count, badge_style, "", True # Sin animación, Intervalo deshabilitado
-
-@app.callback(
-    [Output('interest-panel-item-count-badge', 'className', allow_duplicate=True),
-     Output('badge-animation-interval', 'disabled', allow_duplicate=True)],
-    Input('badge-animation-interval', 'n_intervals'),
-    prevent_initial_call=True
-)
-def reset_badge_animation(n_intervals):
-    """
-    Este callback se dispara por el intervalo (1 segundo después de la animación)
-    para quitar la clase 'pulse-animation' y deshabilitarse a sí mismo.
-    """
-    # Quita la clase de animación y deshabilita el intervalo
-    return "", True
-
-
-# --- 💡 NUEVO CALLBACK: CONTROL DE ESTADO DE PESTAÑAS 💡 ---
+# --- 💡 CALLBACK DE CONTROL DE ESTADO DE PESTAÑAS (FALTABA ESTE) 💡 ---
 @app.callback(
     [Output("tab-pareto-control", "disabled"),
      Output("tab-genes-control", "disabled"),
@@ -1496,10 +1395,39 @@ def update_tabs_disabled_state(data_store, interest_items):
     return pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled
 # --- 💡 FIN DEL CALLBACK 💡 ---
 
-# --- 💡 FIN: NUEVOS CALLBACKS 💡 ---
+# app.py (Añadir al final del archivo)
+
+# --- 💡 CALLBACKS CLIENTSIDE (JS EXTERNO) 💡 ---
+
+# 1. Scroll to Top (Referencia a assets/clientside_callbacks.js)
+# NOTA: Este es el ÚNICO callback para 'scroll-to-top-dummy-store'.
+# Asegúrate de borrar cualquier otra versión anterior que use strings inline.
+
+app.clientside_callback(
+    ClientsideFunction(
+        namespace='clientside',
+        function_name='scroll_to_top'
+    ),
+    Output('scroll-to-top-dummy-store', 'data'),
+    Input('scroll-to-top-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+
+# 2. Auto-Hide Panel (Referencia a assets/clientside_callbacks.js)
+app.clientside_callback(
+    ClientsideFunction(
+        namespace='clientside',
+        function_name='panel_auto_hide'
+    ),
+    Output('auto-hide-setup-dummy', 'data'), # Output dummy técnico
+    Input('interest-panel-wrapper', 'id'),   # Input: ID del panel
+    Input('auto-hide-config-store', 'data')  # Input: Tiempo (ms)
+)
+
+# --- 💡 FIN CALLBACKS CLIENTSIDE 💡 ---
 
 
-#🔑 REGISTRO DE CALLBACKS MODULARIZADOS PARA AMBOS MODOS 🔑
+#🔑 REGISTRO DE CALLBACKS MODULARIZADOS 🔑
 # -------------------------------------------------------------
 register_data_management_callbacks(app)
 register_pareto_plot_callbacks(app)
@@ -1515,24 +1443,6 @@ from logic.callbacks.export_callbacks import register_export_callbacks
 register_export_callbacks(app)
 
 if __name__ == '__main__':
-    """
-    print("🚀 Iniciando BioPareto Analyzer...")
-    print("--------------------------------------------------")
-    
-    # 🔑 REGISTRO DE CALLBACKS MODULARIZADOS 🔑
-    register_data_management_callbacks(app)
-    register_pareto_plot_callbacks(app)
-    register_pareto_selection_callbacks(app)
-    register_consolidation_callbacks(app)
-    register_genes_analysis_callbacks(app)
-    register_gene_groups_callbacks(app)
-    
-    # 🔑 REGISTROS DE LA FASE 4 (CORREGIDOS PARA NOMBRES FINALES)
-    from logic.callbacks.enrichment_analysis import register_enrichment_callbacks
-    register_enrichment_callbacks(app) 
-    from logic.callbacks.export_callbacks import register_export_callbacks
-    register_export_callbacks(app)
-    """
     print("✅ Módulos de Load Data (upload-tab) registrados.")
     print("✅ Módulos de Pareto Front (pareto-tab) registrados.")
     print("✅ Módulos de Genes y Grupos (genes-tab) registrados.")
