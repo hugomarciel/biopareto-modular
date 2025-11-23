@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 from services.gprofiler_service import get_organisms_from_api 
 # UI - Layouts de pestañas modulares
 from ui.layouts.upload_tab import create_upload_tab
+from ui.components.interest_panel import create_interest_panel
 from ui.layouts.pareto_tab import create_pareto_tab
 from ui.layouts.genes_tab import create_genes_tab
 from ui.layouts.gene_groups_tab import create_gene_groups_tab
@@ -87,6 +88,28 @@ app.index_string = '''
         {%css%}
         <style>
         /* ... Estilos CSS largos se mantienen aquí ... */
+
+        /* Estilo para Scrollbar Personalizado en el Panel de Interés */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c1c1c1; /* Color gris suave */
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8; /* Gris un poco más oscuro al pasar el mouse */
+        }
+        
+        /* Efecto Hover para el botón de borrar (Basurero) */
+        .hover-warning:hover {
+            color: #ffc107 !important; /* Amarillo advertencia */
+            background-color: rgba(255,255,255,0.1) !important;
+        }
 
         
         body {
@@ -175,31 +198,8 @@ def create_navbar():
         dark=True,
         className="mb-4"
     )
-# create_interest_panel()
-def create_interest_panel():
-    """Create the interest panel/annotation board"""
-    return dbc.Card([
-        dbc.CardHeader([
-            html.Div([
-                html.H5("📌 Interest Panel", className="text-primary mb-0 d-inline-block"),
-                dbc.Button(
-                    "🗑️",
-                    id="clear-interest-panel-btn",
-                    color="link",
-                    size="sm",
-                    className="float-end",
-                    title="Clear all items"
-                )
-            ])
-        ]),
-        dbc.CardBody([
-            html.P("Save solutions, genes, and groups for later analysis",
-                   className="text-muted small mb-3"),
-            html.Div(id='interest-panel-content', children=[
-                html.P("No items added yet", className="text-muted text-center py-4")
-            ])
-        ], style={'maxHeight': '600px', 'overflowY': 'auto'})
-    ], className="sticky-top border-3")
+
+
 
 # Placeholder para la pestaña Export (A MOVER)
 def create_export_tab():
@@ -456,51 +456,46 @@ def transfer_add_all_click(n_clicks):
     return n_clicks
 
 
-# app.py (Línea 374)
 @app.callback(
     Output("interest-panel-wrapper", "style"),
     Output("tab-content", "style"),
     Input("main-tabs", "active_tab"),
-    Input("ui-state-store", "data") # <-- 💡 AÑADIDO
+    Input("ui-state-store", "data")
 )
-def toggle_interest_panel_visibility(active_tab, ui_state): # <-- 💡 AÑADIDO
+def toggle_interest_panel_visibility(active_tab, ui_state):
     """
-    Ocultar el panel en pestañas de carga/exportación O si el usuario lo oculta manualmente,
-    y ajustar el margen del contenido CON UNA TRANSICIÓN DE DESLIZAMIENTO.
+    Controla la visibilidad y posición del Panel de Interés.
     """
-    # --- 💡 INICIO DE LA MODIFICACIÓN (LÓGICA DE TRANSICIÓN) 💡 ---
     
-    # 1. Definir el estilo base del panel (siempre incluye la transición)
+    # 1. Definir el estilo base del panel (MODIFICADO PARA NUEVO DISEÑO)
     panel_style = {
         'position': 'fixed',
-        'top': '120px',
+        'top': '110px',       # Bajamos un poco para dar aire respecto al Navbar
         'width': '400px',
-        'maxHeight': 'calc(100vh - 140px)',
-        'overflowY': 'auto',
-        'zIndex': '1000',
-        'transition': 'right 0.4s ease-in-out'
+        'height': 'calc(100vh - 130px)', # Altura fija para que el scroll sea interno
+        'zIndex': '1040',     # Nivel de capa: Debajo de modales (1050) pero encima del contenido
+        'transition': 'right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)', # Transición suave
+        # Eliminamos 'overflowY' de aquí porque ahora lo maneja el componente interno
     }
     
-    # 2. Definir el estilo base del contenido (siempre incluye la transición)
+    # 2. Definir el estilo base del contenido principal
     content_style = {
-        'transition': 'margin-right 0.4s ease-in-out'
+        'transition': 'margin-right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)'
     }
 
-    # 3. Comprobar las condiciones de ocultamiento
+    # 3. Lógica de visibilidad
     is_hidden_tab = active_tab in ["upload-tab", "export-tab"]
-    is_manually_hidden = not ui_state.get('panel_visible', True)
+    # El estado por defecto es True (visible)
+    is_manually_hidden = not ui_state.get('panel_visible', True) if ui_state else False
 
-    # 4. Aplicar los estilos de "Oculto" o "Visible"
     if is_hidden_tab or is_manually_hidden:
-        # Oculto: Mover panel fuera de la pantalla y colapsar margen
-        panel_style['right'] = '-420px' # (400px de ancho + 20px de margen)
+        # OCULTO: Lo movemos a la derecha fuera de la pantalla
+        panel_style['right'] = '-450px' # Un poco más ancho para ocultar la sombra
         content_style['marginRight'] = '0px'
     else:
-        # Visible: Poner panel en su sitio y expandir margen
-        panel_style['right'] = '20px'
-        content_style['marginRight'] = '440px'
-    
-    # --- 💡 FIN DE la MODIFICACIÓN 💡 ---
+        # VISIBLE: Lo posicionamos en su lugar
+        panel_style['right'] = '20px' # Margen derecho estético
+        content_style['marginRight'] = '440px' # Espacio reservado en el contenido principal
 
     return panel_style, content_style
 
