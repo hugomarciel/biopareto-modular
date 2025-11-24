@@ -412,25 +412,36 @@ def create_reactome_layout(organism_options):
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.Div([
-                            html.I(className="bi bi-diagram-3-fill me-2"),
-                            html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
-                            
-                            # Icono Ayuda Diagrama
-                            html.I(
-                                id="reactome-vis-help-icon",
-                                className="bi bi-question-circle-fill text-muted ms-2",
-                                style={'cursor': 'pointer', 'fontSize': '1rem'}
-                            ),
-                            
-                            dcc.Loading(
-                                id="loading-reactome-diagram-spinner", 
-                                children=html.Div(id="reactome-diagram-spinner-output"), 
-                                type="circle",
-                                color="#ffc107"
-                            )
-                        ], className="d-flex align-items-center text-primary")
-                    ], className="bg-white border-bottom"), 
+    html.Div([
+        # 1. CAMBIO: Reduje 'me-5' a 'me-2' para quitar el espacio gigante a la izquierda
+        html.I(className="bi bi-diagram-3-fill me-2"),
+        
+        html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
+        
+        # 2. Icono de Ayuda
+        html.I(
+            id="reactome-vis-help-icon",
+            className="bi bi-question-circle-fill text-muted ms-2",
+            style={'cursor': 'pointer', 'fontSize': '1rem'}
+        ),
+        
+        # 3. SOLUCIÓN SPINNER: 
+        # Envolvemos dcc.Loading en un Div con dimensiones fijas y centrado flex
+        html.Div(
+            dcc.Loading(
+                id="loading-reactome-diagram-spinner", 
+                # El hijo debe estar oculto o vacío para no empujar el layout
+                children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
+                type="circle",
+                color="#ffc107",
+            ),
+            # Clases para alinear y dar margen a la izquierda
+            className="ms-3 d-flex align-items-center justify-content-center",
+            # Forzamos un tamaño pequeño para que no rompa la fila
+            style={'height': '20px', 'width': '20px'}
+        )
+    ], className="d-flex align-items-center text-primary") # Flexrow principal
+], className="bg-white border-bottom"),
                     
                     dbc.CardBody([
                         pathway_vis_help_popover, # Insertar Popover

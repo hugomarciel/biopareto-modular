@@ -89,21 +89,11 @@ app.index_string = '''
         {%favicon%}
         {%css%}
         <style>
-        /* Estilo para Scrollbar Personalizado en el Panel de Interés */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #c1c1c1; 
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8; 
-        }
+        /* Estilo para Scrollbar Personalizado */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
         
         /* Efecto Hover para el botón de borrar */
         .hover-warning:hover {
@@ -125,51 +115,70 @@ app.index_string = '''
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
             padding: 30px;
         }
-        .sticky-top {
-            position: sticky;
-            top: 20px; 
-            z-index: 1000;
-        }
+        .sticky-top { position: sticky; top: 20px; z-index: 1000; }
+        
         @keyframes pulse {
           0% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.1); opacity: 0.7; }
           100% { transform: scale(1); opacity: 1; }
         }
-        .pulse-animation {
-          animation: pulse 0.5s ease-in-out;
+        .pulse-animation { animation: pulse 0.5s ease-in-out; }
+
+        /* --- 💡 ESTILOS FINALES PARA PESTAÑAS CONECTADAS (TIPO BOOTSTRAP/GPROFILER) --- */
+        
+        /* 1. Contenedor de Pestañas */
+        .nav-tabs {
+            border-bottom: 1px solid #dee2e6 !important; /* Línea gris base */
+            padding-left: 0px; 
         }
 
-        /* --- 💡 NUEVOS ESTILOS PARA PESTAÑAS --- */
-        
-        /* 1. Resaltar Pestaña Activa */
+        /* 2. Pestaña Activa: EL TRUCO VISUAL */
         .nav-tabs .nav-link.active {
-            background-color: #f0f8ff !important; /* Azul muy pálido */
-            border-color: #dee2e6 #dee2e6 #fff !important;
-            border-top: 3px solid #0d6efd !important; /* Borde superior azul fuerte */
-            color: #0d6efd !important; /* Texto azul */
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            background-color: #ffffff !important; /* Fondo blanco opaco */
+            
+            /* Borde: Azul arriba, gris lados, TRANSPARENTE abajo (pero el fondo blanco tapa la línea) */
+            border-color: #dee2e6 #dee2e6 #ffffff !important; 
+            border-top: 3px solid #0d6efd !important; 
+            border-bottom: 1px solid #ffffff !important; /* Borde blanco explícito para tapar línea gris */
+            
+            color: #495057 !important; /* Texto gris oscuro */
+            font-weight: bold;
+            
+            /* FÍSICA DE LA SUPERPOSICIÓN */
+            margin-bottom: -1px !important; /* Empuja la pestaña 1px hacia abajo */
+            position: relative; 
+            z-index: 5; /* Asegura que esté ENCIMA de la línea gris del contenedor */
         }
         
-        /* 2. Pestañas Inactivas (Normales) */
+        /* 3. Pestañas Inactivas */
         .nav-tabs .nav-link {
-            color: #6c757d; /* Gris */
+            color: #6c757d;
+            background-color: #f8f9fa; /* Gris muy suave */
+            border: 1px solid transparent; 
+            border-bottom: 1px solid #dee2e6; /* Mantiene la línea continua */
+            margin-right: 2px;
+            border-top-left-radius: 0.25rem;
+            border-top-right-radius: 0.25rem;
             font-weight: 600;
-            transition: all 0.2s ease-in-out;
         }
+        
         .nav-tabs .nav-link:hover {
-            background-color: #f8f9fa;
+            border-color: #e9ecef #e9ecef #dee2e6;
             color: #0d6efd;
+            cursor: pointer;
         }
 
-        /* 3. Pestañas Deshabilitadas + Tooltip Hack */
-        /* Por defecto, Bootstrap quita los eventos del mouse en elementos disabled. 
-           Lo reactivamos para que el Tooltip pueda detectarlo. */
-        .nav-tabs .nav-link.disabled {
-            pointer-events: auto !important; 
-            cursor: not-allowed !important;
-            color: #adb5bd !important;
-            background-color: transparent !important;
-            border-color: transparent !important;
+        /* 4. Tab Content: Fusión */
+        #tab-content {
+            border-top: none !important; 
+            margin-top: 0px; 
+            background-color: white; /* Asegura continuidad */
+            border-left: 1px solid #dee2e6; /* Opcional: cierra la caja */
+            border-right: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+            padding: 20px; /* Espacio interno */
+            border-bottom-left-radius: 0.25rem;
+            border-bottom-right-radius: 0.25rem;
         }
         </style>
     </head>
@@ -410,7 +419,7 @@ app.layout = dbc.Container([
                     label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
                 ),
                 
-            ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-3 border-bottom border-primary border-2 shadow-sm bg-white rounded-top"),
+            ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-0 shadow-sm bg-white rounded-top"),
 
             # --- TOOLTIPS DE ADVERTENCIA (Se muestran solo si la pestaña está deshabilitada) ---
             # La lógica de visualización se controla en el callback, pero aquí definimos el componente

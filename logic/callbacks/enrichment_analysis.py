@@ -535,50 +535,58 @@ def register_enrichment_callbacks(app):
         return dbc.Row(cards, className="g-3")
 
 
-    # 2. Callback de selección (ACTUALIZADO PARA VISIBILIDAD)
+   # 2. Callback de selección (CORREGIDO: Usa is_open y allow_duplicate en TODOS los outputs compartidos)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
          Output('enrichment-selection-panel', 'children', allow_duplicate=True),
-         Output('enrichment-modules-wrapper', 'style'),
-         Output('enrichment-empty-alert', 'style')],
+         Output('enrichment-modules-wrapper', 'style', allow_duplicate=True),
+         # CAMBIO IMPORTANTE: Usamos 'is_open' en lugar de 'style' para controlar la visibilidad sin conflictos CSS
+         Output('enrichment-empty-alert', 'is_open', allow_duplicate=True)],
         Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'), 
         State('interest-panel-store', 'data'),
         prevent_initial_call=True
     )
     def update_enrichment_selection(list_of_checkbox_values, items):
         ctx = dash.callback_context
-        if not ctx.triggered or not items:
+        if not ctx.triggered:
             raise PreventUpdate
         
-        selected_indices = {values[0] for values in list_of_checkbox_values if values}
+        # Procesar índices seleccionados
+        selected_indices = set()
+        if list_of_checkbox_values:
+            for values in list_of_checkbox_values:
+                if values:
+                    selected_indices.add(values[0])
+        
         selected_indices_list = sorted(list(selected_indices))
         
-        # Estado sin selección
+        # ESCENARIO 1: NO HAY SELECCIÓN
         if not selected_indices_list:
             return (
                 selected_indices_list, 
-                html.Div(), # Panel de selección vacío
+                html.Div(),          # Panel de resumen vacío
                 {'display': 'none'}, # Ocultar Módulos
-                {'display': 'flex'}  # Mostrar Alerta
+                True                 # MOSTRAR Alerta (is_open = True)
             )
 
-        # Estado CON selección
+        # ESCENARIO 2: HAY SELECCIÓN
         combined_genes = set()
-        for idx in selected_indices_list:
-            if idx < len(items):
-                item = items[idx]
-                item_type = item.get('type', '')
-                
-                if item_type == 'solution':
-                    combined_genes.update(item.get('data', {}).get('selected_genes', []))
-                elif item_type == 'solution_set':
-                    solutions = item.get('data', {}).get('solutions', [])
-                    for sol in solutions:
-                        combined_genes.update(sol.get('selected_genes', []))
-                elif item_type in ['gene_set', 'combined_gene_group']:
-                    combined_genes.update(item.get('data', {}).get('genes', []))
-                elif item_type == 'individual_gene':
-                    combined_genes.add(item.get('data', {}).get('gene', ''))
+        if items:
+            for idx in selected_indices_list:
+                if idx < len(items):
+                    item = items[idx]
+                    item_type = item.get('type', '')
+                    
+                    if item_type == 'solution':
+                        combined_genes.update(item.get('data', {}).get('selected_genes', []))
+                    elif item_type == 'solution_set':
+                        solutions = item.get('data', {}).get('solutions', [])
+                        for sol in solutions:
+                            combined_genes.update(sol.get('selected_genes', []))
+                    elif item_type in ['gene_set', 'combined_gene_group']:
+                        combined_genes.update(item.get('data', {}).get('genes', []))
+                    elif item_type == 'individual_gene':
+                        combined_genes.add(item.get('data', {}).get('gene', ''))
 
         gene_count = len(combined_genes)
         
@@ -617,24 +625,30 @@ def register_enrichment_callbacks(app):
             
         ], color="primary", className="mt-3")
         
-        # Retorno: Datos, Panel, Mostrar Módulos, Ocultar Alerta
-        return selected_indices_list, summary_panel, {'display': 'block'}, {'display': 'none'}
+        # RETORNO EXITOSO:
+        # 1. Indices
+        # 2. Panel de Resumen
+        # 3. Módulos VISIBLES ({'display': 'block'})
+        # 4. Alerta de "Por favor seleccione" OCULTA (is_open = False)
+        return selected_indices_list, summary_panel, {'display': 'block'}, False
+
     
-    
-    # 2.5. Callback de limpiar selección (ACTUALIZADO PARA VISIBILIDAD)
+    # 2.5. Callback de limpiar selección (ACTUALIZADO: Debe coincidir exactamente con los outputs de arriba)
     @app.callback(
         [Output('enrichment-selected-indices-store', 'data', allow_duplicate=True),
          Output('enrichment-selection-panel', 'children', allow_duplicate=True),
          Output('enrichment-modules-wrapper', 'style', allow_duplicate=True),
-         Output('enrichment-empty-alert', 'style', allow_duplicate=True)],
+         Output('enrichment-empty-alert', 'is_open', allow_duplicate=True)], 
         Input('clear-enrichment-selection-btn', 'n_clicks'), 
         prevent_initial_call=True
     )
     def clear_enrichment_selection(n_clicks):
         if n_clicks and n_clicks > 0:
-            # Al limpiar: Store vacío, Panel vacío, Ocultar Módulos, Mostrar Alerta
-            return [], html.Div(), {'display': 'none'}, {'display': 'flex'}
+            # Al limpiar: Store vacío, Panel vacío, Ocultar Módulos, MOSTRAR Alerta (is_open = True)
+            return [], html.Div(), {'display': 'none'}, True
         raise PreventUpdate
+    
+
 
     
     # 2.6. Visibilidad del botón Clear
