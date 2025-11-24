@@ -78,6 +78,8 @@ server = app.server # <-- ¡AÑADIR ESTO!
 app.title = "BioPareto Analyzer"
 
 # Estilos en el index_string se mantienen
+# app.py (Actualización de Estilos)
+
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -87,8 +89,6 @@ app.index_string = '''
         {%favicon%}
         {%css%}
         <style>
-        /* ... Estilos CSS largos se mantienen aquí ... */
-
         /* Estilo para Scrollbar Personalizado en el Panel de Interés */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
@@ -98,20 +98,19 @@ app.index_string = '''
             border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #c1c1c1; /* Color gris suave */
+            background: #c1c1c1; 
             border-radius: 4px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8; /* Gris un poco más oscuro al pasar el mouse */
+            background: #a8a8a8; 
         }
         
-        /* Efecto Hover para el botón de borrar (Basurero) */
+        /* Efecto Hover para el botón de borrar */
         .hover-warning:hover {
-            color: #ffc107 !important; /* Amarillo advertencia */
+            color: #ffc107 !important; 
             background-color: rgba(255,255,255,0.1) !important;
         }
 
-        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -126,29 +125,51 @@ app.index_string = '''
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
             padding: 30px;
         }
-        /* ... Resto de estilos ... */
         .sticky-top {
             position: sticky;
-            top: 20px; /* Adjust as needed */
+            top: 20px; 
             z-index: 1000;
         }
         @keyframes pulse {
-          0% {
-            transform: scale(1);
-            opacity: 1;
-          }
-          50% {
-            transform: scale(1.1);
-            opacity: 0.7;
-          }
-          100% {
-            transform: scale(1);
-            opacity: 1;
-          }
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.1); opacity: 0.7; }
+          100% { transform: scale(1); opacity: 1; }
         }
-
         .pulse-animation {
           animation: pulse 0.5s ease-in-out;
+        }
+
+        /* --- 💡 NUEVOS ESTILOS PARA PESTAÑAS --- */
+        
+        /* 1. Resaltar Pestaña Activa */
+        .nav-tabs .nav-link.active {
+            background-color: #f0f8ff !important; /* Azul muy pálido */
+            border-color: #dee2e6 #dee2e6 #fff !important;
+            border-top: 3px solid #0d6efd !important; /* Borde superior azul fuerte */
+            color: #0d6efd !important; /* Texto azul */
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+        
+        /* 2. Pestañas Inactivas (Normales) */
+        .nav-tabs .nav-link {
+            color: #6c757d; /* Gris */
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-tabs .nav-link:hover {
+            background-color: #f8f9fa;
+            color: #0d6efd;
+        }
+
+        /* 3. Pestañas Deshabilitadas + Tooltip Hack */
+        /* Por defecto, Bootstrap quita los eventos del mouse en elementos disabled. 
+           Lo reactivamos para que el Tooltip pueda detectarlo. */
+        .nav-tabs .nav-link.disabled {
+            pointer-events: auto !important; 
+            cursor: not-allowed !important;
+            color: #adb5bd !important;
+            background-color: transparent !important;
+            border-color: transparent !important;
         }
         </style>
     </head>
@@ -342,42 +363,87 @@ app.layout = dbc.Container([
         'transition': 'right 0.4s ease-in-out'
     }),
 
+    # --- PESTAÑAS PRINCIPALES MEJORADAS (VISUAL Y TOOLTIPS) ---
     dbc.Container([
-        dbc.Tabs([
-            dbc.Tab(
-                label="📂 Load Data", 
-                tab_id="upload-tab",
-                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+        html.Div([
+            dbc.Tabs([
+                # Pestaña 1: Carga
+                dbc.Tab(
+                    label="📂 Load Data", 
+                    tab_id="upload-tab",
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
+                # Pestaña 2: Pareto
+                dbc.Tab(
+                    label="📊 Pareto Front", 
+                    tab_id="pareto-tab",
+                    id="tab-pareto-control",
+                    disabled=True, # Controlado por callback
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
+                # Pestaña 3: Genes
+                dbc.Tab(
+                    label="🧬 Genes Analysis", 
+                    tab_id="genes-tab",
+                    id="tab-genes-control",
+                    disabled=True,
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
+                # Pestaña 4: GGA
+                dbc.Tab(
+                    label="🧪 Gene Groups", 
+                    tab_id="gene-groups-tab",
+                    id="tab-gga-control",
+                    disabled=True,
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
+                # Pestaña 5: Enrichment
+                dbc.Tab(
+                    label="🔬 Biological Analysis", 
+                    tab_id="enrichment-tab",
+                    id="tab-enrichment-control",
+                    disabled=True,
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
+            ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-3 border-bottom border-primary border-2 shadow-sm bg-white rounded-top"),
+
+            # --- TOOLTIPS DE ADVERTENCIA (Se muestran solo si la pestaña está deshabilitada) ---
+            # La lógica de visualización se controla en el callback, pero aquí definimos el componente
+            
+            # Tooltip para Pareto
+            dbc.Tooltip(
+                "⚠️ Disabled: Please load a JSON file in 'Load Data' first.",
+                target="tab-pareto-control",
+                placement="top",
+                id="tooltip-pareto"
             ),
-            dbc.Tab(
-                label="📊 Pareto Front", 
-                tab_id="pareto-tab",
-                id="tab-pareto-control",
-                disabled=True,
-                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            # Tooltip para Genes
+            dbc.Tooltip(
+                "⚠️ Disabled: Please load data first.",
+                target="tab-genes-control",
+                placement="top",
+                id="tooltip-genes"
             ),
-            dbc.Tab(
-                label="🧬 Genes Analysis", 
-                tab_id="genes-tab",
-                id="tab-genes-control",
-                disabled=True,
-                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            # Tooltip para GGA
+            dbc.Tooltip(
+                "⚠️ Disabled: Add items (solutions/genes) to the Interest Panel first.",
+                target="tab-gga-control",
+                placement="top",
+                id="tooltip-gga"
             ),
-            dbc.Tab(
-                label="🧪 Gene Groups", 
-                tab_id="gene-groups-tab",
-                id="tab-gga-control",
-                disabled=True,
-                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+            # Tooltip para Enrichment
+            dbc.Tooltip(
+                "⚠️ Disabled: Add items to the Interest Panel to analyze them.",
+                target="tab-enrichment-control",
+                placement="top",
+                id="tooltip-enrichment"
             ),
-            dbc.Tab(
-                label="🔬 Biological Analysis", 
-                tab_id="enrichment-tab",
-                id="tab-enrichment-control",
-                disabled=True,
-                label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
-            ),
-        ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-3 border-bottom border-primary border-2 shadow-sm bg-white rounded-top"),
+        ]),
         
         html.Div(id="tab-content", className="mt-4", style={
             'marginRight': '0px', 
@@ -1401,20 +1467,25 @@ def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, 
         
     raise PreventUpdate
 
-# --- 💡 CALLBACK DE CONTROL DE ESTADO DE PESTAÑAS (FALTABA ESTE) 💡 ---
+# --- 💡 CALLBACK DE CONTROL DE ESTADO DE PESTAÑAS Y TOOLTIPS (CORREGIDO) 💡 ---
 @app.callback(
     [Output("tab-pareto-control", "disabled"),
      Output("tab-genes-control", "disabled"),
      Output("tab-gga-control", "disabled"),
-     Output("tab-enrichment-control", "disabled")],
+     Output("tab-enrichment-control", "disabled"),
+     # CORRECCIÓN: Usamos 'style' en lugar de 'disabled' para ocultar tooltips
+     Output("tooltip-pareto", "style"), 
+     Output("tooltip-genes", "style"),
+     Output("tooltip-gga", "style"),
+     Output("tooltip-enrichment", "style")],
     [Input("data-store", "data"),
      Input("interest-panel-store", "data")]
 )
 def update_tabs_disabled_state(data_store, interest_items):
     """
-    Habilita/Deshabilita pestañas según el estado de los datos.
-    - Pareto/Genes: Habilitados si hay frentes cargados.
-    - GGA/Enrichment: Habilitados si hay items en el panel de interés.
+    Controla habilitación de pestañas y la VISIBILIDAD de sus tooltips.
+    - Si Tab está Disabled -> Tooltip Visible (display: block).
+    - Si Tab está Enabled  -> Tooltip Oculto (display: none).
     """
     # 1. Verificar si hay datos cargados (Frentes)
     has_data = False
@@ -1426,14 +1497,29 @@ def update_tabs_disabled_state(data_store, interest_items):
     if interest_items and len(interest_items) > 0:
         has_interest_items = True
     
-    # Lógica de deshabilitación (Disabled = not Enabled)
+    # Lógica: Tab Disabled = No hay datos
     pareto_disabled = not has_data
     genes_disabled = not has_data
-    
     gga_disabled = not has_interest_items
     enrichment_disabled = not has_interest_items
     
-    return pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled
+    # Estilos para tooltips: 
+    # Si la pestaña está deshabilitada (True), mostramos el tooltip ({})
+    # Si la pestaña está habilitada (False), ocultamos el tooltip ({'display': 'none'})
+    
+    style_visible = {} # Estilo por defecto (visible)
+    style_hidden = {'display': 'none'}
+    
+    return (
+        pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled, # Estado Tabs
+        style_visible if pareto_disabled else style_hidden,     # Tooltip Pareto
+        style_visible if genes_disabled else style_hidden,      # Tooltip Genes
+        style_visible if gga_disabled else style_hidden,        # Tooltip GGA
+        style_visible if enrichment_disabled else style_hidden  # Tooltip Enrichment
+    )
+# --- 💡 FIN DEL CALLBACK 💡 ---
+    
+# --- 💡 FIN DEL CALLBACK 💡 ---
 # --- 💡 FIN DEL CALLBACK 💡 ---
 
 # app.py (Añadir al final del archivo)

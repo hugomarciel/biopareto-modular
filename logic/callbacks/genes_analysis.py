@@ -166,19 +166,31 @@ def register_genes_analysis_callbacks(app):
         genes_df = pd.read_json(StringIO(data_json), orient='split')
         
         front_names = genes_df['front_name'].unique()
+        
+        # --- LÓGICA AÑADIDA: Detectar si existe un solo frente ---
+        is_single_front = len(front_names) <= 1
+        
         front_filter_options = [{'label': 'All Fronts', 'value': 'all'}] + \
                                [{'label': name, 'value': name} for name in front_names]
         
         objective_options = []
-        categorical_cols = ['gene', 'front_name', 'unique_solution_id']
-        excluded_cols = categorical_cols + ['solution_id']
+        
+        # --- LÓGICA AÑADIDA: Definición dinámica de métricas categóricas ---
+        # Solo añadimos 'front_name' a las métricas si hay más de un frente.
+        categorical_cols_for_metrics = ['gene', 'unique_solution_id']
+        if not is_single_front:
+            categorical_cols_for_metrics.append('front_name')
+        
+        # Columnas a excluir del escaneo de objetivos numéricos
+        excluded_cols = ['gene', 'front_name', 'unique_solution_id', 'solution_id']
         
         for col in genes_df.columns:
             if col in excluded_cols: continue
             if pd.api.types.is_numeric_dtype(genes_df[col]):
                 objective_options.append({'label': col.replace('_', ' ').title(), 'value': col})
 
-        categorical_options = [{'label': col.replace('_', ' ').title(), 'value': col} for col in categorical_cols]
+        # Generamos las opciones del dropdown usando la lista dinámica
+        categorical_options = [{'label': col.replace('_', ' ').title(), 'value': col} for col in categorical_cols_for_metrics]
         metric_options = categorical_options + objective_options
 
         table_columns = []
@@ -202,7 +214,14 @@ def register_genes_analysis_callbacks(app):
                 dbc.Row([
                     dbc.Col([
                         dbc.Label("1. Filter by Front", className="small text-uppercase text-muted fw-bold"),
-                        dcc.Dropdown(id='genes-global-front-filter', options=front_filter_options, value='all', clearable=False, className="shadow-sm")
+                        dcc.Dropdown(
+                            id='genes-global-front-filter', 
+                            options=front_filter_options, 
+                            value='all', 
+                            clearable=False, 
+                            className="shadow-sm",
+                            disabled=is_single_front  # --- CAMBIO: Se deshabilita si solo hay un frente ---
+                        )
                     ], width=12, md=4, className="mb-2 mb-md-0"),
                     dbc.Col([
                         dbc.Label("2. Select Metric to Plot", className="small text-uppercase text-muted fw-bold"),
@@ -487,7 +506,7 @@ def register_genes_analysis_callbacks(app):
 
         return True, title, body, footer, temp_data
 
-    # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (MODIFICADO: TAMAÑO DE TARJETAS) ---
+    # --- CALLBACK 5: ACTUALIZAR GRÁFICO Y PANEL DE RESUMEN (OPTIMIZADO) ---
     @app.callback(
         [Output('genes-table-histogram', 'figure'),
         Output('save-graph-group-btn', 'style'), 
@@ -499,14 +518,14 @@ def register_genes_analysis_callbacks(app):
     )
     def update_table_histogram_and_summary(derived_virtual_data, selected_metric, internal_store_data_input, internal_store_data_state):
         
+        # Layout base con uirevision para mantener el estado del usuario (zoom/scroll) tras interacciones
         default_layout = go.Layout(
             title='Filter the table below to see analysis or select a metric',
             height=400,
+            uirevision='genes_analysis_user_state'  # CLAVE: Evita el reseteo del gráfico al hacer clic
         )
         
-        # Resumen por defecto vacío, se llena luego
         default_summary = dbc.Alert("Loading statistics...", color="light")
-        
         save_btn_style = {'display': 'none'}
         
         final_df = None
@@ -528,50 +547,42 @@ def register_genes_analysis_callbacks(app):
                 layout_empty = go.Layout(
                     title='No data matches the current filter selection.',
                     height=400,
+                    uirevision='genes_analysis_user_state'
                 )
                 return go.Figure(layout=layout_empty), save_btn_style, dbc.Alert("No data matching filters.", color="warning")
 
             return go.Figure(layout=default_layout), save_btn_style, default_summary
 
+        # --- CÁLCULO DE RESUMEN (Sobre todos los datos filtrados, sin recorte) ---
         total_rows = len(final_df)
         unique_solutions = final_df['unique_solution_id'].nunique()
         unique_genes = final_df['gene'].nunique()
 
-        # 💡 MODIFICACIÓN: Reducción del tamaño del icono (fs-1 -> fs-4) y del número (H3 -> H4/fs-3)
         summary_panel = dbc.Row([
-            # Card 1: Total Rows
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    # Icono más pequeño
                     html.Div(html.I(className="bi bi-list-columns fs-4 text-secondary"), className="me-3"),
                     html.Div([
-                        # Número más compacto
                         html.H4(f"{total_rows:,}", className="mb-0 text-secondary fw-bold fs-3"),
                         html.Small("Total Rows (Gene-Solution)", className="text-muted fw-bold text-uppercase", style={'fontSize': '0.7rem'})
                     ])
                 ], className="d-flex align-items-center")
             ]), className="h-100 shadow-sm border-start border-secondary border-5"), width=12, md=4, className="mb-2"),
             
-            # Card 2: Unique Solutions
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    # Icono más pequeño
                     html.Div(html.I(className="bi bi-diagram-3-fill fs-4 text-primary"), className="me-3"),
                     html.Div([
-                        # Número más compacto
                         html.H4(f"{unique_solutions:,}", className="mb-0 text-primary fw-bold fs-3"),
                         html.Small("Unique Solutions", className="text-muted fw-bold text-uppercase", style={'fontSize': '0.7rem'})
                     ])
                 ], className="d-flex align-items-center")
             ]), className="h-100 shadow-sm border-start border-primary border-5"), width=12, md=4, className="mb-2"),
 
-            # Card 3: Unique Genes
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
-                    # Icono más pequeño
                     html.Div(html.I(className="bi bi-dna fs-4 text-success"), className="me-3"),
                     html.Div([
-                        # Número más compacto
                         html.H4(f"{unique_genes:,}", className="mb-0 text-success fw-bold fs-3"),
                         html.Small("Unique Genes", className="text-muted fw-bold text-uppercase", style={'fontSize': '0.7rem'})
                     ])
@@ -585,16 +596,24 @@ def register_genes_analysis_callbacks(app):
         
         metric_name = selected_metric.replace('_', ' ').title()
         
+        # --- LÓGICA GRÁFICA ---
         if not pd.api.types.is_numeric_dtype(final_df[selected_metric]):
-            
+            # Métrica Categórica (Genes, Frentes, etc.)
             save_btn_style = {'display': 'block'}
 
             counts = final_df[selected_metric].value_counts().reset_index()
             counts.columns = [selected_metric, 'count']
-            counts = counts.sort_values('count', ascending=False)
-
-            default_items_to_show = 50
-            max_range_index = min(default_items_to_show, len(counts))
+            
+            # --- OPTIMIZACIÓN DE RENDIMIENTO ---
+            # 1. Límite Duro (Top 300) para evitar lag del navegador y spinner colgado
+            MAX_RENDER_BARS = 300
+            total_categories = len(counts)
+            
+            title_text = f"Counts for '{metric_name}' in Filtered Data"
+            
+            if total_categories > MAX_RENDER_BARS:
+                counts = counts.head(MAX_RENDER_BARS)
+                title_text += f" (Top {MAX_RENDER_BARS} shown - Use table filters for others)"
             
             fig = px.bar(
                 counts,
@@ -602,29 +621,38 @@ def register_genes_analysis_callbacks(app):
                 y='count',
                 color='count',
                 color_continuous_scale='Blues',
-                title=f"Counts for '{metric_name}' in Filtered Data (Top {max_range_index} shown by default)",
+                title=title_text,
                 custom_data=[selected_metric]
             )
             
+            # 2. Límite Visual (Scroll Horizontal)
+            # Mostramos solo los primeros 50 para legibilidad, el resto se ve scrolleando
+            INITIAL_VISIBLE_BARS = 50
+            xaxis_range_config = None
+            if len(counts) > INITIAL_VISIBLE_BARS:
+                xaxis_range_config = [-0.5, INITIAL_VISIBLE_BARS - 0.5]
+
             fig.update_layout(
                 xaxis_title=metric_name,
                 yaxis_title='Count',
                 xaxis_tickangle=-45,
-                xaxis_range=[-0.5, max_range_index - 0.5],
+                uirevision='genes_analysis_user_state', # Mantiene posición/zoom tras interacciones
+                xaxis_range=xaxis_range_config,         # Zoom inicial en Top 50
                 xaxis_rangeslider=dict(
                     visible=True,
                     bgcolor="#EEEEEE",
                     bordercolor="#444",
                     borderwidth=2,
-                    thickness=0.15
+                    thickness=0.10  # Slider un poco más delgado para ganar espacio
                 ),
                 coloraxis_showscale=False,
-                margin=dict(l=60, r=60, t=60, b=60)
+                margin=dict(l=60, r=60, t=60, b=80) # Un poco más de margen inferior para etiquetas
             )
             
             return fig, save_btn_style, summary_panel
         
         else:
+            # Métrica Numérica (Histograma) - Se mantiene igual, solo añade uirevision
             valid_data = final_df[selected_metric].dropna()
             if valid_data.empty:
                 default_layout.title = f"No valid numeric data for '{metric_name}'."
@@ -662,6 +690,7 @@ def register_genes_analysis_callbacks(app):
                 xaxis_title=metric_name + " (Binned)",
                 yaxis_title='Frequency (count)',
                 xaxis_tickangle=-45,
+                uirevision='genes_analysis_user_state', # Persistencia de estado
                 xaxis_rangeslider=dict(
                     visible=True,
                     bgcolor="#EEEEEE",

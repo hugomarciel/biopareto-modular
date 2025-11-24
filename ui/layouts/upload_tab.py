@@ -168,7 +168,7 @@ def create_upload_tab():
     "num_genes": 4,
     "solution_id": "Sol_2"
   }
-]''', style={'fontSize': '11px', 'backgroundColor': '#f1f3f5', 'padding': '15px', 'borderRadius': '5px', 'border': '1px solid #dee2e6'})
+]''', style={'fontSize': '11px', 'backgroundColor': '#f1f3f5', 'padding': '15px', 'borderRadius': '1px', 'border': '1px solid #dee2e6'})
                                 ])
                             ], className="mt-2 border-0 bg-light")
                         ], id="format-info-collapse", is_open=False),

@@ -118,7 +118,7 @@ def register_data_management_callbacks(app):
                         html.Span("CONSOLIDATED", className="badge bg-info text-white") if front.get('is_consolidated') else None
                     ], className="mt-2 small")
                 ])
-            ], className=f"mb-2 shadow-sm border-start border-3 {card_border}")
+            ], className=f"mb-2 shadow-sm border-start border-1 {card_border}")
             
             fronts_items.append(front_card)
 
