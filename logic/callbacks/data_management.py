@@ -1,5 +1,5 @@
 # logic/callbacks/data_management.py
-# Modulo optimizado: Corrección de estilo de tarjetas y bug de recarga tras limpiar.
+# Modulo optimizado: Corrección de estilo de tarjetas, bug de recarga y validación de botón Clear.
 
 import dash
 from dash import Output, Input, State, callback_context, dcc, html, ALL
@@ -19,12 +19,12 @@ from logic.utils.data_processing import validate_and_process_fronts
 
 def register_data_management_callbacks(app):
     
-    # 1. Callback principal de carga y borrado (CORREGIDO: Resetea el Uploader)
+    # 1. Callback principal de carga y borrado
     @app.callback(
         [Output('data-store', 'data'),
          Output('upload-status', 'children'),
          Output('objectives-store', 'data'),
-         Output('upload-data', 'contents')], # <--- 💡 NUEVO OUTPUT PARA RESETEAR EL UPLOADER
+         Output('upload-data', 'contents')], 
         [Input('upload-data', 'contents'),
          Input('upload-data', 'filename'),
          Input('clear-data-btn', 'n_clicks')],
@@ -50,21 +50,18 @@ def register_data_management_callbacks(app):
         elif trigger_id == 'upload-data' and contents_list:
             # Procesamos los datos
             new_data_store, msg, new_objectives = validate_and_process_fronts(contents_list, filename_list, updated_data)
-            
-            # Retornamos los datos procesados y RESETEAMOS el uploader a None 
-            # para permitir volver a cargar el mismo archivo si fuera necesario
             return new_data_store, msg, new_objectives, None
 
         raise PreventUpdate
 
-    # 2. Callback visual de lista de frentes (ESTILO CORREGIDO: Gris sutil)
+    # 2. Callback visual de lista de frentes
     @app.callback(
         Output('fronts-list', 'children'),
         Input('data-store', 'data'),
         Input('main-tabs', 'active_tab')
     )
     def update_fronts_list(current_data, active_tab):
-        """Update the display of loaded fronts. Removed 'Main Front' checkbox logic."""
+        """Update the display of loaded fronts."""
         if active_tab != 'upload-tab':
             raise PreventUpdate
 
@@ -76,8 +73,6 @@ def register_data_management_callbacks(app):
 
         fronts_items = []
         for front in current_data['fronts']:
-            
-            # --- 💡 CAMBIO DE ESTILO: Usar 'border-secondary' (Gris) en lugar de 'primary' ---
             card_border = "border-secondary" if not front.get('is_consolidated') else "border-info"
             icon_class = "bi-file-earmark-bar-graph" if not front.get('is_consolidated') else "bi-layers-fill"
             
@@ -124,7 +119,7 @@ def register_data_management_callbacks(app):
 
         return fronts_items
 
-    # 3. Callback nombres (SIN CAMBIOS)
+    # 3. Callback nombres
     @app.callback(
         Output('data-store', 'data', allow_duplicate=True),
         Input({'type': 'front-name-input', 'index': ALL}, 'value'),
@@ -145,7 +140,7 @@ def register_data_management_callbacks(app):
                     break
         return updated_data
 
-    # 4. Callback Eliminar Frente (SIN CAMBIOS)
+    # 4. Callback Eliminar Frente
     @app.callback(
         [Output('data-store', 'data', allow_duplicate=True),
          Output('objectives-store', 'data', allow_duplicate=True)],
@@ -155,13 +150,11 @@ def register_data_management_callbacks(app):
         prevent_initial_call=True
     )
     def delete_front(n_clicks, ids, current_data):
-        """Deletes a front."""
         if not current_data or not any(n_clicks):
             return dash.no_update, dash.no_update
 
         updated_data = current_data.copy()
         ctx = dash.callback_context
-        
         triggered_id_str = ctx.triggered[0]['prop_id'].split('.')[0]
         try:
             triggered_id_dict = json.loads(re.search(r'\{.*\}', triggered_id_str).group(0))
@@ -177,7 +170,7 @@ def register_data_management_callbacks(app):
 
         return updated_data, None
 
-    # 5. Descargar Test (SIN CAMBIOS)
+    # 5. Descargar Test
     @app.callback(
         Output('download-test-file', 'data'),
         Input('download-test-btn', 'n_clicks'),
@@ -193,7 +186,7 @@ def register_data_management_callbacks(app):
         except Exception:
             return dash.no_update
 
-    # 6. Toggle Format Info (SIN CAMBIOS)
+    # 6. Toggle Format Info
     @app.callback(
         Output("format-info-collapse", "is_open"),
         Input("toggle-format-info", "n_clicks"),
@@ -202,3 +195,14 @@ def register_data_management_callbacks(app):
     def toggle_format_info(n_clicks, is_open):
         if n_clicks: return not is_open
         return is_open
+
+    # 7. NUEVO CALLBACK: Deshabilitar botón Clear si no hay datos
+    @app.callback(
+        Output('clear-data-btn', 'disabled'),
+        Input('data-store', 'data')
+    )
+    def toggle_clear_data_button(data_store):
+        """Disable Clear Data button if no fronts are loaded."""
+        if not data_store or not data_store.get('fronts'):
+            return True # Deshabilitado
+        return False # Habilitado

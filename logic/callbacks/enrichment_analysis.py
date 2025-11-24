@@ -501,10 +501,12 @@ def register_enrichment_callbacks(app):
                             html.Hr(className="my-2"),
                             
                             # Stats Line
+                            # Stats Line
                             html.Div([
                                 html.Span(stats_text_left, className="fw-bold text-primary"),
                                 html.Span(" | ", className="text-muted mx-1"),
-                                html.Span(stats_text_right, className="text-muted text-truncate", style={'maxWidth': '120px', 'display': 'inline-block', 'verticalAlign': 'bottom'})
+                                # CAMBIO: Se eliminó el parámetro 'style' con maxWidth
+                                html.Span(stats_text_right, className="text-muted text-truncate")
                             ], className="small mb-2"),
                             
                             # Comentario

@@ -141,7 +141,8 @@ def register_gene_groups_callbacks(app):
                             html.Div([
                                 html.Span(stats_text_left, className="fw-bold text-primary"),
                                 html.Span(" | ", className="text-muted mx-1"),
-                                html.Span(stats_text_right, className="text-muted text-truncate", style={'maxWidth': '120px', 'display': 'inline-block', 'verticalAlign': 'bottom'})
+                                # CAMBIO: Se eliminó el parámetro 'style' con maxWidth
+                                html.Span(stats_text_right, className="text-muted text-truncate") 
                             ], className="small mb-2"),
                             html.P(item_comment, className="text-muted small fst-italic mb-0 text-truncate", title=item_comment) if item_comment else None,
                             html.Div([html.Small(f"Via: {item_origin}", className="text-muted", style={'fontSize': '0.65rem'})], className="mt-2 pt-1 border-top")

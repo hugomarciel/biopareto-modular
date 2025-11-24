@@ -119,7 +119,7 @@ def create_upload_tab():
                             dbc.Col([
                                 dbc.Button([
                                     html.I(className="bi bi-trash3 me-2"), "Clear All Data"
-                                ], id="clear-data-btn", color="danger", outline=True, className="w-100 shadow-sm")
+                                ], id="clear-data-btn", color="danger", outline=True, className="w-100 shadow-sm", disabled=True)
                             ], width=12, md=6)
                         ], className="mb-4"),
 

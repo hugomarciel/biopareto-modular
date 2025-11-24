@@ -563,19 +563,17 @@ def toggle_interest_panel_visibility(active_tab, ui_state):
     }
 
     # 3. Lógica de visibilidad
-    is_hidden_tab = active_tab in ["upload-tab", "export-tab"]
+    is_hidden_tab = active_tab in ["export-tab"] 
+    
     is_manually_hidden = not ui_state.get('panel_visible', True) if ui_state else False
 
     if is_hidden_tab or is_manually_hidden:
-        # OCULTO: Panel fuera de la pantalla a la derecha
+        # OCULTO
         panel_style['right'] = '-450px' 
     else:
-        # VISIBLE: Panel entra en la pantalla (Overlay)
+        # VISIBLE
         panel_style['right'] = '20px' 
         
-        # NOTA: En modo Overlay, NO cambiamos el content_style['marginRight'].
-        # Esto evita que los gráficos se redibujen (reflow), eliminando el lag.
-
     return panel_style, content_style
 
 # --- 💡 CALLBACK MODIFICADO (NUEVO INPUT) 💡 ---
