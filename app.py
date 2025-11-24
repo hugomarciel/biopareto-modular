@@ -236,7 +236,7 @@ app.layout = dbc.Container([
     dcc.Store(id='gprofiler-results-store', data=[]), 
     dcc.Store(id='reactome-results-store', data=None),
     dcc.Store(id='enrichment-render-trigger-store', data=None), 
-    dcc.Store(id='ui-state-store', data={'panel_visible': True}, storage_type='session'),
+    dcc.Store(id='ui-state-store', data={'panel_visible': False}, storage_type='session'),
     dcc.Store(id='scroll-to-top-dummy-store'),
     dcc.Interval(id='badge-animation-interval', interval=1000, n_intervals=0, disabled=True),
 
@@ -1302,6 +1302,47 @@ def update_gene_groups_selector(items):
             })
 
     return options
+
+@app.callback(
+    [Output('interest-panel-item-count-badge', 'children'),
+     Output('interest-panel-item-count-badge', 'style'),
+     Output('interest-panel-item-count-badge', 'className'),
+     Output('badge-animation-interval', 'disabled')],
+    Input('interest-panel-store', 'data'),
+    State('interest-panel-item-count-badge', 'children'),
+    # --- 💡 CAMBIO: Se elimina prevent_initial_call=True para asegurar carga inicial ---
+    prevent_initial_call=False
+)
+def update_item_count_badge(items, current_count_str):
+    if items is None:
+        count = 0
+    else:
+        count = len(items)
+
+    try:
+        current_count = int(current_count_str) if current_count_str else 0
+    except (ValueError, TypeError):
+        current_count = 0
+
+    badge_style = {
+        "position": "absolute",
+        "top": "0",
+        "right": "0",
+        "transform": "translate(40%, -40%)",
+        "zIndex": "1051"
+    }
+
+    if count == 0:
+        badge_style['display'] = 'none'
+        return "0", badge_style, "", True 
+    
+    badge_style['display'] = 'block'
+    
+    # Animación solo si aumenta el conteo
+    if count > current_count:
+        return str(count), badge_style, "pulse-animation", False
+    else:
+        return str(count), badge_style, "", True
 
 
 # ------------------------------------------------------------
