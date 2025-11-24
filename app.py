@@ -1549,15 +1549,19 @@ app.clientside_callback(
     prevent_initial_call=True
 )
 
+
+
 # 2. Auto-Hide Panel (Referencia a assets/clientside_callbacks.js)
+# AHORA RECIBE EL VALOR DEL SWITCH DE PIN ('value')
 app.clientside_callback(
     ClientsideFunction(
         namespace='clientside',
         function_name='panel_auto_hide'
     ),
-    Output('auto-hide-setup-dummy', 'data'), # Output dummy técnico
-    Input('interest-panel-wrapper', 'id'),   # Input: ID del panel
-    Input('auto-hide-config-store', 'data')  # Input: Tiempo (ms)
+    Output('auto-hide-setup-dummy', 'data'), 
+    Input('interest-panel-wrapper', 'id'),   # ID del panel
+    Input('auto-hide-config-store', 'data'), # Tiempo (ms)
+    Input('pin-interest-panel-switch', 'value') # <--- NUEVO INPUT: Estado del Pin
 )
 
 # --- 💡 FIN CALLBACKS CLIENTSIDE 💡 ---
