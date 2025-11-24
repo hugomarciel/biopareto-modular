@@ -6,7 +6,7 @@ from dash import html, dcc
 def create_interest_panel():
     """Create the interest panel with refined Pin styling."""
     return dbc.Card([
-        # --- 1. HEADER MEJORADO: Switch sutil y alineado ---
+        # --- 1. HEADER MEJORADO ---
         dbc.CardHeader([
             html.Div([
                 # Título e Icono
@@ -15,37 +15,34 @@ def create_interest_panel():
                     html.H5("Interest Panel", className="mb-0 fw-bold", style={'letterSpacing': '0.5px'}),
                 ], className="d-flex align-items-center"),
                 
-                # Controles Derecha: Switch "Pin" (Estilizado) y Botón Trash
+                # Controles Derecha
                 html.Div([
-                    # SWITCH ESTILIZADO
-                    html.Div(
+                    # --- CORRECCIÓN DE ALINEACIÓN PIN ---
+                    html.Div([
+                        # 1. Texto separado del switch para alineación perfecta
+                        html.Span("Pin", className="text-white small me-5", style={'opacity': '0.9', 'fontWeight': '500'}),
+                        
+                        # 2. Switch sin label interno
                         dbc.Switch(
                             id="pin-interest-panel-switch",
                             value=False,
-                            label="Pin", # Texto simple
-                            # Clases: small para tamaño, opacity-75 para sutileza, sin fw-bold
-                            label_class_name="text-white small opacity-75",
-                            # Clases: mb-0 corrige alineación vertical, p-0 reduce padding extra
-                            className="d-flex align-items-center mb-0 p-0", 
+                            className="mb-0 p-0", # Sin márgenes extra
                             style={
+                                "minHeight": "20px",
                                 "cursor": "pointer",
-                                # Truco visual: Escalar al 85% para hacerlo más fino
-                                "transform": "scale(0.85)", 
-                                "transformOrigin": "right center" 
+                                "transform": "scale(1.1)" # Ligeramente más grande para que sea fácil de clickear
                             }
                         ),
-                        # Contenedor flex para asegurar alineación perfecta con el botón
-                        className="d-flex align-items-center me-2" 
-                    ),
+                    ], className="d-flex align-items-center me-3 border-end pe-3 border-white border-opacity-25"), # Divisor vertical sutil
 
+                    # Botón Borrar
                     dbc.Button(
                         html.I(className="bi bi-trash3-fill"),
                         id="clear-interest-panel-btn",
                         color="light", 
                         outline=True,
                         size="sm",
-                        className="border-0 text-white hover-warning",
-                        style={'opacity': '0.9'},
+                        className="border-0 text-white hover-warning p-1",
                         title="Clear all items"
                     )
                 ], className="d-flex align-items-center")

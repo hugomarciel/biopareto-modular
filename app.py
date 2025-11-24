@@ -1159,7 +1159,6 @@ def render_interest_panel_content(items):
         item_origin = item.get('tool_origin', 'Manual Selection')
         
         # --- LÓGICA DE ESTANDARIZACIÓN VISUAL ---
-        # 1. Definir Colores e Iconos
         if item_type == 'solution':
             badge_color, icon = "primary", "🔵"
             badge_text = "Solution"
@@ -1173,23 +1172,20 @@ def render_interest_panel_content(items):
             badge_color, icon = "warning", "🔬"
             badge_text = "Gene"
         elif item_type == 'combined_gene_group':
-            # --- CAMBIO REALIZADO AQUÍ: Color cambiado a 'success' (Verde) ---
             badge_color, icon = "success", "🎯" 
             badge_text = "Combined"
         else:
             badge_color, icon = "secondary", "❓"
             badge_text = "Unknown"
 
-        # 2. Construir Línea de Estadísticas (Genes | Fuente)
+        # 2. Construir Línea de Estadísticas
         stats_line = None
         context_line = None
-        
         data = item.get('data', {})
 
         if item_type == 'solution':
             n_genes = len(data.get('selected_genes', []))
             source = data.get('front_name', 'Unknown Front')
-            
             error_val = data.get('error_value')
             if error_val is not None:
                 try:
@@ -1197,9 +1193,6 @@ def render_interest_panel_content(items):
                     context_line = f"Error: {err}"
                 except (ValueError, TypeError):
                     context_line = None
-            else:
-                context_line = None
-
             stats_line = html.Div([
                 html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
@@ -1214,7 +1207,6 @@ def render_interest_panel_content(items):
                 all_g = set()
                 for s in sols: all_g.update(s.get('selected_genes', []))
                 n_genes = len(all_g)
-            
             n_sols = len(data.get('solutions', []))
             stats_line = html.Div([
                 html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
@@ -1225,12 +1217,7 @@ def render_interest_panel_content(items):
         elif item_type == 'gene_set':
             n_genes = len(data.get('genes', []))
             freq = data.get('frequency', None)
-            
-            if freq:
-                right_text = f"Freq: {freq}%"
-            else:
-                right_text = "Source: Table"
-                
+            right_text = f"Freq: {freq}%" if freq else "Source: Table"
             stats_line = html.Div([
                 html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
@@ -1255,29 +1242,18 @@ def render_interest_panel_content(items):
                 html.Span(f"From: {source}", className="text-muted")
             ], className="small mb-1")
 
-        # 3. Ensamblar Tarjeta
+        # 3. Ensamblar Tarjeta (ESTILO MEJORADO)
         item_card = dbc.Card([
             dbc.CardBody([
-                
                 html.Div(
                     dbc.Button(
                         "×",
                         id={'type': 'remove-interest-item', 'index': idx},
                         color="link",
                         className="text-muted text-decoration-none p-0 hover-danger",
-                        style={
-                            'fontSize': '1.5rem',
-                            'lineHeight': '0.8',
-                            'fontWeight': 'bold'
-                        }
+                        style={'fontSize': '1.5rem', 'lineHeight': '0.8', 'fontWeight': 'bold'}
                     ),
-                    style={
-                        'position': 'absolute',
-                        'top': '5px',
-                        'right': '8px',
-                        'zIndex': '10',
-                        'cursor': 'pointer'
-                    },
+                    style={'position': 'absolute', 'top': '5px', 'right': '8px', 'zIndex': '10', 'cursor': 'pointer'},
                     title="Remove item"
                 ),
 
@@ -1288,21 +1264,20 @@ def render_interest_panel_content(items):
                 ], className="d-flex align-items-center mb-2 pe-3"),
                 
                 html.Hr(className="my-1"),
-                
                 stats_line,
-                
                 html.Div(context_line, className="small text-danger fst-italic mb-1") if context_line else None,
-                
                 html.P(f"\"{item_comment}\"", className="small text-muted mb-1 fst-italic bg-light p-1 rounded") if item_comment else None,
                 
-                # Footer (Origin Tool)
                 html.Div([
                     html.I(className="bi bi-diagram-2 me-1"),
                     html.Span(f"Added via: {item_origin}")
                 ], className="d-flex justify-content-end text-muted", style={'fontSize': '0.7rem'})
 
             ], className="p-2 position-relative")
-        ], className="mb-2 shadow-sm border-start border-2", style={'borderLeftColor': f"var(--bs-{badge_color})"})
+            # --- CAMBIOS DE CLASE CSS AQUÍ ---
+            # border: Agrega borde completo gris claro
+            # border-start-4: Hace la barra de color lateral más gruesa y visible
+        ], className="mb-3 shadow-sm border-secondary border-opacity-25 rounded-2 border-start border-4", style={'borderLeftColor': f"var(--bs-{badge_color})"})
 
         panel_items.append(item_card)
 
