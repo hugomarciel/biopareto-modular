@@ -260,7 +260,7 @@ def create_gene_term_heatmap(heatmap_matrix):
     fig.update_layout(
         title=f"Functional Clustergram (Term vs. Gene Membership) - {clustering_status}",
         xaxis_title="Genes de Entrada",
-        yaxis_title="Términos Enriquecidos",
+        yaxis_title="Rich Terms",
         xaxis={'tickangle': 90, 'showgrid': False, 'zeroline': False},
         yaxis={'showgrid': False, 'zeroline': False, 'automargin': True},
         height=min(max(50 * clustered_matrix.shape[0], 500), 1000),

@@ -6,7 +6,7 @@ services:
   app:
     # Usando la imagen que subiste a Docker Hub (hugomarciel/pareto-app:v2.0-ssl)
     #image: hugomarciel/biopareto:V1.0
-    image: hugomarciel/pareto-app:v2.0-ssl
+    image: hugomarciel/pareto-app:v2.2-ssl
     container_name: biopareto_app
     restart: unless-stopped
     # El puerto interno 8050 no se expone al exterior, solo a Nginx
