@@ -7,6 +7,53 @@ from dash import html, dcc
 def create_export_tab():
     """Create export tab layout"""
     return dbc.Container([
+        # Selector de ítems para exportar (similar a Gene Groups Analysis)
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.Div([
+                            html.I(className="bi bi-box2-heart me-2"),
+                            html.H5("Select Items to Export", className="d-inline-block m-0 fw-bold"),
+                            html.I(
+                                id="export-main-help-icon",
+                                className="bi bi-question-circle-fill text-muted ms-2",
+                                style={'cursor': 'pointer', 'fontSize': '1.1rem'},
+                                title="How the export selection works"
+                            )
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom position-relative"),
+                    dbc.CardBody([
+                        dbc.Popover(
+                            [
+                                dbc.PopoverHeader("Export Selection Guide"),
+                                dbc.PopoverBody([
+                                    html.Div("Choose items from your Interest Panel, edit comments, and mark attachments to include in the export.", className="small text-muted"),
+                                    html.Hr(className="my-2"),
+                                    html.Ul([
+                                        html.Li("Use the checkboxes to pick which items go into the report.", className="small text-muted"),
+                                        html.Li("Comments can be edited and will be included in the export.", className="small text-muted"),
+                                        html.Li("Attachments (tables/plots) will show toggles once available.", className="small text-muted")
+                                    ], className="mb-0 ps-3")
+                                ], style={'maxWidth': '420px'})
+                            ],
+                            id="export-main-help-popover",
+                            target="export-main-help-icon",
+                            trigger="legacy",
+                            placement="right",
+                        ),
+                        html.P("Select items from your Interest Panel to prepare the export package.", className="text-muted small mb-4"),
+                        html.Div(id='export-items-visual-selector', children=[
+                            dbc.Alert([
+                                html.I(className="bi bi-info-circle me-2"),
+                                "No items yet. Add items to the Interest Panel first."
+                            ], color="light", className="d-flex align-items-center small mb-0")
+                        ])
+                    ])
+                ], className="shadow-sm border-0 mb-4")
+            ], width=12)
+        ]),
+
         dbc.Row([
             dbc.Col([
                 dbc.Card([

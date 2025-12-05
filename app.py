@@ -261,6 +261,7 @@ app.layout = dbc.Container([
     dcc.Store(id='intersection-data-temp-store', data=None),
     dcc.Store(id='selected-gene-group-indices-store', data=[]), 
     dcc.Store(id='enrichment-selected-indices-store', data=[]),
+    dcc.Store(id='export-selected-indices-store', data=[]),
     dcc.Store(id='pareto-layout-store', data={}), 
     dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
     dcc.Store(id='gprofiler-results-store', data=[]), 
