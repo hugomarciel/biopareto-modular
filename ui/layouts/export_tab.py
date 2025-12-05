@@ -1,13 +1,11 @@
-# ui/layouts/export_tab.py
-
 import dash_bootstrap_components as dbc
 from dash import html, dcc
 
 
 def create_export_tab():
-    """Create export tab layout"""
+    """Create export tab layout."""
     return dbc.Container([
-        # Selector de ítems para exportar (similar a Gene Groups Analysis)
+        # Selector de items
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -54,11 +52,52 @@ def create_export_tab():
             ], width=12)
         ]),
 
+        # Detalle del item seleccionado
         dbc.Row([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H4("📤 Export Results", className="text-primary mb-0")
+                        html.Div([
+                            html.I(className="bi bi-info-square-fill me-2"),
+                            html.H5("Item Details", className="d-inline-block m-0 fw-bold")
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom position-relative"),
+                    dbc.CardBody([
+                        html.Div(id="export-selected-item-details", children=[
+                            dbc.Alert([
+                                html.I(className="bi bi-hand-index me-2"),
+                                "Select an item above to see its details."
+                            ], color="light", className="d-flex align-items-center small mb-0")
+                        ]),
+                        html.Hr(className="my-3"),
+                        html.Div([
+                            html.Label("Item Comment", className="fw-bold"),
+                            dcc.Textarea(
+                                id="export-comment-editor",
+                                style={'minHeight': '120px'},
+                                className="form-control mb-2",
+                                placeholder="Add or edit the comment for this item..."
+                            ),
+                            dbc.Button(
+                                [html.I(className="bi bi-save me-1"), "Save Comment"],
+                                id="export-save-comment-btn",
+                                color="primary",
+                                size="sm",
+                                className="mt-1"
+                            ),
+                            html.Div(id="export-comment-save-status", className="mt-2")
+                        ])
+                    ])
+                ], className="shadow-sm border-0 mb-4")
+            ], width=12)
+        ]),
+
+        # Bloque de exportaciones existentes
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H4("Export Results", className="text-primary mb-0")
                     ]),
                     dbc.CardBody([
                         html.P("Export analysis results in different formats or generate a full report.",
@@ -69,15 +108,15 @@ def create_export_tab():
                             dbc.Col([
                                 dbc.Card([
                                     dbc.CardBody([
-                                        html.H6("📋 Complete Report", className="text-success"),
+                                        html.H6("Complete Report", className="text-success"),
                                         html.P("Generate a detailed PDF/TXT report with data, plots, and enrichment results.",
                                                className="small text-muted"),
                                         dbc.ButtonGroup([
-                                            dbc.Button("📄 Generate PDF",
+                                            dbc.Button("Generate PDF",
                                                      id="generate-pdf-report",
                                                      color="success",
                                                      className="me-2"),
-                                            dbc.Button("📝 Generate TXT",
+                                            dbc.Button("Generate TXT",
                                                      id="generate-txt-report",
                                                      color="info",
                                                      outline=True)
@@ -94,7 +133,7 @@ def create_export_tab():
                             dbc.Col([
                                 dbc.Card([
                                     dbc.CardBody([
-                                        html.H6("📊 Pareto Front Data", className="text-info"),
+                                        html.H6("Pareto Front Data", className="text-info"),
                                         html.P("Export current Pareto front solutions with their metrics.",
                                                className="small text-muted"),
                                         dbc.ButtonGroup([
@@ -110,7 +149,7 @@ def create_export_tab():
                             dbc.Col([
                                 dbc.Card([
                                     dbc.CardBody([
-                                        html.H6("🧬 Gene List", className="text-info"),
+                                        html.H6("Gene List", className="text-info"),
                                         html.P("Export complete list of unique genes found.",
                                                className="small text-muted"),
                                         dbc.ButtonGroup([
@@ -127,7 +166,7 @@ def create_export_tab():
                         html.Hr(),
 
                         html.Div([
-                            html.H6("📋 Current Session Summary:", className="text-secondary"),
+                            html.H6("Current Session Summary:", className="text-secondary"),
                             html.Div(id="session-summary")
                         ])
                     ])

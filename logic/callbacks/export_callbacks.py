@@ -5,7 +5,6 @@ from dash import Output, Input, State, dcc, html, ALL
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import json
-import pandas as pd
 from datetime import datetime
 from services.report_generator import (
     generate_pdf_report,
@@ -16,11 +15,9 @@ from services.report_generator import (
 
 
 def register_export_callbacks(app):
-    """
-    Register all callbacks for the Export tab.
-    """
+    """Register callbacks for Export tab."""
 
-    # Selector visual de ítems (single-select)
+    # Selector visual (single-select)
     @app.callback(
         Output('export-items-visual-selector', 'children'),
         [Input('interest-panel-store', 'data'),
@@ -33,8 +30,7 @@ def register_export_callbacks(app):
                 "No items available. Add items to your Interest Panel first."
             ], color="light", className="d-flex align-items-center small mb-0")
 
-        if selected_indices_list is None:
-            selected_indices_list = []
+        selected_indices_list = selected_indices_list or []
 
         type_map = {
             'solution': ("primary", "🔵", "Solution"),
@@ -72,7 +68,8 @@ def register_export_callbacks(app):
                 stats_left = f"Genes: {n_genes}"
                 stats_right = f"Sols: {len(data.get('solutions', []))}"
             elif item_type == 'gene_set':
-                stats_left = f"Genes: {len(data.get('genes', []))}"
+                genes = data.get('genes', [])
+                stats_left = f"Genes: {len(genes)}"
                 freq = data.get('frequency')
                 stats_right = f"Freq: {freq}%" if freq else "Table"
             elif item_type == 'individual_gene':
@@ -124,7 +121,100 @@ def register_export_callbacks(app):
 
         return dbc.Row(cards, className="g-3")
 
-    # Store para selección única (mantiene solo el último seleccionado)
+    # Detalle del item seleccionado
+    @app.callback(
+        [Output('export-selected-item-details', 'children'),
+         Output('export-comment-editor', 'value')],
+        Input('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=False
+    )
+    def render_selected_item_details(selected_indices, items):
+        if not selected_indices or not items:
+            return (
+                dbc.Alert([
+                    html.I(className="bi bi-hand-index me-2"),
+                    "Select an item above to see its details."
+                ], color="light", className="d-flex align-items-center small mb-0"),
+                ""
+            )
+
+        idx = selected_indices[0]
+        if idx >= len(items):
+            raise PreventUpdate
+        item = items[idx]
+        item_type = item.get('type', 'Unknown')
+        name = item.get('name', 'Unknown')
+        comment = item.get('comment', '') or ""
+        origin = item.get('tool_origin', 'Interest Panel')
+        timestamp = item.get('timestamp', 'N/A')
+        data = item.get('data', {}) or {}
+
+        info_rows = []
+        if item_type == 'solution':
+            genes = data.get('selected_genes', [])
+            info_rows.append(html.Li(f"Genes: {len(genes)}"))
+            info_rows.append(html.Li(f"Front: {data.get('front_name', 'N/A')}"))
+            info_rows.append(html.Li(f"Solution ID: {data.get('solution_id', 'N/A')}"))
+            if genes:
+                info_rows.append(html.Li(f"Gene list: {', '.join(genes[:30])}" + (" ..." if len(genes) > 30 else "")))
+        elif item_type == 'solution_set':
+            sols = data.get('solutions', [])
+            info_rows.append(html.Li(f"Solutions: {len(sols)}"))
+            info_rows.append(html.Li(f"Unique genes: {data.get('unique_genes_count', 'N/A')}"))
+        elif item_type == 'gene_set':
+            genes = data.get('genes', [])
+            info_rows.append(html.Li(f"Genes: {len(genes)}"))
+            if genes:
+                info_rows.append(html.Li(f"Gene list: {', '.join(genes[:30])}" + (" ..." if len(genes) > 30 else "")))
+        elif item_type == 'individual_gene':
+            info_rows.append(html.Li(f"Gene: {data.get('gene', 'N/A')}"))
+            info_rows.append(html.Li(f"Source: {data.get('source', 'N/A')}"))
+        elif item_type == 'combined_gene_group':
+            info_rows.append(html.Li(f"Genes: {data.get('gene_count', 0)}"))
+            info_rows.append(html.Li(f"Source items: {len(data.get('source_items', []))}"))
+
+        detail = dbc.Card([
+            dbc.CardBody([
+                html.H5(name, className="fw-bold mb-2"),
+                html.Div([
+                    dbc.Badge(item_type, color="secondary", className="me-2"),
+                    html.Small(f"Origin: {origin}", className="text-muted me-3"),
+                    html.Small(f"Added: {timestamp}", className="text-muted")
+                ], className="mb-2"),
+                html.H6("Details", className="fw-bold small"),
+                html.Ul(info_rows if info_rows else [html.Li("No additional data available.", className="text-muted")], className="small"),
+                html.H6("Current Comment", className="fw-bold small mt-3"),
+                html.Div(comment or "No comment", className="text-muted small")
+            ])
+        ], className="border-0 shadow-sm")
+
+        return detail, comment
+
+    # Guardar comentario editado
+    @app.callback(
+        [Output('interest-panel-store', 'data', allow_duplicate=True),
+         Output('export-comment-save-status', 'children')],
+        Input('export-save-comment-btn', 'n_clicks'),
+        [State('export-selected-indices-store', 'data'),
+         State('export-comment-editor', 'value'),
+         State('interest-panel-store', 'data')],
+        prevent_initial_call=True
+    )
+    def save_item_comment(n_clicks, selected_indices, new_comment, items):
+        if not n_clicks:
+            raise PreventUpdate
+        if not selected_indices or items is None:
+            return dash.no_update, dbc.Alert("Select an item first.", color="warning", className="py-1 px-2 mt-2")
+        idx = selected_indices[0]
+        if idx >= len(items):
+            raise PreventUpdate
+        updated = list(items)
+        updated[idx] = {**updated[idx], 'comment': new_comment or ""}
+        status = dbc.Alert("Comment saved.", color="success", className="py-1 px-2 mt-2")
+        return updated, status
+
+    # Store para selección única
     @app.callback(
         Output('export-selected-indices-store', 'data'),
         Input({'type': 'export-card-checkbox', 'index': ALL}, 'value'),
@@ -145,17 +235,15 @@ def register_export_callbacks(app):
         if idx is None:
             raise PreventUpdate
 
-        # Intentamos leer el valor disparado; si no viene, usamos la lista por índice.
         triggered_value = ctx.triggered[0].get('value', None)
         if triggered_value is None and 0 <= idx < len(checkbox_values):
             triggered_value = checkbox_values[idx]
 
-        # Si se activó el switch, seleccionamos solo ese índice; si se apagó, limpiamos.
         if triggered_value:
             return [idx]
         return []
 
-    # 1. Callback para generar PDF Report
+    # Export: PDF
     @app.callback(
         Output("pdf-report-download", "data"),
         Input("generate-pdf-report", "n_clicks"),
@@ -172,7 +260,7 @@ def register_export_callbacks(app):
             return dcc.send_bytes(pdf_buffer.getvalue(), f"BioPareto_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
         raise PreventUpdate
 
-    # 2. Callback para generar TXT Report
+    # Export: TXT
     @app.callback(
         Output("txt-report-download", "data"),
         Input("generate-txt-report", "n_clicks"),
@@ -189,7 +277,7 @@ def register_export_callbacks(app):
             return dcc.send_string(txt_content, f"BioPareto_Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         raise PreventUpdate
 
-    # 3. Exportar Pareto Data (CSV)
+    # Exportar Pareto CSV
     @app.callback(
         Output("download-pareto-csv", "data"),
         Input("btn-export-pareto-csv", "n_clicks"),
@@ -204,7 +292,7 @@ def register_export_callbacks(app):
             return dcc.send_string(csv_data, f"pareto_solutions_{datetime.now().strftime('%Y%m%d')}.csv")
         raise PreventUpdate
 
-    # 4. Exportar Pareto Data (JSON)
+    # Exportar Pareto JSON
     @app.callback(
         Output("download-pareto-json", "data"),
         Input("btn-export-pareto-json", "n_clicks"),
@@ -219,7 +307,7 @@ def register_export_callbacks(app):
             return dcc.send_string(json_data, f"pareto_solutions_{datetime.now().strftime('%Y%m%d')}.json")
         raise PreventUpdate
 
-    # 5. Exportar Lista de Genes (CSV)
+    # Exportar Genes CSV
     @app.callback(
         Output("download-genes-csv", "data"),
         Input("btn-export-genes-csv", "n_clicks"),
@@ -234,7 +322,7 @@ def register_export_callbacks(app):
             return dcc.send_string(csv_data, f"unique_genes_{datetime.now().strftime('%Y%m%d')}.csv")
         raise PreventUpdate
 
-    # 6. Exportar Lista de Genes (TXT)
+    # Exportar Genes TXT
     @app.callback(
         Output("download-genes-txt", "data"),
         Input("btn-export-genes-txt", "n_clicks"),
@@ -249,7 +337,7 @@ def register_export_callbacks(app):
             return dcc.send_string(txt_data, f"unique_genes_{datetime.now().strftime('%Y%m%d')}.txt")
         raise PreventUpdate
 
-    # 7. Resumen de la sesión
+    # Resumen de sesión
     @app.callback(
         Output('session-summary', 'children'),
         Input('data-store', 'data'),
