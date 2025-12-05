@@ -1,3 +1,4 @@
+#/config.py
 """
 BioPareto Analyzer - Configuration
 Global configuration settings

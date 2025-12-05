@@ -232,7 +232,7 @@ def create_navbar():
 
 
 # Placeholder para la pestaña Export (A MOVER)
-def create_export_tab():
+def _deprecated_export_tab_placeholder():
     return html.Div("Export Tab (Loading...)")
 
 # Funciones de reporte (A MOVER) - Se necesita mantener la estructura dummy para que compile el resto de callbacks
@@ -419,6 +419,15 @@ app.layout = dbc.Container([
                     label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
                 ),
                 
+                # Pestaña 6: Export
+                dbc.Tab(
+                    label=" 📩 Export", 
+                    tab_id="export-tab",
+                    id="tab-export-control",
+                    disabled=True,
+                    label_style={"fontWeight": "bold", "borderRadius": "5px 5px 0 0"}
+                ),
+                
             ], id="main-tabs", active_tab="upload-tab", className="nav-fill mb-0 shadow-sm bg-white rounded-top"),
 
             # --- TOOLTIPS DE ADVERTENCIA (Se muestran solo si la pestaña está deshabilitada) ---
@@ -451,6 +460,13 @@ app.layout = dbc.Container([
                 target="tab-enrichment-control",
                 placement="top",
                 id="tooltip-enrichment"
+            ),
+            # Tooltip para Export
+            dbc.Tooltip(
+                "⚠️ Disabled: Add items to the Interest Panel to export them.",
+                target="tab-export-control",
+                placement="top",
+                id="tooltip-export"
             ),
         ]),
         
@@ -563,7 +579,7 @@ def toggle_interest_panel_visibility(active_tab, ui_state):
     }
 
     # 3. Lógica de visibilidad
-    is_hidden_tab = active_tab in ["export-tab"] 
+    is_hidden_tab = active_tab in [] 
     
     is_manually_hidden = not ui_state.get('panel_visible', True) if ui_state else False
 
@@ -1455,11 +1471,13 @@ def confirm_pareto_selection_addition(confirm_clicks, cancel_clicks, temp_data, 
      Output("tab-genes-control", "disabled"),
      Output("tab-gga-control", "disabled"),
      Output("tab-enrichment-control", "disabled"),
+     Output("tab-export-control", "disabled"),
      # CORRECCIÓN: Usamos 'style' en lugar de 'disabled' para ocultar tooltips
      Output("tooltip-pareto", "style"), 
      Output("tooltip-genes", "style"),
      Output("tooltip-gga", "style"),
-     Output("tooltip-enrichment", "style")],
+     Output("tooltip-enrichment", "style"),
+     Output("tooltip-export", "style")],
     [Input("data-store", "data"),
      Input("interest-panel-store", "data")]
 )
@@ -1484,6 +1502,7 @@ def update_tabs_disabled_state(data_store, interest_items):
     genes_disabled = not has_data
     gga_disabled = not has_interest_items
     enrichment_disabled = not has_interest_items
+    export_disabled = not has_interest_items
     
     # Estilos para tooltips: 
     # Si la pestaña está deshabilitada (True), mostramos el tooltip ({})
@@ -1493,11 +1512,12 @@ def update_tabs_disabled_state(data_store, interest_items):
     style_hidden = {'display': 'none'}
     
     return (
-        pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled, # Estado Tabs
+        pareto_disabled, genes_disabled, gga_disabled, enrichment_disabled, export_disabled, # Estado Tabs
         style_visible if pareto_disabled else style_hidden,     # Tooltip Pareto
         style_visible if genes_disabled else style_hidden,      # Tooltip Genes
         style_visible if gga_disabled else style_hidden,        # Tooltip GGA
-        style_visible if enrichment_disabled else style_hidden  # Tooltip Enrichment
+        style_visible if enrichment_disabled else style_hidden, # Tooltip Enrichment
+        style_visible if export_disabled else style_hidden      # Tooltip Export
     )
 # --- 💡 FIN DEL CALLBACK 💡 ---
     
