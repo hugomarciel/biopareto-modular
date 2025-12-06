@@ -1,7 +1,7 @@
 # logic/callbacks/export_callbacks.py
 
 import dash
-from dash import Output, Input, State, dcc, html, dash_table, ALL
+from dash import Output, Input, State, dcc, html, dash_table, ALL, MATCH
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import json
@@ -33,11 +33,11 @@ def register_export_callbacks(app):
         selected_indices_list = selected_indices_list or []
 
         type_map = {
-            'solution': ("primary", "🔵", "Solution"),
-            'solution_set': ("info", "📦", "Set"),
-            'gene_set': ("success", "🧬", "Gene Group"),
-            'individual_gene': ("warning", "🔬", "Gene"),
-            'combined_gene_group': ("success", "🎯", "Combined")
+            'solution': ("primary", "bi bi-record-circle-fill text-primary", "Solution"),
+            'solution_set': ("info", "bi bi-stack", "Set"),
+            'gene_set': ("success", "bi bi-diagram-3", "Gene Group"),
+            'individual_gene': ("warning", "bi bi-shield-check", "Gene"),
+            'combined_gene_group': ("success", "bi bi-intersect", "Combined")
         }
 
         cards = []
@@ -46,7 +46,7 @@ def register_export_callbacks(app):
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
 
-            badge_color, icon, badge_text = type_map.get(item_type, ("secondary", "❓", "Item"))
+            badge_color, icon, badge_text = type_map.get(item_type, ("secondary", "bi bi-file-earmark", "Item"))
             item_name = item.get('name', 'Unknown')
             item_comment = item.get('comment', '')
             item_origin = item.get('tool_origin', 'Manual Selection')
@@ -99,7 +99,7 @@ def register_export_callbacks(app):
 
                         html.Div([
                             html.Div([
-                                html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
+                                html.I(className=icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
                                 dbc.Badge(badge_text, color=badge_color, style={'fontSize': '0.75rem'}),
                             ], className="d-flex align-items-center mb-2"),
                             
@@ -181,10 +181,9 @@ def register_export_callbacks(app):
                     html.Small(f"Origin: {origin}", className="text-muted me-3"),
                     html.Small(f"Added: {timestamp}", className="text-muted")
                 ], className="mb-2"),
+                dbc.Alert(comment or "No comment", color="info", className="py-2 px-3 mb-3"),
                 html.H6("Details", className="fw-bold small"),
-                html.Ul(info_rows if info_rows else [html.Li("No additional data available.", className="text-muted")], className="small"),
-                html.H6("Current Comment", className="fw-bold small mt-3"),
-                html.Div(comment or "No comment", className="text-muted small")
+                html.Ul(info_rows if info_rows else [html.Li("No additional data available.", className="text-muted")], className="small")
             ])
         ], className="border-0 shadow-sm")
 
@@ -216,6 +215,36 @@ def register_export_callbacks(app):
             ])
 
             body_children = []
+            # Comentario editable y destacado primero
+            body_children.append(
+                dbc.Alert(
+                    [
+                        html.Label("Attachment comment", className="fw-bold small mb-1"),
+                        dcc.Textarea(
+                            id={'type': 'export-attachment-comment', 'att_id': att_id},
+                            value=att_comment,
+                            className="form-control",
+                            style={'minHeight': '80px'},
+                            placeholder="Add or edit the comment for this attachment..."
+                        )
+                    ],
+                    color="light",
+                    className="py-2 px-3 mb-3 border border-primary border-2 shadow-0"
+                )
+            )
+
+            # Contenido colapsable (oculto por defecto)
+            collapse_id = {'type': 'export-attachment-collapse', 'att_id': att_id}
+            toggle_button = dbc.Button(
+                "Show/Hide",
+                id={'type': 'export-attachment-toggle', 'att_id': att_id},
+                color="secondary",
+                outline=True,
+                size="sm",
+                className="mb-2"
+            )
+
+            content_children = []
             if att_type == 'table':
                 cols = payload.get('columns', [])
                 rows = payload.get('rows', [])
@@ -251,12 +280,12 @@ def register_export_callbacks(app):
                         'border': '1px solid #dee2e6'
                     }
                 )
-                body_children.append(table)
+                content_children.append(table)
             elif att_type in ['manhattan', 'heatmap']:
                 img_b64 = payload.get('image')
                 img_error = payload.get('error')
                 if img_b64:
-                    body_children.append(
+                    content_children.append(
                         html.Img(
                             src=img_b64,
                             style={
@@ -270,7 +299,7 @@ def register_export_callbacks(app):
                         )
                     )
                 elif img_error:
-                    body_children.append(
+                    content_children.append(
                         dbc.Alert(
                             img_error,
                             color="warning",
@@ -278,7 +307,7 @@ def register_export_callbacks(app):
                         )
                     )
                 else:
-                    body_children.append(
+                    content_children.append(
                         dbc.Alert(
                             "No hay imagen guardada en este adjunto (la captura no se generó al adjuntar).",
                             color="light",
@@ -290,17 +319,10 @@ def register_export_callbacks(app):
                 link_url = payload.get('link_url')
                 if image_url:
                     img = html.Img(src=image_url, style={'maxWidth': '100%', 'border': '1px solid #ddd', 'borderRadius': '4px'})
-                    body_children.append(html.A(img, href=link_url or image_url, target="_blank"))
+                    content_children.append(html.A(img, href=link_url or image_url, target="_blank"))
 
-            body_children.append(html.Div([
-                html.Label("Attachment Comment", className="fw-bold small mt-2"),
-                dcc.Textarea(
-                    id={'type': 'export-attachment-comment', 'att_id': att_id},
-                    value=att_comment,
-                    style={'minHeight': '80px'},
-                    className="form-control"
-                )
-            ], className="mt-2"))
+            body_children.append(toggle_button)
+            body_children.append(dbc.Collapse(content_children, id=collapse_id, is_open=False))
 
             att_cards.append(
                 dbc.Card([
@@ -313,57 +335,94 @@ def register_export_callbacks(app):
 
         return detail, attachments_preview, comment
 
-    # Guardar comentario editado
+    # Auto-guardado de comentario de adjuntos al salir o confirmar (debounce)
     @app.callback(
-        [Output('interest-panel-store', 'data', allow_duplicate=True),
-         Output('export-comment-save-status', 'children')],
-        Input('export-save-comment-btn', 'n_clicks'),
-        [State('export-selected-indices-store', 'data'),
-         State('export-comment-editor', 'value'),
-         State({'type': 'export-attachment-comment', 'att_id': ALL}, 'value'),
-         State({'type': 'export-attachment-comment', 'att_id': ALL}, 'id'),
-         State({'type': 'export-attachment-include', 'att_id': ALL}, 'value'),
-         State({'type': 'export-attachment-include', 'att_id': ALL}, 'id'),
-         State('interest-panel-store', 'data')],
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input({'type': 'export-attachment-comment', 'att_id': ALL}, 'value'),
+        State({'type': 'export-attachment-comment', 'att_id': ALL}, 'id'),
+        State('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
         prevent_initial_call=True
     )
-    def save_item_comment(n_clicks, selected_indices, new_comment, att_comments, att_comment_ids, att_includes, att_include_ids, items):
+    def autosave_attachment_comment(values, id_list, selected_indices, items):
+        ctx = dash.callback_context
+        if items is None or not selected_indices:
+            raise PreventUpdate
+        if not ctx.triggered:
+            raise PreventUpdate
+
+        try:
+            trigger_id = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])
+        except Exception:
+            raise PreventUpdate
+
+        att_id = trigger_id.get('att_id')
+        if att_id is None:
+            raise PreventUpdate
+
+        # Buscar el valor correspondiente en la lista
+        value_map = {}
+        for val, cid in zip(values or [], id_list or []):
+            if isinstance(cid, dict):
+                value_map[cid.get('att_id')] = val
+
+        new_value = value_map.get(att_id, "")
+
+        idx_item = selected_indices[0]
+        if idx_item >= len(items):
+            raise PreventUpdate
+
+        updated_items = list(items)
+        item = dict(updated_items[idx_item])
+        attachments = item.get('attachments', []) or []
+        new_attachments = []
+        changed = False
+        for att in attachments:
+            att_copy = dict(att)
+            if att_copy.get('id') == att_id:
+                att_copy['comment'] = new_value or ""
+                changed = True
+            new_attachments.append(att_copy)
+
+        if not changed:
+            raise PreventUpdate
+
+        item['attachments'] = new_attachments
+        updated_items[idx_item] = item
+        return updated_items
+
+
+    # Toggle mostrar/ocultar cada adjunto
+    @app.callback(
+        Output({'type': 'export-attachment-collapse', 'att_id': MATCH}, 'is_open'),
+        Input({'type': 'export-attachment-toggle', 'att_id': MATCH}, 'n_clicks'),
+        State({'type': 'export-attachment-collapse', 'att_id': MATCH}, 'is_open'),
+        prevent_initial_call=True
+    )
+    def toggle_attachment_collapse(n_clicks, is_open):
         if not n_clicks:
             raise PreventUpdate
-        if not selected_indices or items is None:
-            return dash.no_update, dbc.Alert("Select an item first.", color="warning", className="py-1 px-2 mt-2")
+        return not is_open
+
+    # Auto-guardado del comentario del item principal
+    @app.callback(
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input('export-comment-editor', 'value'),
+        State('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=True
+    )
+    def autosave_item_comment(new_comment, selected_indices, items):
+        if items is None or not selected_indices:
+            raise PreventUpdate
         idx = selected_indices[0]
         if idx >= len(items):
             raise PreventUpdate
-
         updated = list(items)
         item = dict(updated[idx])
         item['comment'] = new_comment or ""
-
-        attachments = item.get('attachments', []) or []
-        att_comment_map = {}
-        for val, cid in zip(att_comments or [], att_comment_ids or []):
-            if isinstance(cid, dict):
-                att_comment_map[cid.get('att_id')] = val
-        att_include_map = {}
-        for val, cid in zip(att_includes or [], att_include_ids or []):
-            if isinstance(cid, dict):
-                att_include_map[cid.get('att_id')] = bool(val)
-
-        new_attachments = []
-        for att in attachments:
-            att_id = att.get('id')
-            att_copy = dict(att)
-            if att_id in att_comment_map:
-                att_copy['comment'] = att_comment_map[att_id] or ""
-            if att_id in att_include_map:
-                att_copy['include'] = att_include_map[att_id]
-            new_attachments.append(att_copy)
-        item['attachments'] = new_attachments
-
         updated[idx] = item
-        status = dbc.Alert("Comment saved.", color="success", className="py-1 px-2 mt-2")
-        return updated, status
+        return updated
 
     # Store para selección única
     @app.callback(

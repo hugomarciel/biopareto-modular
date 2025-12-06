@@ -69,25 +69,20 @@ def create_export_tab():
                                 "Select an item above to see its details."
                             ], color="light", className="d-flex align-items-center small mb-0")
                         ]),
-                        html.Div(id="export-attachments-preview", className="mt-3"),
-                        html.Hr(className="my-3"),
-                        html.Div([
-                            html.Label("Item Comment", className="fw-bold"),
+                        dbc.Alert([
+                            html.Div([
+                                html.Label("Item Comment", className="fw-bold mb-1"),
+                                html.P("This comment will be included in the export.", className="small text-muted mb-2")
+                            ], className="mb-2"),
                             dcc.Textarea(
                                 id="export-comment-editor",
                                 style={'minHeight': '120px'},
                                 className="form-control mb-2",
                                 placeholder="Add or edit the comment for this item..."
-                            ),
-                            dbc.Button(
-                                [html.I(className="bi bi-save me-1"), "Save Comment"],
-                                id="export-save-comment-btn",
-                                color="primary",
-                                size="sm",
-                                className="mt-1"
-                            ),
-                            html.Div(id="export-comment-save-status", className="mt-2")
-                        ])
+                            )
+                        ], color="light", className="mt-3 border border-2"),
+                        html.Hr(className="my-3"),
+                        html.Div(id="export-attachments-preview", className="mt-1")
                     ])
                 ], className="shadow-sm border-0 mb-4")
             ], width=12)

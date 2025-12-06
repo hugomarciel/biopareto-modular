@@ -262,7 +262,7 @@ def create_gene_term_heatmap(heatmap_matrix):
 
     fig.update_layout(
         title=f"Functional Clustergram (Term vs. Gene Membership) - {clustering_status}",
-        xaxis_title="Genes de Entrada",
+        xaxis_title="Genes",
         yaxis_title="Rich Terms",
         xaxis={'tickangle': 90, 'showgrid': False, 'zeroline': False},
         yaxis={'showgrid': False, 'zeroline': False, 'automargin': True},
@@ -1435,6 +1435,7 @@ def register_enrichment_callbacks(app):
         if not ctx.triggered:
             raise PreventUpdate
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        trigger_val = ctx.triggered[0].get('value', None)
 
         # Defaults
         new_ctx = dash.no_update
@@ -1446,6 +1447,9 @@ def register_enrichment_callbacks(app):
 
         # Abrir modal según botón
         if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn']:
+            # Evitar apertura si el click es inicial (None/0)
+            if not trigger_val:
+                raise PreventUpdate
             if trigger_id == 'attach-gprofiler-table-btn':
                 new_ctx = {'type': 'gprofiler_table'}
                 new_title = 'g:Profiler Results'
@@ -1462,10 +1466,14 @@ def register_enrichment_callbacks(app):
 
         # Cancelar modal
         if trigger_id == 'attachment-confirm-cancel':
+            if not cancel_click:
+                raise PreventUpdate
             return dash.no_update, dash.no_update, dash.no_update, None, False, dash.no_update
 
         # Confirmar adjunto
         if trigger_id == 'attachment-confirm-submit':
+            if not submit_click:
+                raise PreventUpdate
             # mostrar indicador de carga mientras se procesa
             saving = dbc.Spinner(size="sm", color="primary")
             if not ctx_data or not selected_indices or not items:
