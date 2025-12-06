@@ -1,7 +1,7 @@
 # ui/layouts/enrichment_tab.py
 
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html, dcc, dash_table
 from services.gprofiler_service import get_organisms_from_api 
 from services.reactome_service import ReactomeService
 
@@ -185,11 +185,19 @@ def create_gprofiler_layout(organism_options):
 
     return html.Div([
         control_panel,
-        
-        # Results Table Container (Generated in Callback)
-        dcc.Loading(html.Div(id="gprofiler-results-content"), type="default"),
-        
-        html.Hr(className="my-4"), 
+
+        # Results Table Container (Generated in Callback) + Attach button (English) near the table
+        dbc.Row([
+            dbc.Col([
+                html.Div(
+                    dbc.Button("Attach Table", id="attach-gprofiler-table-btn", color="primary", outline=True, size="sm", className="mb-2"),
+                    className="d-flex justify-content-end"
+                ),
+                dcc.Loading(html.Div(id="gprofiler-results-content"), type="default"),
+            ])
+        ]),
+
+        html.Hr(className="my-4"),
         
         # --- Manhattan Plot Card ---
         dbc.Card([
@@ -197,6 +205,7 @@ def create_gprofiler_layout(organism_options):
                 html.Div([
                     html.I(className="bi bi-graph-up me-2"),
                     html.H6("Manhattan Plot: Functional Enrichment", className="d-inline-block m-0 fw-bold"),
+                    dbc.Button("Capture Manhattan", id="attach-gprofiler-manhattan-btn", color="secondary", outline=True, size="sm", className="ms-3"),
                     html.I(
                         id="manhattan-help-icon",
                         className="bi bi-question-circle-fill text-muted ms-2",
@@ -237,6 +246,7 @@ def create_gprofiler_layout(organism_options):
                 html.Div([
                     html.I(className="bi bi-grid-3x3-gap-fill me-2"),
                     html.H6("Functional Clustergram", className="d-inline-block m-0 fw-bold"),
+                    dbc.Button("Capture Heatmap", id="attach-gprofiler-heatmap-btn", color="info", outline=True, size="sm", className="ms-3"),
                     html.I(
                         id="clustergram-help-icon",
                         className="bi bi-question-circle-fill text-muted ms-2",
@@ -244,13 +254,49 @@ def create_gprofiler_layout(organism_options):
                     )
                 ], className="d-flex align-items-center text-primary")
             ], className="bg-white border-bottom"),
-            
+
             dbc.CardBody([
                 clustergram_help_popover,
-                dcc.Loading(html.Div(id='gprofiler-clustergram-output'), type="default")
+                dcc.Loading(
+                    dcc.Graph(
+                        id='gprofiler-clustergram-graph',
+                        figure={},
+                        config={'displayModeBar': True}
+                    ),
+                    id='gprofiler-clustergram-output',
+                    type="default"
+                )
             ])
         ], className="mb-4 shadow-sm border-0"),
-        
+
+        # Modal de confirmación de adjuntos
+        dcc.Store(id='attachment-modal-context', data={}),
+        dcc.Store(id='attachment-image-store', data=None),
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle(id='attachment-modal-title', children="Confirm attachment")),
+                dbc.ModalBody([
+                    dbc.FormFloating([
+                        dbc.Input(id='attachment-title-input', type='text', placeholder="Enter title"),
+                        dbc.Label("Title")
+                    ], className="mb-3"),
+                    dbc.FormFloating([
+                        dbc.Textarea(id='attachment-comment-input', placeholder="Optional comment", style={'minHeight': '100px'}),
+                        dbc.Label("Comment")
+                    ], className="mb-2"),
+                    dcc.Loading(html.Div(id='attachment-saving-indicator'), type="default")
+                ]),
+                dbc.ModalFooter([
+                    dbc.Button("Cancel", id='attachment-confirm-cancel', color="secondary", className="me-2"),
+                    dbc.Button("Save attachment", id='attachment-confirm-submit', color="primary")
+                ])
+            ],
+            id='attachment-confirm-modal',
+            is_open=False,
+            backdrop=True,
+            keyboard=False,
+            centered=True
+        )
     ], className="mt-2")
 
 def create_reactome_layout(organism_options):
@@ -406,7 +452,28 @@ def create_reactome_layout(organism_options):
     return html.Div([
         control_panel,
         
-        dcc.Loading(html.Div(id="reactome-results-content"), type="default"),
+        dbc.Row([
+            dbc.Col([
+                dbc.ButtonGroup([
+                    dbc.Button("Adjuntar tabla", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="me-2"),
+                    dbc.Button("Capturar pathway", id="attach-reactome-pathway-btn", color="secondary", outline=True, size="sm")
+                ], className="mb-2")
+            ])
+        ]),
+        
+        # Placeholder para la tabla de resultados de Reactome (evita errores de callbacks antes de renderizar)
+        dcc.Loading(
+            html.Div(
+                dash_table.DataTable(
+                    id='enrichment-results-table-reactome',
+                    data=[],
+                    columns=[],
+                    style_table={'display': 'none'}
+                ),
+                id="reactome-results-content"
+            ),
+            type="default"
+        ),
         
         dbc.Row([
             dbc.Col([

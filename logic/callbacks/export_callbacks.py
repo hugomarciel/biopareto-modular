@@ -1,7 +1,7 @@
 # logic/callbacks/export_callbacks.py
 
 import dash
-from dash import Output, Input, State, dcc, html, ALL
+from dash import Output, Input, State, dcc, html, dash_table, ALL
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import json
@@ -124,6 +124,7 @@ def register_export_callbacks(app):
     # Detalle del item seleccionado
     @app.callback(
         [Output('export-selected-item-details', 'children'),
+         Output('export-attachments-preview', 'children'),
          Output('export-comment-editor', 'value')],
         Input('export-selected-indices-store', 'data'),
         State('interest-panel-store', 'data'),
@@ -131,13 +132,11 @@ def register_export_callbacks(app):
     )
     def render_selected_item_details(selected_indices, items):
         if not selected_indices or not items:
-            return (
-                dbc.Alert([
-                    html.I(className="bi bi-hand-index me-2"),
-                    "Select an item above to see its details."
-                ], color="light", className="d-flex align-items-center small mb-0"),
-                ""
-            )
+            placeholder = dbc.Alert([
+                html.I(className="bi bi-hand-index me-2"),
+                "Select an item above to see its details."
+            ], color="light", className="d-flex align-items-center small mb-0")
+            return placeholder, None, ""
 
         idx = selected_indices[0]
         if idx >= len(items):
@@ -189,7 +188,130 @@ def register_export_callbacks(app):
             ])
         ], className="border-0 shadow-sm")
 
-        return detail, comment
+        # Attachments preview
+        attachments = item.get('attachments', []) or []
+        att_cards = []
+        for att in attachments:
+            att_id = att.get('id')
+            att_type = att.get('type')
+            att_name = att.get('name', att_type)
+            att_source = att.get('source', '')
+            att_comment = att.get('comment', '')
+            include_flag = att.get('include', True)
+            payload = att.get('payload', {})
+
+            header = html.Div([
+                html.Div([
+                    dbc.Badge(att_type or "attachment", color="info", className="me-2"),
+                    html.Strong(att_name),
+                    html.Span(f" ({att_source})", className="text-muted small ms-1")
+                ], className="d-flex align-items-center"),
+                dbc.Checklist(
+                    options=[{"label": "Include in export", "value": "include"}],
+                    value=["include"] if include_flag else [],
+                    id={'type': 'export-attachment-include', 'att_id': att_id},
+                    switch=True,
+                    className="mt-2"
+                )
+            ])
+
+            body_children = []
+            if att_type == 'table':
+                cols = payload.get('columns', [])
+                rows = payload.get('rows', [])
+                safe_rows = []
+                for r in rows:
+                    safe_row = {}
+                    for k, v in r.items():
+                        if isinstance(v, (list, tuple)):
+                            safe_row[k] = ', '.join([str(x) for x in v])
+                        elif isinstance(v, dict):
+                            safe_row[k] = json.dumps(v)
+                        else:
+                            safe_row[k] = v
+                    safe_rows.append(safe_row)
+                table = dash_table.DataTable(
+                    columns=[{"name": c, "id": c, "hideable": True} for c in cols],
+                    data=safe_rows,
+                    page_size=10,
+                    page_action="native",
+                    sort_action="none",
+                    filter_action="none",
+                    style_table={'overflowX': 'auto'},
+                    style_header={
+                        'backgroundColor': '#f8f9fa',
+                        'fontWeight': 'bold',
+                        'border': '1px solid #dee2e6'
+                    },
+                    style_cell={
+                        'fontSize': 12,
+                        'padding': '6px',
+                        'whiteSpace': 'normal',
+                        'height': 'auto',
+                        'border': '1px solid #dee2e6'
+                    }
+                )
+                body_children.append(table)
+            elif att_type in ['manhattan', 'heatmap']:
+                img_b64 = payload.get('image')
+                img_error = payload.get('error')
+                if img_b64:
+                    body_children.append(
+                        html.Img(
+                            src=img_b64,
+                            style={
+                                'width': '80%',
+                                'maxWidth': '80%',
+                                'display': 'block',
+                                'margin': '0 auto',
+                                'border': '1px solid #ddd',
+                                'borderRadius': '4px'
+                            }
+                        )
+                    )
+                elif img_error:
+                    body_children.append(
+                        dbc.Alert(
+                            img_error,
+                            color="warning",
+                            className="small mb-0"
+                        )
+                    )
+                else:
+                    body_children.append(
+                        dbc.Alert(
+                            "No hay imagen guardada en este adjunto (la captura no se generó al adjuntar).",
+                            color="light",
+                            className="small mb-0"
+                        )
+                    )
+            elif att_type == 'pathway':
+                image_url = payload.get('image_url')
+                link_url = payload.get('link_url')
+                if image_url:
+                    img = html.Img(src=image_url, style={'maxWidth': '100%', 'border': '1px solid #ddd', 'borderRadius': '4px'})
+                    body_children.append(html.A(img, href=link_url or image_url, target="_blank"))
+
+            body_children.append(html.Div([
+                html.Label("Attachment Comment", className="fw-bold small mt-2"),
+                dcc.Textarea(
+                    id={'type': 'export-attachment-comment', 'att_id': att_id},
+                    value=att_comment,
+                    style={'minHeight': '80px'},
+                    className="form-control"
+                )
+            ], className="mt-2"))
+
+            att_cards.append(
+                dbc.Card([
+                    dbc.CardHeader(header),
+                    dbc.CardBody(body_children)
+                ], className="mb-3")
+            )
+
+        attachments_preview = att_cards if att_cards else dbc.Alert("No attachments for this item.", color="light", className="small")
+
+        return detail, attachments_preview, comment
 
     # Guardar comentario editado
     @app.callback(
@@ -198,10 +320,14 @@ def register_export_callbacks(app):
         Input('export-save-comment-btn', 'n_clicks'),
         [State('export-selected-indices-store', 'data'),
          State('export-comment-editor', 'value'),
+         State({'type': 'export-attachment-comment', 'att_id': ALL}, 'value'),
+         State({'type': 'export-attachment-comment', 'att_id': ALL}, 'id'),
+         State({'type': 'export-attachment-include', 'att_id': ALL}, 'value'),
+         State({'type': 'export-attachment-include', 'att_id': ALL}, 'id'),
          State('interest-panel-store', 'data')],
         prevent_initial_call=True
     )
-    def save_item_comment(n_clicks, selected_indices, new_comment, items):
+    def save_item_comment(n_clicks, selected_indices, new_comment, att_comments, att_comment_ids, att_includes, att_include_ids, items):
         if not n_clicks:
             raise PreventUpdate
         if not selected_indices or items is None:
@@ -209,8 +335,33 @@ def register_export_callbacks(app):
         idx = selected_indices[0]
         if idx >= len(items):
             raise PreventUpdate
+
         updated = list(items)
-        updated[idx] = {**updated[idx], 'comment': new_comment or ""}
+        item = dict(updated[idx])
+        item['comment'] = new_comment or ""
+
+        attachments = item.get('attachments', []) or []
+        att_comment_map = {}
+        for val, cid in zip(att_comments or [], att_comment_ids or []):
+            if isinstance(cid, dict):
+                att_comment_map[cid.get('att_id')] = val
+        att_include_map = {}
+        for val, cid in zip(att_includes or [], att_include_ids or []):
+            if isinstance(cid, dict):
+                att_include_map[cid.get('att_id')] = bool(val)
+
+        new_attachments = []
+        for att in attachments:
+            att_id = att.get('id')
+            att_copy = dict(att)
+            if att_id in att_comment_map:
+                att_copy['comment'] = att_comment_map[att_id] or ""
+            if att_id in att_include_map:
+                att_copy['include'] = att_include_map[att_id]
+            new_attachments.append(att_copy)
+        item['attachments'] = new_attachments
+
+        updated[idx] = item
         status = dbc.Alert("Comment saved.", color="success", className="py-1 px-2 mt-2")
         return updated, status
 

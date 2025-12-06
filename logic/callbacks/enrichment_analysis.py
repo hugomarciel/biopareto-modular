@@ -5,7 +5,7 @@ Módulo de Callbacks para la Pestaña de Análisis de Enriquecimiento.
 """
 
 import dash
-from dash import Output, Input, State, dcc, html, ALL, dash_table, MATCH # <--- MATCH agregado
+from dash import Output, Input, State, dcc, html, ALL, dash_table, MATCH  # <--- MATCH agregado
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -17,6 +17,8 @@ import numpy as np
 import math 
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
+import base64
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
 import scipy.cluster.hierarchy as sch
@@ -117,10 +119,11 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
         showlegend=True,
         height=550,
         # Aumentamos el margen inferior ('b') para dar espacio al texto rotado
-        margin={'t': 30, 'b': 120, 'l': 50, 'r': 10}, 
+        margin={'t': 30, 'b': 120, 'l': 50, 'r': 10},
         plot_bgcolor='white',
-        dragmode='pan',      
-        hovermode='closest'  
+        dragmode='pan',
+        hovermode='closest',
+        uirevision='gprofiler_manhattan_static'
     )
 
     fig.add_hline(y=y_threshold, line_dash="dot", line_color="red", annotation_text=line_name, annotation_position="top right")
@@ -264,7 +267,8 @@ def create_gene_term_heatmap(heatmap_matrix):
         xaxis={'tickangle': 90, 'showgrid': False, 'zeroline': False},
         yaxis={'showgrid': False, 'zeroline': False, 'automargin': True},
         height=min(max(50 * clustered_matrix.shape[0], 500), 1000),
-        margin=dict(l=250, r=20, t=50, b=100) 
+        margin=dict(l=250, r=20, t=50, b=100),
+        uirevision='gprofiler_clustergram_static'
     )
     return fig
 
@@ -312,6 +316,51 @@ def register_enrichment_callbacks(app):
          Output({'type': 'enrichment-card-wrapper', 'index': MATCH}, 'className')],
         Input({'type': 'enrichment-card-checkbox', 'index': MATCH}, 'value'),
         prevent_initial_call=True
+    )
+    # ---------------------------------------------------------------------------
+
+    # Clientside: capturar imagen del gráfico actual (Manhattan/Heatmap) al pulsar "Capture"
+    app.clientside_callback(
+        """
+        async function(nManhattan, nHeatmap, manFig, heatFig) {
+            const ctx = dash_clientside.callback_context;
+            if (!ctx.triggered.length) {
+                return dash_clientside.no_update;
+            }
+            const trigger = ctx.triggered[0].prop_id.split('.')[0];
+            let fig = null;
+            let type = null;
+            if (trigger === 'attach-gprofiler-manhattan-btn') {
+                fig = manFig;
+                type = 'gprofiler_manhattan';
+            } else if (trigger === 'attach-gprofiler-heatmap-btn') {
+                fig = heatFig;
+                type = 'gprofiler_heatmap';
+            } else {
+                return dash_clientside.no_update;
+            }
+            // Validar que Plotly esté disponible en el navegador
+            if (typeof Plotly === 'undefined' || typeof Plotly.toImage !== 'function') {
+                return {type: type, image: null, error: 'Plotly no disponible (toImage ausente)'};
+            }
+            if (!fig || typeof fig !== 'object' || !fig.data) {
+                return {type: type, image: null, error: 'Figura vacía'};
+            }
+            try {
+                const w = (fig.layout && fig.layout.width) || 800;
+                const h = (fig.layout && fig.layout.height) || 500;
+                const uri = await Plotly.toImage(fig, {format: 'png', width: w, height: h});
+                return {type: type, image: uri, error: null};
+            } catch (e) {
+                return {type: type, image: null, error: e.toString()};
+            }
+        }
+        """,
+        Output('attachment-image-store', 'data'),
+        [Input('attach-gprofiler-manhattan-btn', 'n_clicks'),
+         Input('attach-gprofiler-heatmap-btn', 'n_clicks')],
+        [State('gprofiler-manhattan-plot', 'figure'),
+         State('gprofiler-clustergram-graph', 'figure')]
     )
     # ---------------------------------------------------------------------------
 
@@ -678,7 +727,8 @@ def register_enrichment_callbacks(app):
     # 4. Ejecutar g:Profiler
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
-         Output('gprofiler-spinner-output', 'children')], 
+        Output('gprofiler-spinner-output', 'children'),
+        Output('interest-panel-store', 'data', allow_duplicate=True)], 
         Input('run-gprofiler-btn', 'n_clicks'), 
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
@@ -708,7 +758,7 @@ def register_enrichment_callbacks(app):
         gene_list_original_count = len(set(gene_list_to_validate))
 
         if not gene_list_to_validate:
-            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': 0, 'organism': organism}, None
+            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': 0, 'organism': organism}, None, items
 
         clean_gene_list = []
         
@@ -724,7 +774,7 @@ def register_enrichment_callbacks(app):
         full_response = GProfilerService.get_enrichment(clean_gene_list, organism, selected_sources)
 
         if full_response is None:
-            return {'results': None, 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None 
+            return {'results': None, 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None, items
 
         enrichment_data_list = full_response.get('result', [])
         metadata = full_response.get('meta', {})
@@ -745,7 +795,7 @@ def register_enrichment_callbacks(app):
                     ensg_to_input_map[ensg] = input_id
 
         if not enrichment_data_list:
-            return {'results': [], 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None
+            return {'results': [], 'gene_list_validated': clean_gene_list, 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None, items
 
         final_enrichment_data = []
         for term in enrichment_data_list:
@@ -779,11 +829,11 @@ def register_enrichment_callbacks(app):
             final_enrichment_data.append(new_term_data)
 
         return {
-            'results': final_enrichment_data, 
-            'gene_list_validated': clean_gene_list, 
-            'gene_list_original_count': gene_list_original_count, 
+            'results': final_enrichment_data,
+            'gene_list_validated': clean_gene_list,
+            'gene_list_original_count': gene_list_original_count,
             'organism': organism
-        }, None
+        }, None, items
 
 
    # 4.5. Display g:Profiler Results (CON AJUSTE DE TEXTO MULTILÍNEA)
@@ -1013,7 +1063,8 @@ def register_enrichment_callbacks(app):
   # --- CALLBACK UNIFICADO: REACTOME (RUN + CLEAR) ---
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
-         Output('reactome-spinner-output', 'children')],
+         Output('reactome-spinner-output', 'children'),
+         Output('interest-panel-store', 'data', allow_duplicate=True)],
         [Input('run-reactome-btn', 'n_clicks'),
          Input('clear-reactome-results-btn', 'n_clicks')],
         [State('enrichment-selected-indices-store', 'data'),
@@ -1037,7 +1088,7 @@ def register_enrichment_callbacks(app):
                 'gene_list_original': [], 
                 'gene_list_validated': [], 
                 'organism_selected': 'Homo sapiens'
-            }, None
+            }, None, items
 
         if trigger_id == 'run-reactome-btn':
             if not selected_indices:
@@ -1088,9 +1139,9 @@ def register_enrichment_callbacks(app):
             if res:
                 res['gene_list_original'] = raw
                 res['gene_list_validated'] = clean
-                return res, None
-            
-            return store, None
+                return res, None, items
+
+            return store, None, items
         
         raise PreventUpdate
 
@@ -1297,7 +1348,7 @@ def register_enrichment_callbacks(app):
     # 7.5. Ajuste de tabla
     @app.callback(
         [Output('enrichment-results-table-gprofiler', 'style_header_conditional', allow_duplicate=True),
-        Output('enrichment-results-table-gprofiler', 'style_data_conditional', allow_duplicate=True)],
+         Output('enrichment-results-table-gprofiler', 'style_data_conditional', allow_duplicate=True)],
         Input('enrichment-results-table-gprofiler', 'columns'),
         State('enrichment-results-table-gprofiler', 'style_data_conditional'),
         prevent_initial_call=True
@@ -1306,21 +1357,20 @@ def register_enrichment_callbacks(app):
         if current_columns is None:
             raise PreventUpdate
         return [], base_style_data_conditional
-            
-            
-    # 8. Callback para Heatmap
+
+    # 8. Callback para Heatmap (clustergram)
     @app.callback(
         Output('gprofiler-clustergram-output', 'children'),
-        [Input('gprofiler-results-store', 'data'),      
-        Input('gprofiler-threshold-input', 'value')], 
+        [Input('gprofiler-results-store', 'data'),
+         Input('gprofiler-threshold-input', 'value')],
         [State('enrichment-selected-indices-store', 'data'),
-        State('interest-panel-store', 'data')],
+         State('interest-panel-store', 'data')],
         prevent_initial_call=True
     )
     def display_gprofiler_clustergram(stored_data, threshold_value, selected_indices, items):
         if not stored_data or isinstance(stored_data, list):
             return dbc.Alert(
-                "Ejecute un análisis de g:Profiler para generar el clustergram.",
+                "Ejecute un an?lisis de g:Profiler para generar el clustergram.",
                 color="info",
                 className="mt-3"
             )
@@ -1328,22 +1378,22 @@ def register_enrichment_callbacks(app):
         try:
             val_threshold = float(threshold_value)
         except (TypeError, ValueError):
-            val_threshold = 0.05 
+            val_threshold = 0.05
 
-        heatmap_matrix, debug_counters = process_data_for_gene_term_heatmap(stored_data, threshold=val_threshold, max_terms=50) 
-        
+        heatmap_matrix, debug_counters = process_data_for_gene_term_heatmap(stored_data, threshold=val_threshold, max_terms=50)
+
         if heatmap_matrix.empty:
             if not stored_data or (stored_data.get('results') is None):
-                 detail_message = "No analysis data found. Run g:Profiler analysis first."
+                detail_message = "No analysis data found. Run g:Profiler analysis first."
             elif not stored_data.get('gene_list_validated'):
-                 detail_message = "No validated genes were found after g:Convert sanitation."
+                detail_message = "No validated genes were found after g:Convert sanitation."
             elif debug_counters['terms_after_pvalue_filter'] == 0:
                 detail_message = f"No terms passed the P-value filter (< {val_threshold})."
             elif debug_counters['terms_removed_by_zerovariance'] > 0 or debug_counters['genes_removed_by_zerovariance'] > 0:
-                 detail_message = "All terms/genes were removed during zero-variance cleaning."
+                detail_message = "All terms/genes were removed during zero-variance cleaning."
             else:
-                 detail_message = "No significant gene-term associations found to plot."
-            
+                detail_message = "No significant gene-term associations found to plot."
+
             return dbc.Alert([
                 html.H6("Clustergram could not be generated.", className="alert-heading"),
                 html.P(detail_message)
@@ -1351,4 +1401,292 @@ def register_enrichment_callbacks(app):
 
         heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
 
-        return dcc.Graph(figure=heatmap_fig, config={'displayModeBar': True})
+        return dcc.Graph(id='gprofiler-clustergram-graph', figure=heatmap_fig, config={'displayModeBar': True})
+
+    # --- Modal de confirmación para adjuntos (g:Profiler) ---
+    @app.callback(
+        [Output('attachment-modal-context', 'data'),
+         Output('attachment-title-input', 'value'),
+         Output('attachment-comment-input', 'value'),
+         Output('attachment-saving-indicator', 'children', allow_duplicate=True),
+         Output('attachment-confirm-modal', 'is_open', allow_duplicate=True),
+         Output('interest-panel-store', 'data', allow_duplicate=True)],
+        [Input('attach-gprofiler-table-btn', 'n_clicks'),
+         Input('attach-gprofiler-manhattan-btn', 'n_clicks'),
+         Input('attach-gprofiler-heatmap-btn', 'n_clicks'),
+         Input('attachment-confirm-cancel', 'n_clicks'),
+         Input('attachment-confirm-submit', 'n_clicks')],
+        [State('attachment-modal-context', 'data'),
+         State('attachment-title-input', 'value'),
+         State('attachment-comment-input', 'value'),
+         State('gprofiler-results-store', 'data'),
+         State('gprofiler-threshold-input', 'value'),
+         State('enrichment-selected-indices-store', 'data'),
+         State('interest-panel-store', 'data'),
+         State('gprofiler-manhattan-plot', 'figure'),
+         State('gprofiler-clustergram-graph', 'figure'),
+         State('attachment-image-store', 'data')],
+        prevent_initial_call=True
+    )
+    def handle_attachment_modal(table_click, manhattan_click, heatmap_click, cancel_click, submit_click,
+                                ctx_data, title_value, comment_value, results_store, threshold_value,
+                                selected_indices, items, manhattan_fig_state, heatmap_fig_state, image_store):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        # Defaults
+        new_ctx = dash.no_update
+        new_title = dash.no_update
+        new_comment = dash.no_update
+        saving = dash.no_update
+        modal_open = dash.no_update
+        updated_items = dash.no_update
+
+        # Abrir modal según botón
+        if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn']:
+            if trigger_id == 'attach-gprofiler-table-btn':
+                new_ctx = {'type': 'gprofiler_table'}
+                new_title = 'g:Profiler Results'
+            elif trigger_id == 'attach-gprofiler-manhattan-btn':
+                new_ctx = {'type': 'gprofiler_manhattan'}
+                new_title = 'Manhattan Plot'
+            else:
+                new_ctx = {'type': 'gprofiler_heatmap'}
+                new_title = 'Gene-Term Heatmap'
+            new_comment = ''
+            saving = None
+            modal_open = True
+            return new_ctx, new_title, new_comment, saving, modal_open, dash.no_update
+
+        # Cancelar modal
+        if trigger_id == 'attachment-confirm-cancel':
+            return dash.no_update, dash.no_update, dash.no_update, None, False, dash.no_update
+
+        # Confirmar adjunto
+        if trigger_id == 'attachment-confirm-submit':
+            # mostrar indicador de carga mientras se procesa
+            saving = dbc.Spinner(size="sm", color="primary")
+            if not ctx_data or not selected_indices or not items:
+                warn = dbc.Alert("Select an item and generate results before attaching.", color="warning", className="py-1 px-2")
+                return dash.no_update, dash.no_update, dash.no_update, warn, True, dash.no_update
+            ctx_type = ctx_data.get('type')
+            if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap']:
+                raise PreventUpdate
+
+            try:
+                timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                att = None
+
+                if ctx_type == 'gprofiler_table':
+                    if not results_store:
+                        raise ValueError("No g:Profiler results to attach.")
+                    df = pd.DataFrame(results_store.get('results', []))
+                    if df.empty:
+                        raise ValueError("No table data to attach.")
+                    safe_cols = ['term_name', 'description', 'p_value', 'term_size', 'intersection_size', 'precision', 'recall', 'source']
+                    df_attach = df.copy()
+                    if 'intersection_genes' in df_attach.columns:
+                        df_attach['intersection_genes'] = df_attach['intersection_genes'].apply(lambda x: ', '.join(x) if isinstance(x, (list, tuple)) else str(x))
+                        safe_cols.append('intersection_genes')
+                    df_attach = df_attach[[c for c in safe_cols if c in df_attach.columns]]
+                    att = {
+                        'id': f"att_gprof_table_{timestamp_now}",
+                        'type': 'table',
+                        'source': 'gprofiler',
+                        'name': title_value or 'g:Profiler Results',
+                        'created_at': timestamp_now,
+                        'include': True,
+                        'comment': comment_value or '',
+                        'payload': {
+                            'columns': df_attach.columns.tolist(),
+                            'rows': df_attach.head(50).to_dict('records')
+                        }
+                    }
+
+                elif ctx_type == 'gprofiler_manhattan':
+                    img_b64 = None
+                    img_error = None
+                    if image_store and image_store.get('type') == 'gprofiler_manhattan' and image_store.get('image'):
+                        img_b64 = image_store.get('image')
+                    else:
+                        fig = None
+                        if manhattan_fig_state:
+                            try:
+                                fig = go.Figure(manhattan_fig_state)
+                            except Exception:
+                                fig = None
+                        if fig is None:
+                            df = pd.DataFrame(results_store.get('results', [])) if results_store else pd.DataFrame()
+                            if df.empty:
+                                raise ValueError("No Manhattan data to attach.")
+                            fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
+                        try:
+                            img_bytes = pio.to_image(fig, format="png")
+                            img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                        except Exception as e:
+                            img_error = f"No se pudo generar la imagen del Manhattan (verifique que 'kaleido' esté instalado). Detalle: {e}"
+                    att = {
+                        'id': f"att_gprof_manhattan_{timestamp_now}",
+                        'type': 'manhattan',
+                        'source': 'gprofiler',
+                        'name': title_value or 'Manhattan Plot',
+                        'created_at': timestamp_now,
+                        'include': True,
+                        'comment': comment_value or '',
+                        'payload': {
+                            'image': img_b64,
+                            'error': img_error
+                        }
+                    }
+
+                elif ctx_type == 'gprofiler_heatmap':
+                    img_b64 = None
+                    img_error = None
+                    if image_store and image_store.get('type') == 'gprofiler_heatmap' and image_store.get('image'):
+                        img_b64 = image_store.get('image')
+                    else:
+                        heatmap_fig = None
+                        if heatmap_fig_state:
+                            try:
+                                heatmap_fig = go.Figure(heatmap_fig_state)
+                            except Exception:
+                                heatmap_fig = None
+                        if heatmap_fig is None:
+                            if not results_store:
+                                raise ValueError("No heatmap data to attach.")
+                            heatmap_matrix, _dbg = process_data_for_gene_term_heatmap(results_store, threshold=0.05)
+                            if heatmap_matrix.empty:
+                                raise ValueError("Heatmap is empty.")
+                            heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
+                        try:
+                            img_bytes = pio.to_image(heatmap_fig, format="png")
+                            img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                        except Exception as e:
+                            img_error = f"No se pudo generar la imagen del heatmap (verifique que 'kaleido' esté instalado). Detalle: {e}"
+                    att = {
+                        'id': f"att_gprof_heatmap_{timestamp_now}",
+                        'type': 'heatmap',
+                        'source': 'gprofiler',
+                        'name': title_value or 'Gene-Term Heatmap',
+                        'created_at': timestamp_now,
+                        'include': True,
+                        'comment': comment_value or '',
+                        'payload': {
+                            'image': img_b64,
+                            'error': img_error
+                        }
+                    }
+
+                updated_items = []
+                for idx_item, it in enumerate(items):
+                    it_copy = dict(it)
+                    if idx_item in selected_indices:
+                        atts = list(it_copy.get('attachments', []))
+                        if ctx_type == 'gprofiler_table':
+                            atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'gprofiler')]
+                        atts.append(att)
+                        it_copy['attachments'] = atts
+                    updated_items.append(it_copy)
+
+                spinner = dbc.Alert("Attachment saved.", color="success", className="py-1 px-2")
+                return dash.no_update, dash.no_update, dash.no_update, spinner, False, updated_items
+
+            except Exception as e:
+                err = dbc.Alert(f"Error al adjuntar: {e}", color="danger", className="py-1 px-2")
+                return dash.no_update, dash.no_update, dash.no_update, err, True, dash.no_update
+
+        raise PreventUpdate
+
+    # --- Botones manuales Reactome ---
+    @app.callback(
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input('attach-reactome-table-btn', 'n_clicks'),
+        [State('reactome-results-store', 'data'),
+         State('enrichment-selected-indices-store', 'data'),
+         State('interest-panel-store', 'data')],
+        prevent_initial_call=True
+    )
+    def attach_reactome_table_manual(n_clicks, results_store, selected_indices, items):
+        if not n_clicks or not results_store or not selected_indices or not items:
+            raise PreventUpdate
+        results = results_store.get('results', [])
+        if not results:
+            raise PreventUpdate
+        df = pd.DataFrame(results)
+        cols = ['term_name', 'description', 'p_value', 'entities_found', 'entities_total', 'fdr_value', 'source']
+        df_attach = df[[c for c in cols if c in df.columns]].copy()
+        timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        att = {
+            'id': f"att_react_table_{timestamp_now}",
+            'type': 'table',
+            'source': 'reactome',
+            'name': 'Reactome Results',
+            'created_at': timestamp_now,
+            'include': True,
+            'comment': '',
+            'payload': {
+                'columns': df_attach.columns.tolist(),
+                'rows': df_attach.head(50).to_dict('records')
+            }
+        }
+        updated_items = []
+        for idx_item, it in enumerate(items):
+            it_copy = dict(it)
+            if idx_item in selected_indices:
+                atts = list(it_copy.get('attachments', []))
+                atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
+                atts.append(att)
+                it_copy['attachments'] = atts
+            updated_items.append(it_copy)
+        return updated_items
+
+    @app.callback(
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input('attach-reactome-pathway-btn', 'n_clicks'),
+        [State('enrichment-results-table-reactome', 'selected_rows'),
+         State('enrichment-results-table-reactome', 'data'),
+         State('reactome-results-store', 'data'),
+         State('enrichment-selected-indices-store', 'data'),
+         State('interest-panel-store', 'data')],
+        prevent_initial_call=True
+    )
+    def attach_reactome_pathway_manual(n_clicks, selected_rows, table_data, reactome_store, selected_indices, items):
+        if not n_clicks or not selected_rows or not table_data or not reactome_store or not selected_indices or not items:
+            raise PreventUpdate
+        sel_idx = selected_rows[0] if isinstance(selected_rows, list) and selected_rows else None
+        if sel_idx is None or sel_idx >= len(table_data):
+            raise PreventUpdate
+        row = table_data[sel_idx]
+        pathway_st_id = row.get('description')
+        pathway_name = row.get('term_name', 'Pathway')
+        token = reactome_store.get('token')
+        if not pathway_st_id or not token:
+            raise PreventUpdate
+        img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
+        if img is None:
+            raise PreventUpdate
+        timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        att = {
+            'id': f"att_react_pathway_{timestamp_now}",
+            'type': 'pathway',
+            'source': 'reactome',
+            'name': f"Pathway: {pathway_name}",
+            'created_at': timestamp_now,
+            'include': True,
+            'comment': '',
+            'payload': {
+                'image_url': img,
+                'link_url': f"https://reactome.org/content/detail/{pathway_st_id}?analysis={token}"
+            }
+        }
+        updated_items = []
+        for idx_item, it in enumerate(items):
+            it_copy = dict(it)
+            if idx_item in selected_indices:
+                atts = list(it_copy.get('attachments', []))
+                atts.append(att)
+                it_copy['attachments'] = atts
+            updated_items.append(it_copy)
+        return updated_items

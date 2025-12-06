@@ -264,11 +264,12 @@ app.layout = dbc.Container([
     dcc.Store(id='export-selected-indices-store', data=[]),
     dcc.Store(id='pareto-layout-store', data={}), 
     dcc.Store(id='enrichment-selected-item-ids-store', data=[]), 
-    dcc.Store(id='gprofiler-results-store', data=[]), 
-    dcc.Store(id='reactome-results-store', data=None),
-    dcc.Store(id='enrichment-render-trigger-store', data=None), 
+    dcc.Store(id='gprofiler-results-store', data=[], storage_type='session'),
+    dcc.Store(id='reactome-results-store', data=None, storage_type='session'),
+    dcc.Store(id='enrichment-render-trigger-store', data=None),
     dcc.Store(id='ui-state-store', data={'panel_visible': False}, storage_type='session'),
     dcc.Store(id='scroll-to-top-dummy-store'),
+    dcc.Store(id='attachment-image-store', data=None, storage_type='session'),
     dcc.Interval(id='badge-animation-interval', interval=1000, n_intervals=0, disabled=True),
 
     # --- 💡 NUEVOS STORES PARA AUTO-HIDE 💡 ---

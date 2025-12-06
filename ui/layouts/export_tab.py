@@ -69,6 +69,7 @@ def create_export_tab():
                                 "Select an item above to see its details."
                             ], color="light", className="d-flex align-items-center small mb-0")
                         ]),
+                        html.Div(id="export-attachments-preview", className="mt-3"),
                         html.Hr(className="my-3"),
                         html.Div([
                             html.Label("Item Comment", className="fw-bold"),
