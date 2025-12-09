@@ -1766,8 +1766,6 @@ def register_enrichment_callbacks(app):
                             atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'gprofiler')]
                         if ctx_type == 'reactome_table':
                             atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
-                        if ctx_type == 'reactome_pathway':
-                            atts = [a for a in atts if not (a.get('type') == 'pathway' and a.get('source') == 'reactome')]
                         atts.append(att)
                         it_copy['attachments'] = atts
                     updated_items.append(it_copy)

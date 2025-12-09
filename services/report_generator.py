@@ -400,8 +400,20 @@ def generate_item_pdf(item):
 
     # Adjuntos (incluye tablas renderizadas)
     if attachments:
+        # Ordenar adjuntos agrupando por source y tablas primero
+        type_rank = {'table': 0, 'manhattan': 1, 'heatmap': 1, 'pathway': 1}
+        source_rank = {'gprofiler': 0, 'reactome': 1}
+
+        def att_key(att):
+            src = att.get('source', 'zzz')
+            t = att.get('type', 'zzz')
+            created = att.get('created_at', '')
+            return (source_rank.get(src, 99), type_rank.get(t, 5), created)
+
+        ordered_attachments = sorted(attachments, key=att_key)
+
         # Render de tablas (primeros 50 registros, ya vienen en payload) e imágenes
-        for att in attachments:
+        for att in ordered_attachments:
             att_type = att.get('type')
             if att_type == 'table':
                 payload = att.get('payload') or {}
