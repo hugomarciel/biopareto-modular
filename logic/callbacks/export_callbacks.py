@@ -189,6 +189,29 @@ def register_export_callbacks(app):
 
         # Attachments preview
         attachments = item.get('attachments', []) or []
+        # Ordenar: tablas primero para que se muestren antes que imágenes/otros
+        attachments = sorted(attachments, key=lambda a: 0 if a.get('type') == 'table' else 1)
+
+        # Config de iconos/colores por tipo
+        color_map = {
+            'table': 'primary',
+            'manhattan': 'success',
+            'heatmap': 'success',
+            'pathway': 'success'
+        }
+        icon_map = {
+            'table': 'bi bi-table',
+            'manhattan': 'bi bi-graph-up',
+            'heatmap': 'bi bi-grid-3x3-gap',
+            'pathway': 'bi bi-diagram-3'
+        }
+        label_map = {
+            'table': 'Table',
+            'manhattan': 'Plot',
+            'heatmap': 'Plot',
+            'pathway': 'Pathway'
+        }
+
         att_cards = []
         for att in attachments:
             att_id = att.get('id')
@@ -199,20 +222,42 @@ def register_export_callbacks(app):
             include_flag = att.get('include', True)
             payload = att.get('payload', {})
 
-            header = html.Div([
-                html.Div([
-                    dbc.Badge(att_type or "attachment", color="info", className="me-2"),
-                    html.Strong(att_name),
-                    html.Span(f" ({att_source})", className="text-muted small ms-1")
-                ], className="d-flex align-items-center"),
-                dbc.Checklist(
-                    options=[{"label": "Include in export", "value": "include"}],
-                    value=["include"] if include_flag else [],
-                    id={'type': 'export-attachment-include', 'att_id': att_id},
-                    switch=True,
-                    className="mt-2"
-                )
-            ])
+            att_color = color_map.get(att_type, 'secondary')
+            icon_class = icon_map.get(att_type, 'bi bi-paperclip')
+            label_text = label_map.get(att_type, 'Attachment')
+
+            collapse_id = {'type': 'export-attachment-collapse', 'att_id': att_id}
+            toggle_button = dbc.Button(
+                "Hide/Show",
+                id={'type': 'export-attachment-toggle', 'att_id': att_id},
+                color="secondary",
+                outline=True,
+                size="sm",
+                className="me-0"
+            )
+
+            header = html.Div(
+                [
+                    html.Div(
+                        [
+                            html.I(className=icon_class, style={'color': f'var(--bs-{att_color})', 'fontSize': '1.1rem'}),
+                            dbc.Badge(label_text, color=att_color, className="ms-2"),
+                            html.Strong(att_name, className="ms-2"),
+                            html.Small(f"({att_source})", className="text-muted ms-1") if att_source else None,
+                            toggle_button
+                        ],
+                        className="d-flex align-items-center flex-wrap gap-2"
+                    ),
+                    dbc.Checklist(
+                        options=[{"label": "Include in export", "value": "include"}],
+                        value=["include"] if include_flag else [],
+                        id={'type': 'export-attachment-include', 'att_id': att_id},
+                        switch=True,
+                        className="ms-auto"
+                    )
+                ],
+                className="d-flex align-items-center justify-content-between flex-wrap gap-2"
+            )
 
             body_children = []
             # Comentario editable y destacado primero
@@ -231,17 +276,6 @@ def register_export_callbacks(app):
                     color="light",
                     className="py-2 px-3 mb-3 border border-primary border-2 shadow-0"
                 )
-            )
-
-            # Contenido colapsable (oculto por defecto)
-            collapse_id = {'type': 'export-attachment-collapse', 'att_id': att_id}
-            toggle_button = dbc.Button(
-                "Show/Hide",
-                id={'type': 'export-attachment-toggle', 'att_id': att_id},
-                color="secondary",
-                outline=True,
-                size="sm",
-                className="mb-2"
             )
 
             content_children = []
@@ -321,8 +355,9 @@ def register_export_callbacks(app):
                     img = html.Img(src=image_url, style={'maxWidth': '100%', 'border': '1px solid #ddd', 'borderRadius': '4px'})
                     content_children.append(html.A(img, href=link_url or image_url, target="_blank"))
 
-            body_children.append(toggle_button)
-            body_children.append(dbc.Collapse(content_children, id=collapse_id, is_open=False))
+            body_children.append(
+                dbc.Collapse(content_children, id=collapse_id, is_open=False, className="mt-2")
+            )
 
             att_cards.append(
                 dbc.Card([

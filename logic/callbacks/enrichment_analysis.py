@@ -19,6 +19,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 import base64
+QUOTA_APPROX_BYTES = 4_500_000  # Umbral estimado para evitar QuotaExceeded en sessionStorage
 from services.gprofiler_service import GProfilerService 
 from services.reactome_service import ReactomeService 
 import scipy.cluster.hierarchy as sch
@@ -842,10 +843,10 @@ def register_enrichment_callbacks(app):
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
          Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
         [Input('gprofiler-results-store', 'data'),
-         Input('gprofiler-threshold-input', 'value')], 
-        [State('main-tabs', 'active_tab'),
-         State('enrichment-service-tabs', 'active_tab')], 
-        prevent_initial_call=True
+         Input('gprofiler-threshold-input', 'value'),
+         Input('main-tabs', 'active_tab'),
+         Input('enrichment-service-tabs', 'active_tab')],
+        prevent_initial_call='initial_duplicate'
     )
     def display_gprofiler_results(stored_data, threshold_value, main_active_tab, service_active_tab):
         if main_active_tab != 'enrichment-tab':
@@ -1043,26 +1044,10 @@ def register_enrichment_callbacks(app):
             return empty_data, go.Figure()
         raise PreventUpdate
 
-    # 7. Limpiar Reactome
-    @app.callback(
-        Output('reactome-results-store', 'data', allow_duplicate=True),
-        Input('clear-reactome-results-btn', 'n_clicks'), 
-        prevent_initial_call=True
-    )
-    def clear_reactome_results(n_clicks):
-        if n_clicks and n_clicks > 0:
-            return {
-                'results': [], 
-                'gene_list_original': [], 
-                'gene_list_validated': [], 
-                'organism_selected': 'Homo sapiens'
-            }
-        raise PreventUpdate
-
-
   # --- CALLBACK UNIFICADO: REACTOME (RUN + CLEAR) ---
     @app.callback(
         [Output('reactome-results-store', 'data', allow_duplicate=True), 
+         Output('reactome-results-store', 'clear_data', allow_duplicate=True),
          Output('reactome-spinner-output', 'children'),
          Output('interest-panel-store', 'data', allow_duplicate=True)],
         [Input('run-reactome-btn', 'n_clicks'),
@@ -1081,16 +1066,17 @@ def register_enrichment_callbacks(app):
             raise PreventUpdate
 
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        logger.info(f"[Reactome] trigger={trigger_id}, run_clicks={run_clicks}, clear_clicks={clear_clicks}")
 
         if trigger_id == 'clear-reactome-results-btn':
-            return {
-                'results': [], 
-                'gene_list_original': [], 
-                'gene_list_validated': [], 
-                'organism_selected': 'Homo sapiens'
-            }, None, items
+            logger.info("[Reactome] Clearing store -> empty data and clear_data=True")
+            return {'results': [], 'token': None, 'cleared': True}, True, None, items
 
         if trigger_id == 'run-reactome-btn':
+            # Evitar ejecuciones cuando no hay clic real (re-render del tab)
+            if not run_clicks:
+                logger.info("[Reactome] Skip run: run_clicks is falsy (likely tab re-render)")
+                raise PreventUpdate
             if not selected_indices:
                 raise PreventUpdate
             
@@ -1118,11 +1104,12 @@ def register_enrichment_callbacks(app):
                 clean = val_res.get('validated_genes', [])
             else:
                 clean = sorted(list(set(raw)))
-            
+
             store = {'results': [], 'token': 'ERROR', 'gene_list_validated': clean, 'gene_list_original': raw}
             
             if not clean: 
-                return store, None
+                logger.info("[Reactome] No valid genes after cleanup; returning empty store")
+                return store, False, None, items
             
             try:
                 res = ReactomeService.get_enrichment(
@@ -1134,32 +1121,36 @@ def register_enrichment_callbacks(app):
                 )
             except Exception as e:
                  logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
-                 return store, None
+                 return store, False, None, items
 
             if res:
                 res['gene_list_original'] = raw
                 res['gene_list_validated'] = clean
-                return res, None, items
+                logger.info(f"[Reactome] Enrichment OK. Results={len(res.get('results', []))}, token={res.get('token')}")
+                return res, False, None, items
 
-            return store, None, items
+            logger.info("[Reactome] Service returned no results; returning empty store")
+            return store, False, None, items
         
         raise PreventUpdate
 
     # 5.5 Display Reactome Results (CORREGIDO: Typo en variable de retorno)
     @app.callback(
         [Output('reactome-results-content', 'children'),
-        Output('clear-reactome-results-btn', 'disabled'),
-        Output('reactome-diagram-output', 'children', allow_duplicate=True),
+         Output('clear-reactome-results-btn', 'disabled'),
+         Output('reactome-diagram-output', 'children', allow_duplicate=True),
         Output('reactome-fireworks-output', 'children', allow_duplicate=True)], 
         Input('reactome-results-store', 'data'),
-        prevent_initial_call=True
+        prevent_initial_call='initial_duplicate'
     )
     def display_reactome_results(stored_data):
         placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-muted text-center border-0"), className="p-1")
         placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-muted text-center border-0"), className="p-1")
         
-        if stored_data is None or not isinstance(stored_data, dict):
-            raise PreventUpdate
+        logger.info(f"[Reactome][Display] stored_data keys={list(stored_data.keys()) if isinstance(stored_data, dict) else 'none'}")
+        if stored_data is None or not isinstance(stored_data, dict) or not stored_data.get('results') or stored_data.get('cleared'):
+            empty_message = dbc.Alert("Run Reactome analysis to view results.", color="light", className="text-muted text-center border-0")
+            return empty_message, True, placeholder_diagram, placeholder_fireworks
         
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
@@ -1362,12 +1353,15 @@ def register_enrichment_callbacks(app):
     @app.callback(
         Output('gprofiler-clustergram-output', 'children'),
         [Input('gprofiler-results-store', 'data'),
-         Input('gprofiler-threshold-input', 'value')],
+         Input('gprofiler-threshold-input', 'value'),
+         Input('main-tabs', 'active_tab')],
         [State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data')],
-        prevent_initial_call=True
+        prevent_initial_call='initial_duplicate'
     )
-    def display_gprofiler_clustergram(stored_data, threshold_value, selected_indices, items):
+    def display_gprofiler_clustergram(stored_data, threshold_value, main_active_tab, selected_indices, items):
+        if main_active_tab != 'enrichment-tab':
+            raise PreventUpdate
         if not stored_data or isinstance(stored_data, list):
             return dbc.Alert(
                 "Ejecute un an?lisis de g:Profiler para generar el clustergram.",
@@ -1414,23 +1408,28 @@ def register_enrichment_callbacks(app):
         [Input('attach-gprofiler-table-btn', 'n_clicks'),
          Input('attach-gprofiler-manhattan-btn', 'n_clicks'),
          Input('attach-gprofiler-heatmap-btn', 'n_clicks'),
+         Input('attach-reactome-table-btn', 'n_clicks'),
+         Input('attach-reactome-pathway-btn', 'n_clicks'),
          Input('attachment-confirm-cancel', 'n_clicks'),
          Input('attachment-confirm-submit', 'n_clicks')],
         [State('attachment-modal-context', 'data'),
          State('attachment-title-input', 'value'),
          State('attachment-comment-input', 'value'),
          State('gprofiler-results-store', 'data'),
+         State('reactome-results-store', 'data'),
          State('gprofiler-threshold-input', 'value'),
          State('enrichment-selected-indices-store', 'data'),
          State('interest-panel-store', 'data'),
+         State('enrichment-results-table-reactome', 'selected_rows'),
+         State('enrichment-results-table-reactome', 'data'),
          State('gprofiler-manhattan-plot', 'figure'),
          State('gprofiler-clustergram-graph', 'figure'),
          State('attachment-image-store', 'data')],
         prevent_initial_call=True
     )
-    def handle_attachment_modal(table_click, manhattan_click, heatmap_click, cancel_click, submit_click,
-                                ctx_data, title_value, comment_value, results_store, threshold_value,
-                                selected_indices, items, manhattan_fig_state, heatmap_fig_state, image_store):
+    def handle_attachment_modal(table_click, manhattan_click, heatmap_click, react_table_click, react_pathway_click, cancel_click, submit_click,
+                                ctx_data, title_value, comment_value, gprof_results_store, reactome_store, threshold_value,
+                                selected_indices, items, react_selected_rows, react_table_data, manhattan_fig_state, heatmap_fig_state, image_store):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
@@ -1446,7 +1445,7 @@ def register_enrichment_callbacks(app):
         updated_items = dash.no_update
 
         # Abrir modal según botón
-        if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn']:
+        if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn', 'attach-reactome-table-btn', 'attach-reactome-pathway-btn']:
             # Evitar apertura si el click es inicial (None/0)
             if not trigger_val:
                 raise PreventUpdate
@@ -1456,9 +1455,20 @@ def register_enrichment_callbacks(app):
             elif trigger_id == 'attach-gprofiler-manhattan-btn':
                 new_ctx = {'type': 'gprofiler_manhattan'}
                 new_title = 'Manhattan Plot'
-            else:
+            elif trigger_id == 'attach-gprofiler-heatmap-btn':
                 new_ctx = {'type': 'gprofiler_heatmap'}
                 new_title = 'Gene-Term Heatmap'
+            elif trigger_id == 'attach-reactome-table-btn':
+                new_ctx = {'type': 'reactome_table'}
+                new_title = 'Reactome Results'
+            else:
+                sel_idx = react_selected_rows[0] if react_selected_rows else None
+                if sel_idx is None or not react_table_data or sel_idx >= len(react_table_data):
+                    raise PreventUpdate
+                row = react_table_data[sel_idx]
+                pathway_name = row.get('term_name', 'Pathway')
+                new_ctx = {'type': 'reactome_pathway', 'row_index': sel_idx}
+                new_title = f"Pathway: {pathway_name}"
             new_comment = ''
             saving = None
             modal_open = True
@@ -1480,7 +1490,7 @@ def register_enrichment_callbacks(app):
                 warn = dbc.Alert("Select an item and generate results before attaching.", color="warning", className="py-1 px-2")
                 return dash.no_update, dash.no_update, dash.no_update, warn, True, dash.no_update
             ctx_type = ctx_data.get('type')
-            if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap']:
+            if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap', 'reactome_table', 'reactome_pathway']:
                 raise PreventUpdate
 
             try:
@@ -1488,9 +1498,9 @@ def register_enrichment_callbacks(app):
                 att = None
 
                 if ctx_type == 'gprofiler_table':
-                    if not results_store:
+                    if not gprof_results_store:
                         raise ValueError("No g:Profiler results to attach.")
-                    df = pd.DataFrame(results_store.get('results', []))
+                    df = pd.DataFrame(gprof_results_store.get('results', []))
                     if df.empty:
                         raise ValueError("No table data to attach.")
                     safe_cols = ['term_name', 'description', 'p_value', 'term_size', 'intersection_size', 'precision', 'recall', 'source']
@@ -1526,7 +1536,7 @@ def register_enrichment_callbacks(app):
                             except Exception:
                                 fig = None
                         if fig is None:
-                            df = pd.DataFrame(results_store.get('results', [])) if results_store else pd.DataFrame()
+                            df = pd.DataFrame(gprof_results_store.get('results', [])) if gprof_results_store else pd.DataFrame()
                             if df.empty:
                                 raise ValueError("No Manhattan data to attach.")
                             fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
@@ -1562,9 +1572,9 @@ def register_enrichment_callbacks(app):
                             except Exception:
                                 heatmap_fig = None
                         if heatmap_fig is None:
-                            if not results_store:
+                            if not gprof_results_store:
                                 raise ValueError("No heatmap data to attach.")
-                            heatmap_matrix, _dbg = process_data_for_gene_term_heatmap(results_store, threshold=0.05)
+                            heatmap_matrix, _dbg = process_data_for_gene_term_heatmap(gprof_results_store, threshold=0.05)
                             if heatmap_matrix.empty:
                                 raise ValueError("Heatmap is empty.")
                             heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
@@ -1587,6 +1597,60 @@ def register_enrichment_callbacks(app):
                         }
                     }
 
+                elif ctx_type == 'reactome_table':
+                    if not reactome_store:
+                        raise ValueError("No Reactome results to attach.")
+                    results = reactome_store.get('results', [])
+                    if not results:
+                        raise ValueError("No Reactome results to attach.")
+                    df = pd.DataFrame(results)
+                    cols = ['term_name', 'description', 'p_value', 'entities_found', 'entities_total', 'fdr_value', 'source']
+                    df_attach = df[[c for c in cols if c in df.columns]].copy()
+                    att = {
+                        'id': f"att_react_table_{timestamp_now}",
+                        'type': 'table',
+                        'source': 'reactome',
+                        'name': title_value or 'Reactome Results',
+                        'created_at': timestamp_now,
+                        'include': True,
+                        'comment': comment_value or '',
+                        'payload': {
+                            'columns': df_attach.columns.tolist(),
+                            'rows': df_attach.head(50).to_dict('records')
+                        }
+                    }
+
+                elif ctx_type == 'reactome_pathway':
+                    sel_idx = ctx_data.get('row_index')
+                    if sel_idx is None or sel_idx < 0:
+                        raise ValueError("Select a pathway row before attaching.")
+                    if not react_table_data or sel_idx >= len(react_table_data):
+                        raise ValueError("Selected pathway is not available.")
+                    if not reactome_store:
+                        raise ValueError("No Reactome analysis found.")
+                    row = react_table_data[sel_idx]
+                    pathway_st_id = row.get('description')
+                    pathway_name = row.get('term_name', 'Pathway')
+                    token = reactome_store.get('token')
+                    if not pathway_st_id or not token:
+                        raise ValueError("Missing pathway identifier or Reactome token.")
+                    img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
+                    if img is None:
+                        raise ValueError("Unable to retrieve pathway image.")
+                    att = {
+                        'id': f"att_react_pathway_{timestamp_now}",
+                        'type': 'pathway',
+                        'source': 'reactome',
+                        'name': title_value or f"Pathway: {pathway_name}",
+                        'created_at': timestamp_now,
+                        'include': True,
+                        'comment': comment_value or '',
+                        'payload': {
+                            'image_url': img,
+                            'link_url': f"https://reactome.org/content/detail/{pathway_st_id}?analysis={token}"
+                        }
+                    }
+
                 updated_items = []
                 for idx_item, it in enumerate(items):
                     it_copy = dict(it)
@@ -1594,6 +1658,10 @@ def register_enrichment_callbacks(app):
                         atts = list(it_copy.get('attachments', []))
                         if ctx_type == 'gprofiler_table':
                             atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'gprofiler')]
+                        if ctx_type == 'reactome_table':
+                            atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
+                        if ctx_type == 'reactome_pathway':
+                            atts = [a for a in atts if not (a.get('type') == 'pathway' and a.get('source') == 'reactome')]
                         atts.append(att)
                         it_copy['attachments'] = atts
                     updated_items.append(it_copy)
@@ -1607,94 +1675,3 @@ def register_enrichment_callbacks(app):
 
         raise PreventUpdate
 
-    # --- Botones manuales Reactome ---
-    @app.callback(
-        Output('interest-panel-store', 'data', allow_duplicate=True),
-        Input('attach-reactome-table-btn', 'n_clicks'),
-        [State('reactome-results-store', 'data'),
-         State('enrichment-selected-indices-store', 'data'),
-         State('interest-panel-store', 'data')],
-        prevent_initial_call=True
-    )
-    def attach_reactome_table_manual(n_clicks, results_store, selected_indices, items):
-        if not n_clicks or not results_store or not selected_indices or not items:
-            raise PreventUpdate
-        results = results_store.get('results', [])
-        if not results:
-            raise PreventUpdate
-        df = pd.DataFrame(results)
-        cols = ['term_name', 'description', 'p_value', 'entities_found', 'entities_total', 'fdr_value', 'source']
-        df_attach = df[[c for c in cols if c in df.columns]].copy()
-        timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        att = {
-            'id': f"att_react_table_{timestamp_now}",
-            'type': 'table',
-            'source': 'reactome',
-            'name': 'Reactome Results',
-            'created_at': timestamp_now,
-            'include': True,
-            'comment': '',
-            'payload': {
-                'columns': df_attach.columns.tolist(),
-                'rows': df_attach.head(50).to_dict('records')
-            }
-        }
-        updated_items = []
-        for idx_item, it in enumerate(items):
-            it_copy = dict(it)
-            if idx_item in selected_indices:
-                atts = list(it_copy.get('attachments', []))
-                atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
-                atts.append(att)
-                it_copy['attachments'] = atts
-            updated_items.append(it_copy)
-        return updated_items
-
-    @app.callback(
-        Output('interest-panel-store', 'data', allow_duplicate=True),
-        Input('attach-reactome-pathway-btn', 'n_clicks'),
-        [State('enrichment-results-table-reactome', 'selected_rows'),
-         State('enrichment-results-table-reactome', 'data'),
-         State('reactome-results-store', 'data'),
-         State('enrichment-selected-indices-store', 'data'),
-         State('interest-panel-store', 'data')],
-        prevent_initial_call=True
-    )
-    def attach_reactome_pathway_manual(n_clicks, selected_rows, table_data, reactome_store, selected_indices, items):
-        if not n_clicks or not selected_rows or not table_data or not reactome_store or not selected_indices or not items:
-            raise PreventUpdate
-        sel_idx = selected_rows[0] if isinstance(selected_rows, list) and selected_rows else None
-        if sel_idx is None or sel_idx >= len(table_data):
-            raise PreventUpdate
-        row = table_data[sel_idx]
-        pathway_st_id = row.get('description')
-        pathway_name = row.get('term_name', 'Pathway')
-        token = reactome_store.get('token')
-        if not pathway_st_id or not token:
-            raise PreventUpdate
-        img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
-        if img is None:
-            raise PreventUpdate
-        timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        att = {
-            'id': f"att_react_pathway_{timestamp_now}",
-            'type': 'pathway',
-            'source': 'reactome',
-            'name': f"Pathway: {pathway_name}",
-            'created_at': timestamp_now,
-            'include': True,
-            'comment': '',
-            'payload': {
-                'image_url': img,
-                'link_url': f"https://reactome.org/content/detail/{pathway_st_id}?analysis={token}"
-            }
-        }
-        updated_items = []
-        for idx_item, it in enumerate(items):
-            it_copy = dict(it)
-            if idx_item in selected_indices:
-                atts = list(it_copy.get('attachments', []))
-                atts.append(att)
-                it_copy['attachments'] = atts
-            updated_items.append(it_copy)
-        return updated_items

@@ -271,6 +271,15 @@ app.layout = dbc.Container([
     dcc.Store(id='scroll-to-top-dummy-store'),
     dcc.Store(id='attachment-image-store', data=None, storage_type='session'),
     dcc.Interval(id='badge-animation-interval', interval=1000, n_intervals=0, disabled=True),
+    html.Div(
+        dash_table.DataTable(
+            id='enrichment-results-table-reactome',
+            data=[],
+            columns=[],
+            style_table={'display': 'none'}
+        ),
+        style={'display': 'none'}
+    ),
 
     # --- 💡 NUEVOS STORES PARA AUTO-HIDE 💡 ---
     # Configura aquí el tiempo en milisegundos (5000 ms = 5 segundos)
@@ -533,6 +542,9 @@ app.layout = dbc.Container([
         ])
     ])
 ], fluid=True, style={'marginBottom': '50px'})
+
+# Validation layout para registrar todos los IDs y evitar errores de callback
+app.validation_layout = app.layout
 
 
 # -------------------------------------------------------------

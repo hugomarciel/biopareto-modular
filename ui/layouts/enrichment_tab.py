@@ -452,13 +452,15 @@ def create_reactome_layout(organism_options):
     return html.Div([
         control_panel,
         
+        # Botón de adjuntar tabla Reactome (alineado a la derecha)
         dbc.Row([
-            dbc.Col([
-                dbc.ButtonGroup([
-                    dbc.Button("Adjuntar tabla", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="me-2"),
-                    dbc.Button("Capturar pathway", id="attach-reactome-pathway-btn", color="secondary", outline=True, size="sm")
-                ], className="mb-2")
-            ])
+            dbc.Col(
+                html.Div(
+                    dbc.Button("Attach Table", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="mb-2"),
+                    className="d-flex justify-content-end"
+                ),
+                width=12
+            )
         ]),
         
         # Placeholder para la tabla de resultados de Reactome (evita errores de callbacks antes de renderizar)
@@ -479,36 +481,28 @@ def create_reactome_layout(organism_options):
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-    html.Div([
-        # 1. CAMBIO: Reduje 'me-5' a 'me-2' para quitar el espacio gigante a la izquierda
-        html.I(className="bi bi-diagram-3-fill me-2"),
-        
-        html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
-        
-        # 2. Icono de Ayuda
-        html.I(
-            id="reactome-vis-help-icon",
-            className="bi bi-question-circle-fill text-muted ms-2",
-            style={'cursor': 'pointer', 'fontSize': '1rem'}
-        ),
-        
-        # 3. SOLUCIÓN SPINNER: 
-        # Envolvemos dcc.Loading en un Div con dimensiones fijas y centrado flex
-        html.Div(
-            dcc.Loading(
-                id="loading-reactome-diagram-spinner", 
-                # El hijo debe estar oculto o vacío para no empujar el layout
-                children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
-                type="circle",
-                color="#ffc107",
-            ),
-            # Clases para alinear y dar margen a la izquierda
-            className="ms-3 d-flex align-items-center justify-content-center",
-            # Forzamos un tamaño pequeño para que no rompa la fila
-            style={'height': '20px', 'width': '20px'}
-        )
-    ], className="d-flex align-items-center text-primary") # Flexrow principal
-], className="bg-white border-bottom"),
+                        html.Div([
+                            html.I(className="bi bi-diagram-3-fill me-2"),
+                            html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
+                            dbc.Button("Capture Pathway", id="attach-reactome-pathway-btn",
+                                       color="secondary", outline=True, size="sm", className="ms-3"),
+                            html.I(
+                                id="reactome-vis-help-icon",
+                                className="bi bi-question-circle-fill text-muted ms-2",
+                                style={'cursor': 'pointer', 'fontSize': '1rem'}
+                            ),
+                            html.Div(
+                                dcc.Loading(
+                                    id="loading-reactome-diagram-spinner", 
+                                    children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
+                                    type="circle",
+                                    color="#ffc107",
+                                ),
+                                className="ms-3 d-flex align-items-center justify-content-center",
+                                style={'height': '20px', 'width': '20px'}
+                            )
+                        ], className="d-flex align-items-center text-primary")
+                    ], className="bg-white border-bottom"),
                     
                     dbc.CardBody([
                         pathway_vis_help_popover, # Insertar Popover
