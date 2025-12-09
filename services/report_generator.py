@@ -398,7 +398,7 @@ def generate_item_pdf(item):
         story.append(tbl)
         story.append(Spacer(1, 0.15 * inch))
 
-    # Adjuntos
+    # Adjuntos (incluye tablas renderizadas)
     if attachments:
         story.append(Paragraph("Attachments", styles['ItemHeading']))
         att_rows = [["Name", "Type", "Source", "Comment"]]
@@ -418,6 +418,82 @@ def generate_item_pdf(item):
             ('FONTSIZE', (0, 0), (-1, -1), 9),
         ]))
         story.append(att_tbl)
+        story.append(Spacer(1, 0.15 * inch))
+
+        # Render de tablas (primeros 50 registros, ya vienen en payload)
+        for att in attachments:
+            if att.get('type') == 'table':
+                payload = att.get('payload') or {}
+                cols = payload.get('columns') or []
+                rows = payload.get('rows') or []
+                if not cols or not rows:
+                    continue
+                # Cada adjunto en página nueva, incluido el primero
+                story.append(PageBreak())
+
+                # Celdas con wrapping para evitar traslape
+                body_style = ParagraphStyle(name='TblText', fontName='Helvetica', fontSize=8, leading=9, wordWrap='LTR')
+                head_style = ParagraphStyle(name='TblHead', fontName='Helvetica-Bold', fontSize=8, leading=9, alignment=1, wordWrap='LTR')
+                def wrap_cell(val, head=False):
+                    txt = "" if val is None else str(val)
+                    return Paragraph(txt, head_style if head else body_style)
+
+                # Encabezados amigables (romper por underscore)
+                def header_label(col):
+                    if 'intersection_genes' in col:
+                        return 'intersection\ngenes'
+                    return col.replace('_', '\n')
+
+                header_row = [wrap_cell("No.", head=True)] + [wrap_cell(header_label(c), head=True) for c in cols]
+                table_data = [header_row]
+                for idx, r in enumerate(rows, start=1):
+                    row_vals = [wrap_cell(str(idx))]
+                    for c in cols:
+                        row_vals.append(wrap_cell(r.get(c, "")))
+                    table_data.append(row_vals)
+                story.append(Paragraph(att.get('name', 'Table'), styles['ItemHeading']))
+
+                # Ajustar anchos segĂşn nombre de columna para evitar desbordes
+                def _compute_col_widths(columns, total_width=10 * inch):
+                    weights = [0.6]  # columna del correlativo
+                    for c in columns:
+                        lc = str(c).lower()
+                        if 'intersection_genes' in lc:
+                            w = 4.0
+                        elif lc == 'term_size':
+                            w = 0.9
+                        elif 'p_value' in lc:
+                            w = 1.0
+                        elif 'precision' in lc or 'recall' in lc:
+                            w = 1.2
+                        elif 'term' in lc or 'description' in lc or 'name' in lc:
+                            w = 2.2
+                        elif 'source' in lc:
+                            w = 0.9
+                        else:
+                            w = 1.1
+                        weights.append(w)
+                    if not weights:
+                        return None
+                    scale = total_width / sum(weights)
+                    return [w * scale for w in weights]
+
+                col_widths = _compute_col_widths(cols)
+                tbl = Table(table_data, repeatRows=1, colWidths=col_widths)
+                tbl.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                    ('TOPPADDING', (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ]))
+                story.append(tbl)
+                story.append(Spacer(1, 0.2 * inch))
     else:
         story.append(Paragraph("No attachments for this item.", styles['ItemText']))
 
