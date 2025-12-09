@@ -1175,6 +1175,11 @@ def register_enrichment_callbacks(app):
             if res:
                 res['gene_list_original'] = raw
                 res['gene_list_validated'] = clean
+                token = res.get('token')
+                fireworks_url = None
+                if token and organism_name:
+                    organism_encoded = str(organism_name).replace(' ', '%20')
+                    fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={token}"
                 updated_items = list(items)
                 for idx in selected_indices:
                     if idx < len(updated_items):
@@ -1195,7 +1200,9 @@ def register_enrichment_callbacks(app):
                                     'project_to_human': projection,
                                     'include_disease': include_disease,
                                     'interactors': interactors
-                                }
+                                },
+                                'token': token,
+                                'fireworks_url': fireworks_url
                             }
                             validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean, 'meta': meta})
                         analysis_meta = [m for m in analysis_meta if not (m.get('origin') == 'reactome' and m.get('namespace') == ns)]
@@ -1208,7 +1215,9 @@ def register_enrichment_callbacks(app):
                                 'project_to_human': projection,
                                 'include_disease': include_disease,
                                 'interactors': interactors
-                            }
+                            },
+                            'token': token,
+                            'fireworks_url': fireworks_url
                         })
                         if 'validated_genes' not in data_copy:
                             data_copy['validated_genes'] = clean

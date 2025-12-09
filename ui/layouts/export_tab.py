@@ -55,36 +55,39 @@ def create_export_tab():
         # Detalle del item seleccionado
         dbc.Row([
             dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader([
-                        html.Div([
-                            html.I(className="bi bi-info-square-fill me-2"),
-                            html.H5("Item Details", className="d-inline-block m-0 fw-bold")
-                        ], className="d-flex align-items-center text-primary")
-                    ], className="bg-white border-bottom position-relative"),
-                    dbc.CardBody([
-                        html.Div(id="export-selected-item-details", children=[
-                            dbc.Alert([
-                                html.I(className="bi bi-hand-index me-2"),
-                                "Select an item above to see its details."
-                            ], color="light", className="d-flex align-items-center small mb-0")
-                        ]),
-                        dbc.Alert([
+                html.Div(
+                    dbc.Card([
+                        dbc.CardHeader([
                             html.Div([
-                                html.Label("Item Comment", className="fw-bold mb-1"),
-                                html.P("This comment will be included in the export.", className="small text-muted mb-2")
-                            ], className="mb-2"),
-                            dcc.Textarea(
-                                id="export-comment-editor",
-                                style={'minHeight': '120px'},
-                                className="form-control mb-2",
-                                placeholder="Add or edit the comment for this item..."
-                            )
-                        ], color="light", className="mt-3 border border-2"),
-                        html.Hr(className="my-3"),
-                        html.Div(id="export-attachments-preview", className="mt-1")
-                    ])
-                ], className="shadow-sm border-0 mb-4")
+                                html.I(className="bi bi-info-square-fill me-2"),
+                                html.H5("Item Details", className="d-inline-block m-0 fw-bold")
+                            ], className="d-flex align-items-center text-primary")
+                        ], className="bg-white border-bottom position-relative"),
+                        dbc.CardBody([
+                            html.Div(id="export-selected-item-details", children=[
+                                dbc.Alert([
+                                    html.I(className="bi bi-hand-index me-2"),
+                                    "Select an item above to see its details."
+                                ], color="light", className="d-flex align-items-center small mb-0")
+                            ]),
+                            dbc.Alert([
+                                html.Div([
+                                    html.Label("Item Comment", className="fw-bold mb-1"),
+                                    html.P("This comment will be included in the export.", className="small text-muted mb-2")
+                                ], className="mb-2"),
+                                dcc.Textarea(
+                                    id="export-comment-editor",
+                                    style={'minHeight': '120px'},
+                                    className="form-control mb-2",
+                                    placeholder="Add or edit the comment for this item..."
+                                )
+                            ], color="light", className="mt-3 border border-2"),
+                            html.Hr(className="my-3"),
+                            html.Div(id="export-attachments-preview", className="mt-1")
+                        ])
+                    ], className="shadow-sm border-0 mb-4"),
+                    id="export-item-details-wrapper"
+                )
             ], width=12)
         ]),
 

@@ -132,10 +132,11 @@ def register_export_callbacks(app):
     )
     def render_selected_item_details(selected_indices, items):
         if not selected_indices or not items:
-            placeholder = dbc.Alert([
-                html.I(className="bi bi-hand-index me-2"),
-                "Select an item above to see its details."
-            ], color="light", className="d-flex align-items-center small mb-0")
+            placeholder = dbc.Alert(
+                "Select an item from the list above to view its details.",
+                color="light",
+                className="d-flex align-items-center small mb-0"
+            )
             return placeholder, None, ""
 
         idx = selected_indices[0]
@@ -377,6 +378,8 @@ def register_export_callbacks(app):
                     'interactors': 'Include Interactors'
                 }
                 enabled_opts = ", ".join([opt_labels.get(k, k) for k, v in opts.items() if v])
+                token = am.get('token')
+                fireworks_url = am.get('fireworks_url')
                 meta_rows.append(
                     html.Div([
                         html.Strong(origin, className="me-2"),
@@ -384,7 +387,9 @@ def register_export_callbacks(app):
                         html.Span(f"Namespace: {ns}", className="me-3"),
                         html.Span(f"Validation: {val_txt}", className="me-3"),
                         html.Span(f"Sources: {sources}", className="me-3") if sources else None,
-                        html.Span(f"Options: {enabled_opts}", className="me-3") if enabled_opts else None
+                        html.Span(f"Options: {enabled_opts}", className="me-3") if enabled_opts else None,
+                        html.Span(f"Token: {token}", className="me-3") if token else None,
+                        html.A("Fireworks", href=fireworks_url, target="_blank", className="me-3") if fireworks_url else None
                     ], className="small text-muted mb-1")
                 )
             detail_children.append(
@@ -711,6 +716,16 @@ def register_export_callbacks(app):
         if triggered_value:
             return [idx]
         return []
+
+    # Mostrar/ocultar bloque de detalles seg?en selecci?en
+    @app.callback(
+        Output('export-item-details-wrapper', 'style'),
+        Input('export-selected-indices-store', 'data')
+    )
+    def toggle_item_details_visibility(selected_indices):
+        if not selected_indices:
+            return {'display': 'none'}
+        return {}
 
     # Export: PDF
     @app.callback(
