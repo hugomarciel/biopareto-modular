@@ -7,6 +7,7 @@ import pandas as pd
 import base64
 import logging
 import math
+from datetime import datetime
 
 # Imports para PDF ReportLab
 from reportlab.lib.pagesizes import letter, A4, landscape
@@ -276,6 +277,150 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
             
             
     # --- Final Build ---
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
+# --- 3. Reporte PDF de un solo Item (horizontal) ---
+def generate_item_pdf(item):
+    """Genera un PDF simple para un item del panel de interés en orientación horizontal."""
+    if not item:
+        return None
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=0.5 * inch,
+        leftMargin=0.5 * inch,
+        topMargin=0.5 * inch,
+        bottomMargin=0.5 * inch,
+        title=f"Report for {item.get('name','item')}"
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='ItemTitle', fontName='Helvetica-Bold', fontSize=16, alignment=TA_LEFT, spaceAfter=12))
+    styles.add(ParagraphStyle(name='ItemHeading', fontName='Helvetica-Bold', fontSize=12, spaceAfter=8))
+    styles.add(ParagraphStyle(name='ItemText', fontName='Helvetica', fontSize=10, spaceAfter=4))
+
+    story = []
+
+    name = item.get('name', 'Item')
+    item_type = item.get('type', 'Unknown')
+    origin = item.get('tool_origin', 'Interest Panel')
+    timestamp = item.get('timestamp', 'N/A')
+    comment = item.get('comment', '')
+    data = item.get('data', {}) or {}
+    attachments = item.get('attachments', []) or []
+    validated_sets = data.get('validated_sets', []) or []
+    analysis_meta = data.get('analysis_meta', []) or []
+
+    story.append(Paragraph(f"Report: {name}", styles['ItemTitle']))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['ItemText']))
+    story.append(Paragraph(f"Type: {item_type} | Origin: {origin} | Timestamp: {timestamp}", styles['ItemText']))
+    if comment:
+        story.append(Paragraph(f"Comment: {comment}", styles['ItemText']))
+    story.append(Spacer(1, 0.15 * inch))
+
+    # Resumen segĂşn tipo
+    summary_lines = []
+    if item_type == 'solution':
+        genes = data.get('selected_genes', [])
+        summary_lines.append(f"Genes: {len(genes)}")
+        summary_lines.append(f"Front: {data.get('front_name', 'N/A')}")
+        summary_lines.append(f"Solution ID: {data.get('solution_id', 'N/A')}")
+    elif item_type == 'solution_set':
+        sols = data.get('solutions', [])
+        summary_lines.append(f"Solutions: {len(sols)}")
+        summary_lines.append(f"Unique genes: {data.get('unique_genes_count', 'N/A')}")
+    elif item_type == 'gene_set':
+        genes = data.get('genes', [])
+        summary_lines.append(f"Genes: {len(genes)}")
+    elif item_type == 'individual_gene':
+        summary_lines.append(f"Gene: {data.get('gene', 'N/A')} | Source: {data.get('source', 'N/A')}")
+    elif item_type == 'combined_gene_group':
+        summary_lines.append(f"Genes: {data.get('gene_count', 0)} | Sources: {len(data.get('source_items', []))}")
+
+    if summary_lines:
+        story.append(Paragraph("Summary", styles['ItemHeading']))
+        for line in summary_lines:
+            story.append(Paragraph(line, styles['ItemText']))
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Meta de análisis
+    if analysis_meta:
+        story.append(Paragraph("Analysis settings", styles['ItemHeading']))
+        for am in analysis_meta:
+            origin_am = am.get('origin', 'analysis')
+            org = am.get('organism') or ''
+            ns = am.get('namespace') or ''
+            val = am.get('validation')
+            val_txt = "on" if val else "off" if val is not None else "n/a"
+            sources = ", ".join(am.get('sources') or [])
+            opts = am.get('options') or {}
+            opt_labels = {
+                'project_to_human': 'Project to Human',
+                'include_disease': 'Include Disease',
+                'interactors': 'Include Interactors'
+            }
+            enabled_opts = ", ".join([opt_labels.get(k, k) for k, v in opts.items() if v])
+            token = am.get('token')
+            fireworks_url = am.get('fireworks_url')
+            line = f"{origin_am} | Organism: {org} | Namespace: {ns} | Validation: {val_txt}"
+            if sources:
+                line += f" | Sources: {sources}"
+            if enabled_opts:
+                line += f" | Options: {enabled_opts}"
+            if token:
+                line += f" | Token: {token}"
+            if fireworks_url:
+                line += f" | Fireworks: {fireworks_url}"
+            story.append(Paragraph(line, styles['ItemText']))
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Validated gene sets (solo primer set por namespace ya filtrado aguas arriba)
+    if validated_sets:
+        story.append(Paragraph("Validated gene sets", styles['ItemHeading']))
+        tbl_data = [["Source", "Namespace", "Genes (count)"]]
+        for vs in validated_sets:
+            source_vs = vs.get('origin', 'analysis')
+            ns_vs = vs.get('namespace') or 'N/A'
+            genes_vs = vs.get('genes') or []
+            tbl_data.append([source_vs, ns_vs, f"{len(genes_vs)}"])
+        tbl = Table(tbl_data, colWidths=[2.2 * inch, 1.5 * inch, 2.0 * inch])
+        tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.15 * inch))
+
+    # Adjuntos
+    if attachments:
+        story.append(Paragraph("Attachments", styles['ItemHeading']))
+        att_rows = [["Name", "Type", "Source", "Comment"]]
+        for att in attachments:
+            att_rows.append([
+                att.get('name', att.get('type', 'Attachment')),
+                att.get('type', ''),
+                att.get('source', ''),
+                att.get('comment', '') or ''
+            ])
+        att_tbl = Table(att_rows, colWidths=[2.5 * inch, 1.2 * inch, 1.5 * inch, 4.0 * inch])
+        att_tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ]))
+        story.append(att_tbl)
+    else:
+        story.append(Paragraph("No attachments for this item.", styles['ItemText']))
+
     doc.build(story)
     buffer.seek(0)
     return buffer

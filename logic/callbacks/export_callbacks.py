@@ -10,7 +10,8 @@ from services.report_generator import (
     generate_pdf_report,
     generate_txt_report,
     export_pareto_data,
-    export_genes_list
+    export_genes_list,
+    generate_item_pdf,
 )
 
 
@@ -586,6 +587,27 @@ def register_export_callbacks(app):
         attachments_preview = att_cards if att_cards else dbc.Alert("No attachments for this item.", color="light", className="small")
 
         return detail, attachments_preview, comment
+
+    # Descargar PDF del item seleccionado (orientación horizontal)
+    @app.callback(
+        Output('export-item-pdf-download', 'data'),
+        Input('export-download-item-pdf', 'n_clicks'),
+        State('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=True
+    )
+    def download_item_pdf(n_clicks, selected_indices, items):
+        if not n_clicks or not selected_indices or not items:
+            raise PreventUpdate
+        idx = selected_indices[0]
+        if idx >= len(items):
+            raise PreventUpdate
+        item = items[idx]
+        pdf_bytes = generate_item_pdf(item)
+        if not pdf_bytes:
+            raise PreventUpdate
+        filename = f"{item.get('name','item')}_report.pdf"
+        return dcc.send_bytes(pdf_bytes.getvalue(), filename)
 
     # Toggle para listas validadas (show more)
     @app.callback(

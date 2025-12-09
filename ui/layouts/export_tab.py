@@ -57,12 +57,24 @@ def create_export_tab():
             dbc.Col([
                 html.Div(
                     dbc.Card([
-                        dbc.CardHeader([
+                        dbc.CardHeader(
                             html.Div([
-                                html.I(className="bi bi-info-square-fill me-2"),
-                                html.H5("Item Details", className="d-inline-block m-0 fw-bold")
-                            ], className="d-flex align-items-center text-primary")
-                        ], className="bg-white border-bottom position-relative"),
+                                html.Div([
+                                    html.I(className="bi bi-info-square-fill me-2"),
+                                    html.H5("Item Details", className="d-inline-block m-0 fw-bold")
+                                ], className="d-flex align-items-center text-primary"),
+                                dbc.Button(
+                                    "Download PDF",
+                                    id="export-download-item-pdf",
+                                    color="primary",
+                                    outline=True,
+                                    size="sm",
+                                    className="ms-auto"
+                                ),
+                                dcc.Download(id="export-item-pdf-download")
+                            ], className="d-flex align-items-center gap-2"),
+                            className="bg-white border-bottom position-relative"
+                        ),
                         dbc.CardBody([
                             html.Div(id="export-selected-item-details", children=[
                                 dbc.Alert([
