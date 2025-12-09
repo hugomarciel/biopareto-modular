@@ -173,19 +173,70 @@ def register_export_callbacks(app):
             info_rows.append(html.Li(f"Genes: {data.get('gene_count', 0)}"))
             info_rows.append(html.Li(f"Source items: {len(data.get('source_items', []))}"))
 
-        detail = dbc.Card([
-            dbc.CardBody([
-                html.H5(name, className="fw-bold mb-2"),
-                html.Div([
-                    dbc.Badge(item_type, color="secondary", className="me-2"),
-                    html.Small(f"Origin: {origin}", className="text-muted me-3"),
-                    html.Small(f"Added: {timestamp}", className="text-muted")
-                ], className="mb-2"),
-                dbc.Alert(comment or "No comment", color="info", className="py-2 px-3 mb-3"),
-                html.H6("Details", className="fw-bold small"),
-                html.Ul(info_rows if info_rows else [html.Li("No additional data available.", className="text-muted")], className="small")
-            ])
-        ], className="border-0 shadow-sm")
+        attachments = item.get('attachments', []) or []
+        attachments = item.get('attachments', []) or []
+        validated_sets = data.get('validated_sets', []) or []
+        converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
+        if not converted_genes and attachments:
+            # Buscar si alg?n adjunto trae la lista validada (p.ej. g:Profiler)
+            for att in attachments:
+                att_payload = att.get('payload') or {}
+                att_genes = att_payload.get('validated_genes') or att_payload.get('gene_list_validated') or []
+                if att_genes:
+                    converted_genes = att_genes
+                    break
+
+        converted_sections = []
+        if validated_sets:
+            for vs in validated_sets:
+                genes_vs = vs.get('genes') or []
+                if not genes_vs:
+                    continue
+                origin_vs = vs.get('origin', 'analysis')
+                ns_vs = vs.get('namespace') or 'N/A'
+                converted_sections.append(
+                    dbc.Alert(
+                        [
+                            html.Div([
+                                html.Strong(f"Validated genes ({origin_vs}, {ns_vs})", className="me-2"),
+                                html.Small(f"({len(genes_vs)} genes)", className="text-muted")
+                            ], className="mb-1"),
+                            html.P(', '.join(genes_vs[:50]) + (" ..." if len(genes_vs) > 50 else ""), className="small mb-0")
+                        ],
+                        color="light",
+                        className="py-2 px-3 mt-3 border border-info border-2"
+                    )
+                )
+        elif converted_genes:
+            converted_sections.append(
+                dbc.Alert(
+                    [
+                        html.Div([
+                            html.Strong("Validated/converted genes", className="me-2"),
+                            html.Small(f"({len(converted_genes)} genes)", className="text-muted")
+                        ], className="mb-1"),
+                        html.P(', '.join(converted_genes[:50]) + (" ..." if len(converted_genes) > 50 else ""), className="small mb-0")
+                    ],
+                    color="light",
+                    className="py-2 px-3 mt-3 border border-info border-2"
+                )
+            )
+
+        detail_children = [
+            html.H5(name, className="fw-bold mb-2"),
+            html.Div([
+                dbc.Badge(item_type, color="secondary", className="me-2"),
+                html.Small(f"Origin: {origin}", className="text-muted me-3"),
+                html.Small(f"Added: {timestamp}", className="text-muted")
+            ], className="mb-2"),
+            dbc.Alert(comment or "No comment", color="info", className="py-2 px-3 mb-3"),
+            html.H6("Details", className="fw-bold small"),
+            html.Ul(info_rows if info_rows else [html.Li("No additional data available.", className="text-muted")], className="small")
+        ]
+        for section in converted_sections:
+            detail_children.append(section)
+
+        detail = dbc.Card([dbc.CardBody(detail_children)], className="border-0 shadow-sm")
 
         # Attachments preview
         attachments = item.get('attachments', []) or []

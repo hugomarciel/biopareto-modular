@@ -770,7 +770,7 @@ def register_enrichment_callbacks(app):
             clean_gene_list = sorted(list(set(gene_list_to_validate)))
         
         if not clean_gene_list:
-            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None
+            return {'results': [], 'gene_list_validated': [], 'gene_list_original_count': gene_list_original_count, 'organism': organism}, None, items
 
         full_response = GProfilerService.get_enrichment(clean_gene_list, organism, selected_sources)
 
@@ -829,12 +829,29 @@ def register_enrichment_callbacks(app):
             }
             final_enrichment_data.append(new_term_data)
 
+        # Enriquecer los items seleccionados con la lista validada (evita depender del store/adjuntos)
+        updated_items = list(items)
+        for idx in selected_indices:
+            if idx < len(updated_items):
+                it_copy = dict(updated_items[idx])
+                data_copy = dict(it_copy.get('data', {}))
+                validated_sets = list(data_copy.get('validated_sets', []))
+                ns = target_namespace or 'default'
+                exists = any(vs.get('origin') == 'gprofiler' and vs.get('namespace') == ns for vs in validated_sets)
+                if not exists:
+                    validated_sets.append({'origin': 'gprofiler', 'namespace': ns, 'genes': clean_gene_list})
+                if 'validated_genes' not in data_copy:
+                    data_copy['validated_genes'] = clean_gene_list
+                data_copy['validated_sets'] = validated_sets
+                it_copy['data'] = data_copy
+                updated_items[idx] = it_copy
+
         return {
             'results': final_enrichment_data,
             'gene_list_validated': clean_gene_list,
             'gene_list_original_count': gene_list_original_count,
             'organism': organism
-        }, None, items
+        }, None, updated_items
 
 
    # 4.5. Display g:Profiler Results (CON AJUSTE DE TEXTO MULTILÍNEA)
@@ -1126,8 +1143,24 @@ def register_enrichment_callbacks(app):
             if res:
                 res['gene_list_original'] = raw
                 res['gene_list_validated'] = clean
+                updated_items = list(items)
+                for idx in selected_indices:
+                    if idx < len(updated_items):
+                        it_copy = dict(updated_items[idx])
+                        data_copy = dict(it_copy.get('data', {}))
+                        validated_sets = list(data_copy.get('validated_sets', []))
+                        ns = target_namespace or 'default'
+                        exists = any(vs.get('origin') == 'reactome' and vs.get('namespace') == ns for vs in validated_sets)
+                        if not exists:
+                            validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean})
+                        if 'validated_genes' not in data_copy:
+                            data_copy['validated_genes'] = clean
+                        data_copy['validated_sets'] = validated_sets
+                        it_copy['data'] = data_copy
+                        updated_items[idx] = it_copy
+
                 logger.info(f"[Reactome] Enrichment OK. Results={len(res.get('results', []))}, token={res.get('token')}")
-                return res, False, None, items
+                return res, False, None, updated_items
 
             logger.info("[Reactome] Service returned no results; returning empty store")
             return store, False, None, items
@@ -1496,6 +1529,9 @@ def register_enrichment_callbacks(app):
             try:
                 timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 att = None
+                validated_genes = []
+                if gprof_results_store:
+                    validated_genes = gprof_results_store.get('gene_list_validated') or gprof_results_store.get('validated_genes') or []
 
                 if ctx_type == 'gprofiler_table':
                     if not gprof_results_store:
@@ -1519,7 +1555,8 @@ def register_enrichment_callbacks(app):
                         'comment': comment_value or '',
                         'payload': {
                             'columns': df_attach.columns.tolist(),
-                            'rows': df_attach.head(50).to_dict('records')
+                            'rows': df_attach.head(50).to_dict('records'),
+                            'validated_genes': validated_genes
                         }
                     }
 
@@ -1555,7 +1592,8 @@ def register_enrichment_callbacks(app):
                         'comment': comment_value or '',
                         'payload': {
                             'image': img_b64,
-                            'error': img_error
+                            'error': img_error,
+                            'validated_genes': validated_genes
                         }
                     }
 
@@ -1593,7 +1631,8 @@ def register_enrichment_callbacks(app):
                         'comment': comment_value or '',
                         'payload': {
                             'image': img_b64,
-                            'error': img_error
+                            'error': img_error,
+                            'validated_genes': validated_genes
                         }
                     }
 
