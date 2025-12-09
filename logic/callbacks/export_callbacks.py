@@ -174,6 +174,7 @@ def register_export_callbacks(app):
             info_rows.append(html.Li(f"Source items: {len(data.get('source_items', []))}"))
 
         attachments = item.get('attachments', []) or []
+        analysis_meta = data.get('analysis_meta', []) or []
         attachments = item.get('attachments', []) or []
         validated_sets = data.get('validated_sets', []) or []
         converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
@@ -187,6 +188,22 @@ def register_export_callbacks(app):
                     break
 
         converted_sections = []
+        if validated_sets or converted_genes:
+            converted_sections.append(
+                html.Div(
+                    [
+                        html.H6("Validated gene sets", className="fw-bold mb-1"),
+                        html.Div([
+                            html.Small("Source", className="fw-bold text-muted", style={'width': '180px', 'flexShrink': 0}),
+                            html.Small("Namespace", className="fw-bold text-muted", style={'width': '140px', 'flexShrink': 0}),
+                            html.Small("Sample genes", className="fw-bold text-muted", style={'flex': 1, 'minWidth': 0}),
+                            html.Small("Include", className="fw-bold text-muted text-end", style={'width': '140px', 'flexShrink': 0})
+                        ], className="d-flex align-items-center gap-2 px-2")
+                    ],
+                    className="mb-2"
+                )
+            )
+
         if validated_sets:
             for vs in validated_sets:
                 genes_vs = vs.get('genes') or []
@@ -194,31 +211,138 @@ def register_export_callbacks(app):
                     continue
                 origin_vs = vs.get('origin', 'analysis')
                 ns_vs = vs.get('namespace') or 'N/A'
+                origin_color = 'primary' if origin_vs.lower() == 'gprofiler' else 'success' if origin_vs.lower() == 'reactome' else 'info'
+                meta_vs = vs.get('meta') or {}
+                sample_genes = genes_vs[:5]
+                rest_genes = genes_vs[5:]
+                collapse_id = {'type': 'validated-collapse', 'origin': origin_vs, 'namespace': ns_vs}
+                toggle_id = {'type': 'validated-toggle', 'origin': origin_vs, 'namespace': ns_vs}
+                meta_parts = []
+                if meta_vs.get('organism'):
+                    meta_parts.append(f"Organism: {meta_vs.get('organism')}")
+                if meta_vs.get('validation') is not None:
+                    meta_parts.append(f"Validation: {'on' if meta_vs.get('validation') else 'off'}")
+                srcs = meta_vs.get('sources') or []
+                if srcs:
+                    meta_parts.append(f"Sources: {', '.join(srcs)}")
+                thr = meta_vs.get('threshold')
+                if thr is not None:
+                    meta_parts.append(f"P-threshold: {thr}")
+                opts = meta_vs.get('options') or {}
+                if opts:
+                    label_map = {
+                        'project_to_human': 'Project to Human',
+                        'include_disease': 'Include Disease',
+                        'interactors': 'Include Interactors',
+                        'projection': 'Project to Human'
+                    }
+                    enabled_opts = [label_map.get(k, k) for k, v in opts.items() if v]
+                    if enabled_opts:
+                        meta_parts.append(f"Options: {', '.join(enabled_opts)}")
+                meta_text = " | ".join(meta_parts)
                 converted_sections.append(
-                    dbc.Alert(
+                    dbc.Card(
                         [
-                            html.Div([
-                                html.Strong(f"Validated genes ({origin_vs}, {ns_vs})", className="me-2"),
-                                html.Small(f"({len(genes_vs)} genes)", className="text-muted")
-                            ], className="mb-1"),
-                            html.P(', '.join(genes_vs[:50]) + (" ..." if len(genes_vs) > 50 else ""), className="small mb-0")
-                        ],
-                        color="light",
-                        className="py-2 px-3 mt-3 border border-info border-2"
+                            dbc.CardHeader(
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                dbc.Badge(origin_vs, color=origin_color, className="me-2"),
+                                                html.Small(f"{len(genes_vs)} genes", className="text-muted")
+                                            ],
+                        className="d-flex align-items-center me-2",
+                        style={'width': '180px', 'flexShrink': 0}
+                    ),
+                    html.Div(
+                        dbc.Badge(ns_vs, color="secondary"),
+                        className="d-flex align-items-center me-2",
+                        style={'width': '140px', 'flexShrink': 0}
+                    ),
+                    html.Div(" | ".join(sample_genes) + (" ..." if rest_genes else ""), className="small text-muted flex-grow-1", style={'minWidth': 0}),
+                    html.Div(
+                        dbc.Button("Show more", id=toggle_id, color="link", size="sm", className="p-0"),
+                        style={'width': '90px', 'textAlign': 'center'}
+                    ),
+                    html.Div(
+                        dbc.Checklist(
+                            options=[{"label": "Include in export", "value": "include"}],
+                            value=["include"],
+                            switch=True,
+                            className="ms-2"
+                        ),
+                        style={'width': '140px', 'textAlign': 'right'}
                     )
+                ],
+                className="d-flex align-items-center flex-wrap gap-2"
+            ),
+            className="py-2 px-2"
+        ),
+        dbc.Collapse(
+            html.Div(
+                html.P(', '.join(genes_vs), className="small mb-0"),
+                className="px-3 pb-2"
+            ),
+            id=collapse_id,
+            is_open=False
+        )
+    ],
+    className="mb-2 border-0 bg-light"
+)
                 )
         elif converted_genes:
+            sample_genes = converted_genes[:5]
+            rest_genes = converted_genes[5:]
+            collapse_id = {'type': 'validated-collapse', 'origin': 'validated', 'namespace': 'default'}
+            toggle_id = {'type': 'validated-toggle', 'origin': 'validated', 'namespace': 'default'}
             converted_sections.append(
-                dbc.Alert(
+                dbc.Card(
                     [
-                        html.Div([
-                            html.Strong("Validated/converted genes", className="me-2"),
-                            html.Small(f"({len(converted_genes)} genes)", className="text-muted")
-                        ], className="mb-1"),
-                        html.P(', '.join(converted_genes[:50]) + (" ..." if len(converted_genes) > 50 else ""), className="small mb-0")
+                        dbc.CardHeader(
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            dbc.Badge("validated", color="info", className="me-2"),
+                                            html.Small(f"{len(converted_genes)} genes", className="text-muted")
+                                        ],
+                                        className="d-flex align-items-center me-2",
+                                        style={'width': '180px', 'flexShrink': 0}
+                                    ),
+                                    html.Div(
+                                        dbc.Badge("default", color="secondary"),
+                                        className="d-flex align-items-center me-2",
+                                        style={'width': '140px', 'flexShrink': 0}
+                                    ),
+                                    html.Div(" | ".join(sample_genes) + (" ..." if rest_genes else ""), className="small text-muted flex-grow-1", style={'minWidth': 0}),
+                                    html.Div(
+                                        dbc.Button("Show more", id=toggle_id, color="link", size="sm", className="p-0"),
+                                        style={'width': '90px', 'textAlign': 'center'}
+                                    ),
+                                    html.Div(
+                                        dbc.Checklist(
+                                            options=[{"label": "Include in export", "value": "include"}],
+                                            value=["include"],
+                                            switch=True,
+                                            className="ms-2"
+                                        ),
+                                        style={'width': '140px', 'textAlign': 'right'}
+                                    )
+                                ],
+                                className="d-flex align-items-center flex-wrap gap-2"
+                            ),
+                            className="py-2 px-2"
+                        ),
+                        dbc.Collapse(
+                            html.Div(
+                                html.P(', '.join(converted_genes), className="small mb-0"),
+                                className="px-3 pb-2"
+                            ),
+                            id=collapse_id,
+                            is_open=False
+                        )
                     ],
-                    color="light",
-                    className="py-2 px-3 mt-3 border border-info border-2"
+                    className="mb-2 border-0 bg-light"
                 )
             )
 
@@ -235,6 +359,43 @@ def register_export_callbacks(app):
         ]
         for section in converted_sections:
             detail_children.append(section)
+
+        # Meta de análisis (gprofiler / reactome) siempre visible
+        if analysis_meta:
+            meta_rows = []
+            for am in analysis_meta:
+                origin = am.get('origin', 'analysis')
+                org = am.get('organism') or ''
+                ns = am.get('namespace') or ''
+                val = am.get('validation')
+                val_txt = "on" if val else "off" if val is not None else "n/a"
+                sources = ", ".join(am.get('sources') or [])
+                opts = am.get('options') or {}
+                opt_labels = {
+                    'project_to_human': 'Project to Human',
+                    'include_disease': 'Include Disease',
+                    'interactors': 'Include Interactors'
+                }
+                enabled_opts = ", ".join([opt_labels.get(k, k) for k, v in opts.items() if v])
+                meta_rows.append(
+                    html.Div([
+                        html.Strong(origin, className="me-2"),
+                        html.Span(f"Organism: {org}", className="me-3"),
+                        html.Span(f"Namespace: {ns}", className="me-3"),
+                        html.Span(f"Validation: {val_txt}", className="me-3"),
+                        html.Span(f"Sources: {sources}", className="me-3") if sources else None,
+                        html.Span(f"Options: {enabled_opts}", className="me-3") if enabled_opts else None
+                    ], className="small text-muted mb-1")
+                )
+            detail_children.append(
+                dbc.Card(
+                    dbc.CardBody([
+                        html.H6("Analysis settings", className="fw-bold mb-2"),
+                        *meta_rows
+                    ]),
+                    className="border-0 bg-light mb-2"
+                )
+            )
 
         detail = dbc.Card([dbc.CardBody(detail_children)], className="border-0 shadow-sm")
 
@@ -420,6 +581,18 @@ def register_export_callbacks(app):
         attachments_preview = att_cards if att_cards else dbc.Alert("No attachments for this item.", color="light", className="small")
 
         return detail, attachments_preview, comment
+
+    # Toggle para listas validadas (show more)
+    @app.callback(
+        Output({'type': 'validated-collapse', 'origin': MATCH, 'namespace': MATCH}, 'is_open'),
+        Input({'type': 'validated-toggle', 'origin': MATCH, 'namespace': MATCH}, 'n_clicks'),
+        State({'type': 'validated-collapse', 'origin': MATCH, 'namespace': MATCH}, 'is_open'),
+        prevent_initial_call=True
+    )
+    def toggle_validated_collapse(n_clicks, is_open):
+        if not n_clicks:
+            raise PreventUpdate
+        return not is_open
 
     # Auto-guardado de comentario de adjuntos al salir o confirmar (debounce)
     @app.callback(

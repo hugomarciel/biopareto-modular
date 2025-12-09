@@ -611,6 +611,18 @@ def register_enrichment_callbacks(app):
                     selected_indices.add(values[0])
         
         selected_indices_list = sorted(list(selected_indices))
+
+        # Forzar selecciÇün ÚNICA: usar solo el checkbox que disparÇü el callback
+        try:
+            trigger_id = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])
+            idx = trigger_id.get('index')
+            triggered_value = ctx.triggered[0].get('value', None)
+            if triggered_value is None and list_of_checkbox_values is not None and idx is not None and 0 <= idx < len(list_of_checkbox_values):
+                triggered_value = list_of_checkbox_values[idx]
+            if idx is not None:
+                selected_indices_list = [idx] if triggered_value else []
+        except Exception:
+            pass
         
         # ESCENARIO 1: NO HAY SELECCIÓN
         if not selected_indices_list:
@@ -836,13 +848,33 @@ def register_enrichment_callbacks(app):
                 it_copy = dict(updated_items[idx])
                 data_copy = dict(it_copy.get('data', {}))
                 validated_sets = list(data_copy.get('validated_sets', []))
+                analysis_meta = list(data_copy.get('analysis_meta', []))
                 ns = target_namespace or 'default'
-                exists = any(vs.get('origin') == 'gprofiler' and vs.get('namespace') == ns for vs in validated_sets)
-                if not exists:
-                    validated_sets.append({'origin': 'gprofiler', 'namespace': ns, 'genes': clean_gene_list})
+                # Solo conservar la primera conversi�n por namespace (sin importar origen)
+                exists_ns = any((vs.get('namespace') == ns) for vs in validated_sets)
+                if not exists_ns:
+                    meta = {
+                        'origin': 'gprofiler',
+                        'organism': organism,
+                        'namespace': ns,
+                        'validation': bool(use_validation),
+                        'sources': selected_sources or [],
+                        'threshold': None  # el umbral se aplica en display, aquí no disponible
+                    }
+                    validated_sets.append({'origin': 'gprofiler', 'namespace': ns, 'genes': clean_gene_list, 'meta': meta})
+                analysis_meta = [m for m in analysis_meta if not (m.get('origin') == 'gprofiler' and m.get('namespace') == ns)]
+                analysis_meta.append({
+                    'origin': 'gprofiler',
+                    'organism': organism,
+                    'namespace': ns,
+                    'validation': bool(use_validation),
+                    'sources': selected_sources or [],
+                    'threshold': None
+                })
                 if 'validated_genes' not in data_copy:
                     data_copy['validated_genes'] = clean_gene_list
                 data_copy['validated_sets'] = validated_sets
+                data_copy['analysis_meta'] = analysis_meta
                 it_copy['data'] = data_copy
                 updated_items[idx] = it_copy
 
@@ -1149,13 +1181,39 @@ def register_enrichment_callbacks(app):
                         it_copy = dict(updated_items[idx])
                         data_copy = dict(it_copy.get('data', {}))
                         validated_sets = list(data_copy.get('validated_sets', []))
+                        analysis_meta = list(data_copy.get('analysis_meta', []))
                         ns = target_namespace or 'default'
-                        exists = any(vs.get('origin') == 'reactome' and vs.get('namespace') == ns for vs in validated_sets)
-                        if not exists:
-                            validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean})
+                        # Solo conservar la primera conversi�n por namespace
+                        exists_ns = any((vs.get('namespace') == ns) for vs in validated_sets)
+                        if not exists_ns:
+                            meta = {
+                                'origin': 'reactome',
+                                'organism': organism_name,
+                                'namespace': ns,
+                                'validation': bool(use_validation),
+                                'options': {
+                                    'project_to_human': projection,
+                                    'include_disease': include_disease,
+                                    'interactors': interactors
+                                }
+                            }
+                            validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean, 'meta': meta})
+                        analysis_meta = [m for m in analysis_meta if not (m.get('origin') == 'reactome' and m.get('namespace') == ns)]
+                        analysis_meta.append({
+                            'origin': 'reactome',
+                            'organism': organism_name,
+                            'namespace': ns,
+                            'validation': bool(use_validation),
+                            'options': {
+                                'project_to_human': projection,
+                                'include_disease': include_disease,
+                                'interactors': interactors
+                            }
+                        })
                         if 'validated_genes' not in data_copy:
                             data_copy['validated_genes'] = clean
                         data_copy['validated_sets'] = validated_sets
+                        data_copy['analysis_meta'] = analysis_meta
                         it_copy['data'] = data_copy
                         updated_items[idx] = it_copy
 
