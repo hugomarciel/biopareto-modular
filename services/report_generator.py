@@ -400,29 +400,10 @@ def generate_item_pdf(item):
 
     # Adjuntos (incluye tablas renderizadas)
     if attachments:
-        story.append(Paragraph("Attachments", styles['ItemHeading']))
-        att_rows = [["Name", "Type", "Source", "Comment"]]
+        # Render de tablas (primeros 50 registros, ya vienen en payload) e imágenes
         for att in attachments:
-            att_rows.append([
-                att.get('name', att.get('type', 'Attachment')),
-                att.get('type', ''),
-                att.get('source', ''),
-                att.get('comment', '') or ''
-            ])
-        att_tbl = Table(att_rows, colWidths=[2.5 * inch, 1.2 * inch, 1.5 * inch, 4.0 * inch])
-        att_tbl.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ]))
-        story.append(att_tbl)
-        story.append(Spacer(1, 0.15 * inch))
-
-        # Render de tablas (primeros 50 registros, ya vienen en payload)
-        for att in attachments:
-            if att.get('type') == 'table':
+            att_type = att.get('type')
+            if att_type == 'table':
                 payload = att.get('payload') or {}
                 cols = payload.get('columns') or []
                 rows = payload.get('rows') or []
@@ -451,7 +432,10 @@ def generate_item_pdf(item):
                     for c in cols:
                         row_vals.append(wrap_cell(r.get(c, "")))
                     table_data.append(row_vals)
+                # Cabecera del adjunto con título y comentario
                 story.append(Paragraph(att.get('name', 'Table'), styles['ItemHeading']))
+                if att.get('comment'):
+                    story.append(Paragraph(att.get('comment'), styles['ItemText']))
 
                 # Ajustar anchos segĂşn nombre de columna para evitar desbordes
                 def _compute_col_widths(columns, total_width=10 * inch):
@@ -494,6 +478,29 @@ def generate_item_pdf(item):
                 ]))
                 story.append(tbl)
                 story.append(Spacer(1, 0.2 * inch))
+            elif att_type in ['manhattan', 'heatmap', 'pathway'] or (att.get('payload') or {}).get('image') or (att.get('payload') or {}).get('image_url'):
+                payload = att.get('payload') or {}
+                img_b64 = payload.get('image') or payload.get('image_url')
+                if not img_b64:
+                    continue
+                story.append(PageBreak())
+                story.append(Paragraph(att.get('name', att_type.title()), styles['ItemHeading']))
+                if att.get('comment'):
+                    story.append(Paragraph(att.get('comment'), styles['ItemText']))
+                try:
+                    # limpiar prefijo data URI si existe
+                    if img_b64.startswith('data:image'):
+                        img_b64 = img_b64.split(',', 1)[1]
+                    img_bytes = base64.b64decode(img_b64)
+                    img_buf = BytesIO(img_bytes)
+                    img = Image(img_buf)
+                    img._restrictSize(9 * inch, 6 * inch)
+                    story.append(img)
+                    link_url = payload.get('link_url')
+                    if link_url:
+                        story.append(Paragraph(link_url, styles['ItemText']))
+                except Exception:
+                    story.append(Paragraph("Image could not be rendered.", styles['ItemText']))
     else:
         story.append(Paragraph("No attachments for this item.", styles['ItemText']))
 
