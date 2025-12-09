@@ -584,7 +584,7 @@ def create_enrichment_tab_modified():
         placement="right",
     )
 
-    return dbc.Container([
+    enrichment_content = dbc.Container([
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -646,3 +646,16 @@ def create_enrichment_tab_modified():
             ], width=12),
         ])
     ], fluid=True, className="py-3")
+
+    # Placeholder oculto para asegurar presencia del ID en el layout
+    hidden_reactome_table = html.Div(
+        dash_table.DataTable(
+            id='enrichment-results-table-reactome',
+            data=[],
+            columns=[],
+            style_table={'display': 'none'}
+        ),
+        style={'display': 'none'}
+    )
+
+    return html.Div([enrichment_content, hidden_reactome_table])

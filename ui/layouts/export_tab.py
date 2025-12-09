@@ -1,10 +1,10 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html, dcc, dash_table
 
 
 def create_export_tab():
     """Create export tab layout."""
-    return dbc.Container([
+    layout = dbc.Container([
         # Selector de items
         dbc.Row([
             dbc.Col([
@@ -185,3 +185,16 @@ def create_export_tab():
             ], width=12)
         ])
     ], fluid=True)
+
+    # Placeholder oculto para asegurar presencia de IDs usados en callbacks (Reactome table)
+    hidden_placeholder = html.Div(
+        dash_table.DataTable(
+            id='enrichment-results-table-reactome',
+            data=[],
+            columns=[],
+            style_table={'display': 'none'}
+        ),
+        style={'display': 'none'}
+    )
+
+    return html.Div([layout, hidden_placeholder])

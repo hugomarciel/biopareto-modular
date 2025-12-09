@@ -249,6 +249,7 @@ def _reactome_table_placeholder():
             id='enrichment-results-table-reactome',
             data=[],
             columns=[],
+            selected_rows=[],
             style_table={'display': 'none'}
         ),
         style={'display': 'none'}
@@ -549,7 +550,10 @@ app.layout = dbc.Container([
 ], fluid=True, style={'marginBottom': '50px'})
 
 # Validation layout para registrar todos los IDs y evitar errores de callback
-app.validation_layout = html.Div([app.layout, _reactome_table_placeholder()])
+app.validation_layout = html.Div([
+    app.layout,
+    _reactome_table_placeholder()
+])
 
 
 # -------------------------------------------------------------

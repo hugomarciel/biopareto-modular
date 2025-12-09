@@ -621,16 +621,17 @@ def register_export_callbacks(app):
             raise PreventUpdate
         return not is_open
 
-    # Auto-guardado de comentario de adjuntos al salir o confirmar (debounce)
+    # Guardado de comentario de adjuntos al perder foco
     @app.callback(
         Output('interest-panel-store', 'data', allow_duplicate=True),
-        Input({'type': 'export-attachment-comment', 'att_id': ALL}, 'value'),
+        Input({'type': 'export-attachment-comment', 'att_id': ALL}, 'n_blur'),
+        State({'type': 'export-attachment-comment', 'att_id': ALL}, 'value'),
         State({'type': 'export-attachment-comment', 'att_id': ALL}, 'id'),
         State('export-selected-indices-store', 'data'),
         State('interest-panel-store', 'data'),
         prevent_initial_call=True
     )
-    def autosave_attachment_comment(values, id_list, selected_indices, items):
+    def autosave_attachment_comment(n_blur_list, values, id_list, selected_indices, items):
         ctx = dash.callback_context
         if items is None or not selected_indices:
             raise PreventUpdate
