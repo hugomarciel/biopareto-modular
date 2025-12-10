@@ -1,6 +1,7 @@
 # services/report_generator.py
 
 import io
+import os
 from io import BytesIO
 import json
 import pandas as pd
@@ -11,7 +12,7 @@ from datetime import datetime
 
 # Imports para PDF ReportLab
 from reportlab.lib.pagesizes import letter, A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak, Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -133,6 +134,7 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
     """
     Generates a full PDF report incorporating plots and data.
     """
+    print("[PDF] generate_pdf_report: start")
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=inch/2, leftMargin=inch/2, topMargin=inch/2, bottomMargin=inch/2)
     styles = getSampleStyleSheet()
@@ -144,6 +146,35 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
     styles.add(ParagraphStyle(name='Heading2', fontName='Helvetica-Bold', fontSize=12, spaceAfter=8, leftIndent=10, textColor=colors.blue))
     styles.add(ParagraphStyle(name='Normal', fontName='Helvetica', fontSize=10, spaceAfter=6, leftIndent=10))
     styles.add(ParagraphStyle(name='Small', fontName='Helvetica', fontSize=8, spaceAfter=4, leftIndent=10))
+
+    # Logo helpers (watermark-style en esquina superior derecha)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "bioparetologoFblanco.png"))
+    if not os.path.exists(logo_path):
+        logger.warning("PDF logo not found at %s", logo_path)
+        print(f"[PDF] Logo not found at {logo_path}")
+        logo_path = None
+    else:
+        logger.info("PDF logo found at %s", logo_path)
+        print(f"[PDF] Logo found at {logo_path}")
+
+    def draw_logo(canvas_obj, doc_obj):
+        if not logo_path:
+            return
+        try:
+            logo_w = 2.2 * inch
+            logo_h = 1.0 * inch
+            x_pos = doc_obj.pagesize[0] - doc_obj.rightMargin - logo_w
+            y_pos = doc_obj.pagesize[1] - doc_obj.topMargin - logo_h + 0.1 * inch
+            canvas_obj.drawImage(logo_path, x_pos, y_pos, width=logo_w, height=logo_h,
+                                 preserveAspectRatio=True, mask='auto')
+            print(f"[PDF] Logo drawn at x={x_pos:.1f}, y={y_pos:.1f}")
+        except Exception as exc:
+            logger.exception("PDF logo draw failed: %s", exc)
+            print(f"[PDF] Logo draw failed: {exc}")
+
+    def add_pagebreak():
+        story.append(PageBreak())
 
 
     # --- Título ---
@@ -210,7 +241,7 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
 
     
     # --- Sección 3: Gene Frequency Analysis ---
-    story.append(PageBreak())
+    add_pagebreak()
     story.append(Paragraph("3. Gene Frequency Analysis", styles['Heading1']))
     
     if all_solutions:
@@ -242,7 +273,7 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
     
     # --- Sección 4: Enrichment Analysis Results (if provided) ---
     if enrichment_data:
-        story.append(PageBreak())
+        add_pagebreak()
         story.append(Paragraph("4. Biological Enrichment Analysis (g:Profiler)", styles['Heading1']))
         
         df = pd.DataFrame(enrichment_data)
@@ -277,7 +308,9 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
             
             
     # --- Final Build ---
-    doc.build(story)
+    # Solo dibujar el logo en la primera página
+    doc.build(story, onFirstPage=draw_logo)
+    print("[PDF] generate_pdf_report: end")
     buffer.seek(0)
     return buffer
 
@@ -304,6 +337,26 @@ def generate_item_pdf(item):
     styles.add(ParagraphStyle(name='ItemText', fontName='Helvetica', fontSize=10, spaceAfter=4))
 
     story = []
+
+    # Logo helpers para item PDF (canvas)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "bioparetologoFblanco.png"))
+
+    def draw_item_logo(canvas_obj, doc_obj):
+        if not logo_path or not os.path.exists(logo_path):
+            return
+        try:
+            logo_w = 2.2 * inch
+            logo_h = 1.0 * inch
+            x_pos = doc_obj.pagesize[0] - doc_obj.rightMargin - logo_w
+            y_pos = doc_obj.pagesize[1] - doc_obj.topMargin - logo_h + 0.1 * inch
+            canvas_obj.saveState()
+            canvas_obj.drawImage(logo_path, x_pos, y_pos, width=logo_w, height=logo_h, preserveAspectRatio=True, mask='auto')
+            canvas_obj.restoreState()
+            print(f"[PDF] Item logo drawn at x={x_pos:.1f}, y={y_pos:.1f}")
+        except Exception as exc:
+            logger.exception("PDF item logo draw failed: %s", exc)
+            print(f"[PDF] Item logo draw failed: {exc}")
 
     name = item.get('name', 'Item')
     item_type = item.get('type', 'Unknown')
@@ -516,7 +569,7 @@ def generate_item_pdf(item):
     else:
         story.append(Paragraph("No attachments for this item.", styles['ItemText']))
 
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_item_logo)
     buffer.seek(0)
     return buffer
 

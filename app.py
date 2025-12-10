@@ -205,10 +205,13 @@ def create_navbar():
             dbc.Row(
                 [
                     dbc.Col(
-                        [
-                            html.Img(src="/assets/logo.png", height="60px", className="me-2") if True else None,
-                            dbc.NavbarBrand("🧬 BioPareto Analyzer", className="ms-2", style={"fontSize": "2.0rem", "fontWeight": "bold"})
-                        ],
+                        html.Div(
+                            [
+                                html.Img(src="/assets/logo.png", height="60px", className="me-2"),
+                                html.Img(src="/assets/bioparetologo.png", height="75px")
+                            ],
+                            className="d-flex align-items-center"
+                        ),
                         width="auto"
                     ),
                     
@@ -1608,3 +1611,5 @@ if __name__ == '__main__':
 
     port = int(os.environ.get("PORT", 80))
     app.run(debug=True, host='0.0.0.0', port=port)
+
+
