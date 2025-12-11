@@ -189,10 +189,8 @@ def create_gprofiler_layout(organism_options):
         # Results Table Container (Generated in Callback) + Attach button (English) near the table
         dbc.Row([
             dbc.Col([
-                html.Div(
-                    dbc.Button("Attach Table", id="attach-gprofiler-table-btn", color="primary", outline=True, size="sm", className="mb-2"),
-                    className="d-flex justify-content-end"
-                ),
+                # Placeholder oculto para asegurar que el ID exista siempre y evitar errores de Dash
+                dbc.Button("Attach Table", id="attach-gprofiler-table-btn", color="primary", outline=True, size="sm", style={"display": "none"}),
                 dcc.Loading(html.Div(id="gprofiler-results-content"), type="default"),
             ])
         ]),
@@ -203,15 +201,17 @@ def create_gprofiler_layout(organism_options):
         dbc.Card([
             dbc.CardHeader([
                 html.Div([
-                    html.I(className="bi bi-graph-up me-2"),
-                    html.H6("Manhattan Plot: Functional Enrichment", className="d-inline-block m-0 fw-bold"),
-                    dbc.Button("Capture Manhattan", id="attach-gprofiler-manhattan-btn", color="secondary", outline=True, size="sm", className="ms-3"),
-                    html.I(
-                        id="manhattan-help-icon",
-                        className="bi bi-question-circle-fill text-muted ms-2",
-                        style={'cursor': 'pointer', 'fontSize': '1rem'}
-                    )
-                ], className="d-flex align-items-center text-primary")
+                    html.Div([
+                        html.I(className="bi bi-graph-up me-2"),
+                        html.H6("Manhattan Plot: Functional Enrichment", className="d-inline-block m-0 fw-bold"),
+                        html.I(
+                            id="manhattan-help-icon",
+                            className="bi bi-question-circle-fill text-muted ms-2",
+                            style={'cursor': 'pointer', 'fontSize': '1rem'}
+                        )
+                    ], className="d-flex align-items-center text-primary"),
+                    dbc.Button("Capture Manhattan", id="attach-gprofiler-manhattan-btn", color="secondary", outline=True, size="sm")
+                ], className="d-flex align-items-center justify-content-between")
             ], className="bg-white border-bottom"),
             
             dbc.CardBody([
@@ -244,15 +244,17 @@ def create_gprofiler_layout(organism_options):
         dbc.Card([
             dbc.CardHeader([
                 html.Div([
-                    html.I(className="bi bi-grid-3x3-gap-fill me-2"),
-                    html.H6("Functional Clustergram", className="d-inline-block m-0 fw-bold"),
-                    dbc.Button("Capture Heatmap", id="attach-gprofiler-heatmap-btn", color="info", outline=True, size="sm", className="ms-3"),
-                    html.I(
-                        id="clustergram-help-icon",
-                        className="bi bi-question-circle-fill text-muted ms-2",
-                        style={'cursor': 'pointer', 'fontSize': '1rem'}
-                    )
-                ], className="d-flex align-items-center text-primary")
+                    html.Div([
+                        html.I(className="bi bi-grid-3x3-gap-fill me-2"),
+                        html.H6("Functional Clustergram", className="d-inline-block m-0 fw-bold"),
+                        html.I(
+                            id="clustergram-help-icon",
+                            className="bi bi-question-circle-fill text-muted ms-2",
+                            style={'cursor': 'pointer', 'fontSize': '1rem'}
+                        )
+                    ], className="d-flex align-items-center text-primary"),
+                    dbc.Button("Capture Heatmap", id="attach-gprofiler-heatmap-btn", color="info", outline=True, size="sm")
+                ], className="d-flex align-items-center justify-content-between")
             ], className="bg-white border-bottom"),
 
             dbc.CardBody([
@@ -455,10 +457,7 @@ def create_reactome_layout(organism_options):
         # Botón de adjuntar tabla Reactome (alineado a la derecha)
         dbc.Row([
             dbc.Col(
-                html.Div(
-                    dbc.Button("Attach Table", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="mb-2"),
-                    className="d-flex justify-content-end"
-                ),
+                dbc.Button("Attach Table", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", style={"display": "none"}),
                 width=12
             )
         ]),
@@ -479,29 +478,31 @@ def create_reactome_layout(organism_options):
         
         dbc.Row([
             dbc.Col([
-                dbc.Card([
+                    dbc.Card([
                     dbc.CardHeader([
                         html.Div([
-                            html.I(className="bi bi-diagram-3-fill me-2"),
-                            html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
-                            dbc.Button("Capture Pathway", id="attach-reactome-pathway-btn",
-                                       color="secondary", outline=True, size="sm", className="ms-3"),
-                            html.I(
-                                id="reactome-vis-help-icon",
-                                className="bi bi-question-circle-fill text-muted ms-2",
-                                style={'cursor': 'pointer', 'fontSize': '1rem'}
-                            ),
-                            html.Div(
-                                dcc.Loading(
-                                    id="loading-reactome-diagram-spinner", 
-                                    children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
-                                    type="circle",
-                                    color="#ffc107",
+                            html.Div([
+                                html.I(className="bi bi-diagram-3-fill me-2"),
+                                html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
+                                html.I(
+                                    id="reactome-vis-help-icon",
+                                    className="bi bi-question-circle-fill text-muted ms-2",
+                                    style={'cursor': 'pointer', 'fontSize': '1rem'}
                                 ),
-                                className="ms-3 d-flex align-items-center justify-content-center",
-                                style={'height': '20px', 'width': '20px'}
-                            )
-                        ], className="d-flex align-items-center text-primary")
+                                html.Div(
+                                    dcc.Loading(
+                                        id="loading-reactome-diagram-spinner", 
+                                        children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
+                                        type="circle",
+                                        color="#ffc107",
+                                    ),
+                                    className="ms-3 d-flex align-items-center justify-content-center",
+                                    style={'height': '20px', 'width': '20px'}
+                                )
+                            ], className="d-flex align-items-center text-primary"),
+                            dbc.Button("Capture Pathway", id="attach-reactome-pathway-btn",
+                                       color="secondary", outline=True, size="sm")
+                        ], className="d-flex align-items-center justify-content-between")
                     ], className="bg-white border-bottom"),
                     
                     dbc.CardBody([

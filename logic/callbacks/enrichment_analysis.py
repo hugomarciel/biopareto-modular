@@ -1,4 +1,4 @@
-# logic/callbacks/enrichment_analysis.py
+﻿# logic/callbacks/enrichment_analysis.py
 
 """
 Módulo de Callbacks para la Pestaña de Análisis de Enriquecimiento.
@@ -1074,6 +1074,40 @@ def register_enrichment_callbacks(app):
                 tooltip_duration=None,
             )
         ]
+
+        # Reasignamos para separar el panel de resumen y dar título propio a la tabla con el botón de adjuntar
+        table_header = html.Div([
+            html.Div([
+                html.H5("g:Profiler Results Table", className="fw-bold m-0 text-dark"),
+                html.I(id="gprofiler-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+            ], className="d-flex align-items-center"),
+            dbc.Button("Attach Table", id="attach-gprofiler-table-btn", color="primary", outline=True, size="sm", className="ms-3")
+        ], className="d-flex align-items-center justify-content-between mb-2")
+
+        results_content = [
+            table_help_popover,
+            dbc.Card(dbc.CardBody(summary_content), className="mb-3 shadow-sm border-light bg-light", style={'whiteSpace': 'pre-line'}),
+            table_header,
+            dash_table.DataTable(
+                id='enrichment-results-table-gprofiler',
+                data=display_df.to_dict('records'),
+                columns=display_columns,
+                hidden_columns=hidden_cols,
+                sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
+                style_table={'overflowX': 'auto', 'minWidth': '100%'},
+                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal', 'height': 'auto'},
+                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
+                style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '0.9rem', 'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                style_cell_conditional=[
+                    {'if': {'column_id': 'term_name'}, 'width': '20%', 'minWidth': '120px'},
+                    {'if': {'column_id': 'description'}, 'width': '35%', 'minWidth': '200px'},
+                    {'if': {'column_id': 'p_value'}, 'width': '10%', 'textAlign': 'center'},
+                    {'if': {'column_id': 'intersection_size'}, 'width': '8%', 'textAlign': 'center'},
+                ],
+                tooltip_duration=None,
+            )
+        ]
         
         if not display_df.empty:
             return html.Div(results_content), False, manhattan_fig
@@ -1355,45 +1389,48 @@ def register_enrichment_callbacks(app):
             id="reactome-table-help", target="reactome-table-help-icon", trigger="legacy", placement="left"
         )
 
-        # --- Results Content ---
-        results_content = [
+                # --- Results Content ---
+        table_header = html.Div([
             html.Div([
-                html.Div([
-                    html.H5("Reactome Enrichment Results", className="fw-bold m-0 text-dark"),
-                    html.I(id="reactome-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
-                ], className="d-flex align-items-center mb-3"),
-                table_help_popover
-            ]),
-            
-            dbc.Card(dbc.CardBody(summary_content), className="mb-3 shadow-sm border-light bg-light", style={'whiteSpace': 'pre-line'}),
-            
+                html.H5("Reactome Results Table", className="fw-bold m-0 text-dark"),
+                html.I(id="reactome-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2",
+                       style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+            ], className="d-flex align-items-center"),
+            dbc.Button("Attach Table", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="ms-3")
+        ], className="d-flex align-items-center justify-content-between mb-2")
+
+        results_content = [
+            table_help_popover,
+            dbc.Card(dbc.CardBody(summary_content), className="mb-3 shadow-sm border-light bg-light",
+                     style={'whiteSpace': 'pre-line'}),
+            table_header,
             dash_table.DataTable(
-                id='enrichment-results-table-reactome', 
-                data=display_df.to_dict('records'), 
+                id='enrichment-results-table-reactome',
+                data=display_df.to_dict('records'),
                 columns=display_columns,
-                hidden_columns=hidden_cols, 
+                hidden_columns=hidden_cols,
                 row_selectable='single', selected_rows=[],
                 sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=10,
-                style_table={'overflowX': 'auto', 'minWidth': '100%'}, 
-                
-                # --- ESTILOS ACTUALIZADOS PARA MULTILÍNEA ---
-                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold', 'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal', 'height': 'auto', 'padding': '10px 8px'},
-                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)', 'fontWeight': 'bold', 'color': '#333'},
-                
-                # 💡 CLAVE: whiteSpace: normal para permitir saltos de línea
-                style_cell={'textAlign': 'center', 'padding': '8px', 'fontSize': '0.9rem', 'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
-                
+                style_table={'overflowX': 'auto', 'minWidth': '100%'},
+                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold',
+                              'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal',
+                              'height': 'auto', 'padding': '10px 8px'},
+                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)',
+                              'fontWeight': 'bold', 'color': '#333'},
+                style_cell={'textAlign': 'center', 'padding': '8px', 'fontSize': '0.9rem',
+                            'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
                 style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
-                
                 style_cell_conditional=[
                     {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
                     {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '80px'},
                     {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '80px'},
                 ],
-                tooltip_data=[{'description': {'value': row['description'], 'type': 'text'}} for row in display_df.to_dict('records')],
+                tooltip_data=[{'description': {'value': row['description'], 'type': 'text'}}
+                              for row in display_df.to_dict('records')],
                 tooltip_duration=None,
             )
         ]
+
         
         # RETORNO FINAL CORREGIDO
         logger.info(f"[Reactome][Display] rendering table rows={len(display_df)}, columns={len(display_columns)}")
