@@ -715,9 +715,10 @@ def register_export_callbacks(app):
     @app.callback(
         Output('export-selected-indices-store', 'data'),
         Input({'type': 'export-card-checkbox', 'index': ALL}, 'value'),
+        State('export-selected-indices-store', 'data'),
         prevent_initial_call=True
     )
-    def enforce_single_selection(checkbox_values):
+    def enforce_single_selection(checkbox_values, prev_selected):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
@@ -735,6 +736,12 @@ def register_export_callbacks(app):
         triggered_value = ctx.triggered[0].get('value', None)
         if triggered_value is None and 0 <= idx < len(checkbox_values):
             triggered_value = checkbox_values[idx]
+
+        # Si el render inicial llega con None/[] pero ya había selección previa, la preservamos.
+        if (triggered_value is None or triggered_value == []) and prev_selected:
+            valid_prev = [i for i in prev_selected if isinstance(i, int)]
+            if valid_prev:
+                return valid_prev
 
         if triggered_value:
             return [idx]

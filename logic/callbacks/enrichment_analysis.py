@@ -395,8 +395,19 @@ def register_enrichment_callbacks(app):
         if not ctx.triggered:
             raise PreventUpdate
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        logger.info(f"[Enrichment][Selection] trigger={trigger_id} active_tab={active_tab} selected_indices={selected_indices_list} items_count={len(items) if items else 0}")
-        
+        logger.info(f"[Enrichment][Selection] trigger={trigger_id} active_tab={active_tab} incoming_sel={selected_indices_list} items_count={len(items) if items else 0}")
+
+        # Si hay re-render de pestaña o interest panel y llega selección vacía,
+        # preservamos la selección previa (store) para evitar perder el estado visual.
+        # Solo limpiamos si no hay items.
+        if trigger_id in ['main-tabs', 'interest-panel-store'] and (selected_indices_list is None or selected_indices_list == []):
+            if items:
+                # Intentar recuperar la selección previa de un estado previo del store
+                prev_sel = dash.no_update
+                # No tenemos el valor previo directo aquí, así que simplemente no actualizamos.
+                logger.info("[Enrichment][Selection] preserving previous selection (empty incoming on tab/panel change)")
+                return dash.no_update, dash.no_update
+
         if trigger_id in ['interest-panel-store', 'enrichment-selected-indices-store'] or (trigger_id == 'main-tabs' and active_tab == 'enrichment-tab'):
             selected_item_ids = []
             if items:
@@ -604,6 +615,14 @@ def register_enrichment_callbacks(app):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
+
+        # Si el render llega sin checkboxes pero hay selección previa y items,
+        # no limpiamos para evitar que se borre al cambiar de pestaña.
+        if (not list_of_checkbox_values) and prev_selected and items:
+            valid_prev = [i for i in prev_selected if isinstance(i, int) and i < len(items)]
+            if valid_prev:
+                logger.info(f"[Enrichment][Selection] preserve prev selection on empty render: {valid_prev}")
+                raise PreventUpdate
         
         # Procesar índices seleccionados
         selected_indices = set()
