@@ -542,7 +542,8 @@ def create_reactome_layout(organism_options):
             ], width=12)
         ], className="g-4"),
         
-        dcc.Store(id='reactome-scroll-fix-dummy', data=0)
+        dcc.Store(id='reactome-scroll-fix-dummy', data=0),
+        dcc.Store(id='reactome-diagram-cache-store', data=None)
     ], className="mt-2")    
 
 def create_enrichment_tab_modified(): 

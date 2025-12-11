@@ -1440,7 +1440,8 @@ def register_enrichment_callbacks(app):
     # 6. Visualizar Diagrama Reactome
     @app.callback(
         [Output('reactome-diagram-output', 'children', allow_duplicate=True),
-         Output('reactome-diagram-spinner-output', 'children')], 
+         Output('reactome-diagram-spinner-output', 'children'),
+         Output('reactome-diagram-cache-store', 'data')], 
         Input('enrichment-results-table-reactome', 'selected_rows'), 
         State('enrichment-results-table-reactome', 'data'),
         State('reactome-results-store', 'data'),
@@ -1454,7 +1455,7 @@ def register_enrichment_callbacks(app):
         placeholder_alert = html.Div(dbc.Alert("Select a pathway from the table to visualize gene overlap.", color="secondary"), className="p-3")
 
         if not stored_results or stored_results.get('token') in [None, 'N/A', 'ERROR'] or stored_results.get('token').startswith('REF_'):
-            return placeholder_alert, None
+            return placeholder_alert, None, dash.no_update
 
         analysis_token = stored_results['token']
         selected_index = selected_rows[0]
@@ -1464,7 +1465,7 @@ def register_enrichment_callbacks(app):
         logger.info(f"[Reactome][Diagram] pathway selected idx={selected_index}, st_id={pathway_st_id}, name={pathway_name}")
 
         if not pathway_st_id:
-            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3"), None
+            return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3"), None, dash.no_update
         
         image_base64_string = ReactomeService.get_diagram_image_base64(
             pathway_st_id=pathway_st_id, 
@@ -1472,7 +1473,7 @@ def register_enrichment_callbacks(app):
         )
         
         if image_base64_string is None:
-            return html.Div(dbc.Alert("Error: Could not download the pathway diagram from Reactome.", color="danger"), className="p-3"), None
+            return html.Div(dbc.Alert("Error: Could not download the pathway diagram from Reactome.", color="danger"), className="p-3"), None, dash.no_update
 
         diagram_content = html.Div([
             html.H5(f"Pathway Visualization: {pathway_name}", className="mt-3"),
@@ -1490,7 +1491,13 @@ def register_enrichment_callbacks(app):
             html.P(html.Strong("Click the image to view the interactive diagram on Reactome.org"), className="text-center text-info small mt-2")
         ], className="mt-4 p-3 border rounded shadow-sm")
         
-        return diagram_content, None
+        logger.info(f"[Reactome][Diagram] caching image for st_id={pathway_st_id} (len={len(image_base64_string)})")
+        cache_payload = {
+            'st_id': pathway_st_id,
+            'name': pathway_name,
+            'image': image_base64_string
+        }
+        return diagram_content, None, cache_payload
 
             
     # 7.5. Ajuste de tabla
@@ -1566,7 +1573,8 @@ def register_enrichment_callbacks(app):
          Output('attachment-comment-input', 'value'),
          Output('attachment-saving-indicator', 'children', allow_duplicate=True),
          Output('attachment-confirm-modal', 'is_open', allow_duplicate=True),
-         Output('interest-panel-store', 'data', allow_duplicate=True)],
+         Output('interest-panel-store', 'data', allow_duplicate=True),
+         Output('reactome-diagram-cache-store', 'data', allow_duplicate=True)],
         [Input('attach-gprofiler-table-btn', 'n_clicks'),
          Input('attach-gprofiler-manhattan-btn', 'n_clicks'),
          Input('attach-gprofiler-heatmap-btn', 'n_clicks'),
@@ -1586,12 +1594,13 @@ def register_enrichment_callbacks(app):
          State('enrichment-results-table-reactome', 'data'),
          State('gprofiler-manhattan-plot', 'figure'),
          State('gprofiler-clustergram-graph', 'figure'),
-         State('attachment-image-store', 'data')],
+         State('attachment-image-store', 'data'),
+         State('reactome-diagram-cache-store', 'data')],
         prevent_initial_call=True
     )
     def handle_attachment_modal(table_click, manhattan_click, heatmap_click, react_table_click, react_pathway_click, cancel_click, submit_click,
                                 ctx_data, title_value, comment_value, gprof_results_store, reactome_store, threshold_value,
-                                selected_indices, items, react_selected_rows, react_table_data, manhattan_fig_state, heatmap_fig_state, image_store):
+                                selected_indices, items, react_selected_rows, react_table_data, manhattan_fig_state, heatmap_fig_state, image_store, reactome_diagram_cache):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
@@ -1605,6 +1614,7 @@ def register_enrichment_callbacks(app):
         saving = dash.no_update
         modal_open = dash.no_update
         updated_items = dash.no_update
+        new_cache_store = dash.no_update
 
         # Abrir modal según botón
         if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn', 'attach-reactome-table-btn', 'attach-reactome-pathway-btn']:
@@ -1634,13 +1644,13 @@ def register_enrichment_callbacks(app):
             new_comment = ''
             saving = None
             modal_open = True
-            return new_ctx, new_title, new_comment, saving, modal_open, dash.no_update
+            return new_ctx, new_title, new_comment, saving, modal_open, dash.no_update, new_cache_store
 
         # Cancelar modal
         if trigger_id == 'attachment-confirm-cancel':
             if not cancel_click:
                 raise PreventUpdate
-            return dash.no_update, dash.no_update, dash.no_update, None, False, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, None, False, dash.no_update, new_cache_store
 
         # Confirmar adjunto
         if trigger_id == 'attachment-confirm-submit':
@@ -1650,7 +1660,7 @@ def register_enrichment_callbacks(app):
             saving = dbc.Spinner(size="sm", color="primary")
             if not ctx_data or not selected_indices or not items:
                 warn = dbc.Alert("Select an item and generate results before attaching.", color="warning", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, warn, True, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update, warn, True, dash.no_update, new_cache_store
             ctx_type = ctx_data.get('type')
             if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap', 'reactome_table', 'reactome_pathway']:
                 raise PreventUpdate
@@ -1802,9 +1812,18 @@ def register_enrichment_callbacks(app):
                     token = reactome_store.get('token')
                     if not pathway_st_id or not token:
                         raise ValueError("Missing pathway identifier or Reactome token.")
-                    img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
-                    if img is None:
-                        raise ValueError("Unable to retrieve pathway image.")
+                    # Reutilizar imagen cacheada si coincide con el ST_ID; si no, descargarla.
+                    img = None
+                    if reactome_diagram_cache and reactome_diagram_cache.get('st_id') == pathway_st_id:
+                        img = reactome_diagram_cache.get('image')
+                        logger.info(f"[Reactome][Attach] cache hit for st_id={pathway_st_id} (len={len(img) if img else 0})")
+                        new_cache_store = None  # limpiar cache tras adjuntar
+                    if not img:
+                        logger.info(f"[Reactome][Attach] cache miss -> downloading st_id={pathway_st_id}")
+                        img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
+                        if img is None:
+                            raise ValueError("Unable to retrieve pathway image.")
+                        new_cache_store = None
                     att = {
                         'id': f"att_react_pathway_{timestamp_now}",
                         'type': 'pathway',
@@ -1833,11 +1852,11 @@ def register_enrichment_callbacks(app):
                     updated_items.append(it_copy)
 
                 spinner = dbc.Alert("Attachment saved.", color="success", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, spinner, False, updated_items
+                return dash.no_update, dash.no_update, dash.no_update, spinner, False, updated_items, new_cache_store
 
             except Exception as e:
                 err = dbc.Alert(f"Error al adjuntar: {e}", color="danger", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, err, True, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update, err, True, dash.no_update, new_cache_store
 
         raise PreventUpdate
 
