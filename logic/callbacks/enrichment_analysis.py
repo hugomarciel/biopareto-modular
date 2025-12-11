@@ -395,6 +395,7 @@ def register_enrichment_callbacks(app):
         if not ctx.triggered:
             raise PreventUpdate
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        logger.info(f"[Enrichment][Selection] trigger={trigger_id} active_tab={active_tab} selected_indices={selected_indices_list} items_count={len(items) if items else 0}")
         
         if trigger_id in ['interest-panel-store', 'enrichment-selected-indices-store'] or (trigger_id == 'main-tabs' and active_tab == 'enrichment-tab'):
             selected_item_ids = []
@@ -595,10 +596,11 @@ def register_enrichment_callbacks(app):
          # CAMBIO IMPORTANTE: Usamos 'is_open' en lugar de 'style' para controlar la visibilidad sin conflictos CSS
          Output('enrichment-empty-alert', 'is_open', allow_duplicate=True)],
         Input({'type': 'enrichment-card-checkbox', 'index': ALL}, 'value'), 
-        State('interest-panel-store', 'data'),
+        [State('interest-panel-store', 'data'),
+         State('enrichment-selected-indices-store', 'data')],
         prevent_initial_call=True
     )
-    def update_enrichment_selection(list_of_checkbox_values, items):
+    def update_enrichment_selection(list_of_checkbox_values, items, prev_selected):
         ctx = dash.callback_context
         if not ctx.triggered:
             raise PreventUpdate
@@ -626,12 +628,18 @@ def register_enrichment_callbacks(app):
         
         # ESCENARIO 1: NO HAY SELECCIÓN
         if not selected_indices_list:
-            return (
-                selected_indices_list, 
-                html.Div(),          # Panel de resumen vacío
-                {'display': 'none'}, # Ocultar Módulos
-                True                 # MOSTRAR Alerta (is_open = True)
-            )
+            # Si había una selección previa válida, la preservamos para evitar limpiar la vista al re-render
+            if prev_selected:
+                valid_prev = [i for i in prev_selected if isinstance(i, int) and items and i < len(items)]
+                if valid_prev:
+                    selected_indices_list = valid_prev
+            if not selected_indices_list:
+                return (
+                    selected_indices_list, 
+                    html.Div(),          # Panel de resumen vacío
+                    {'display': 'none'}, # Ocultar Módulos
+                    True                 # MOSTRAR Alerta (is_open = True)
+                )
 
         # ESCENARIO 2: HAY SELECCIÓN
         combined_genes = set()
@@ -754,6 +762,7 @@ def register_enrichment_callbacks(app):
     def run_gprofiler_analysis(n_clicks, selected_indices, items, organism, selected_sources, target_namespace, use_validation):
         if not n_clicks or not selected_indices:
             raise PreventUpdate
+        logger.info(f"[gProfiler][Run] n_clicks={n_clicks} selected_indices={selected_indices}")
         
         combined_genes_dirty = set()
         for idx in selected_indices:
@@ -1128,6 +1137,7 @@ def register_enrichment_callbacks(app):
                 raise PreventUpdate
             if not selected_indices:
                 raise PreventUpdate
+            logger.info(f"[Reactome][Run] n_clicks={run_clicks} selected_indices={selected_indices}")
             
             options = selected_options or []
             projection = 'projection' in options
