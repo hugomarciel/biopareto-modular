@@ -470,7 +470,7 @@ def create_reactome_layout(organism_options):
                     id='enrichment-results-table-reactome',
                     data=[],
                     columns=[],
-                    style_table={'display': 'none'}
+                    style_table={'overflowX': 'auto', 'minWidth': '100%'}
                 ),
                 id="reactome-results-content"
             ),
@@ -647,15 +647,4 @@ def create_enrichment_tab_modified():
         ])
     ], fluid=True, className="py-3")
 
-    # Placeholder oculto para asegurar presencia del ID en el layout
-    hidden_reactome_table = html.Div(
-        dash_table.DataTable(
-            id='enrichment-results-table-reactome',
-            data=[],
-            columns=[],
-            style_table={'display': 'none'}
-        ),
-        style={'display': 'none'}
-    )
-
-    return html.Div([enrichment_content, hidden_reactome_table])
+    return html.Div([enrichment_content])

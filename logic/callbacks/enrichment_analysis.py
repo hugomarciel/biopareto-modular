@@ -1247,10 +1247,16 @@ def register_enrichment_callbacks(app):
         placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-muted text-center border-0"), className="p-1")
         placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-muted text-center border-0"), className="p-1")
         
-        logger.info(f"[Reactome][Display] stored_data keys={list(stored_data.keys()) if isinstance(stored_data, dict) else 'none'}")
-        if stored_data is None or not isinstance(stored_data, dict) or not stored_data.get('results') or stored_data.get('cleared'):
+        logger.info(f"[Reactome][Display] stored_data keys={list(stored_data.keys()) if isinstance(stored_data, dict) else 'none'} cleared={stored_data.get('cleared') if isinstance(stored_data, dict) else 'n/a'} len_results={len(stored_data.get('results', [])) if isinstance(stored_data, dict) else 0}")
+        # Solo mostramos el alert si explícitamente se limpió (cleared=True).
+        # Si el store está vacío por un re-render inicial, no sobrescribimos la vista existente.
+        if stored_data is None or not isinstance(stored_data, dict):
+            raise PreventUpdate
+        if stored_data.get('cleared'):
             empty_message = dbc.Alert("Run Reactome analysis to view results.", color="light", className="text-muted text-center border-0")
             return empty_message, True, placeholder_diagram, placeholder_fireworks
+        if not stored_data.get('results'):
+            raise PreventUpdate
         
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
@@ -1380,6 +1386,8 @@ def register_enrichment_callbacks(app):
         ]
         
         # RETORNO FINAL CORREGIDO
+        logger.info(f"[Reactome][Display] rendering table rows={len(display_df)}, columns={len(display_columns)}")
+        logger.info(f"[Reactome][Display] returning children types={ [type(c).__name__ for c in results_content] }")
         return html.Div(results_content), False, placeholder_diagram, fireworks_content
 
     # 6. Visualizar Diagrama Reactome
@@ -1392,6 +1400,7 @@ def register_enrichment_callbacks(app):
         prevent_initial_call=True
     )
     def visualize_reactome_diagram(selected_rows, table_data, stored_results):
+        logger.info(f"[Reactome][Diagram] selected_rows={selected_rows}, table_rows={len(table_data) if table_data else 0}, token={(stored_results.get('token') if stored_results else 'none')}")
         if not selected_rows or not table_data:
             raise PreventUpdate
         
@@ -1405,6 +1414,7 @@ def register_enrichment_callbacks(app):
         selected_pathway_data = table_data[selected_index]
         pathway_st_id = selected_pathway_data.get('description')
         pathway_name = selected_pathway_data.get('term_name')
+        logger.info(f"[Reactome][Diagram] pathway selected idx={selected_index}, st_id={pathway_st_id}, name={pathway_name}")
 
         if not pathway_st_id:
             return html.Div(dbc.Alert("Error: Could not find Pathway Stable ID (ST_ID).", color="danger"), className="p-3"), None
@@ -1463,11 +1473,13 @@ def register_enrichment_callbacks(app):
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
         if not stored_data or isinstance(stored_data, list):
-            return dbc.Alert(
-                "Ejecute un an?lisis de g:Profiler para generar el clustergram.",
-                color="info",
-                className="mt-3"
+            empty_fig = go.Figure()
+            empty_fig.update_layout(
+                title="Run g:Profiler to generate the clustergram.",
+                xaxis={'visible': False}, yaxis={'visible': False},
+                height=400, paper_bgcolor='white', plot_bgcolor='white'
             )
+            return dcc.Graph(id='gprofiler-clustergram-graph', figure=empty_fig, config={'displayModeBar': True})
 
         try:
             val_threshold = float(threshold_value)
@@ -1488,10 +1500,13 @@ def register_enrichment_callbacks(app):
             else:
                 detail_message = "No significant gene-term associations found to plot."
 
-            return dbc.Alert([
-                html.H6("Clustergram could not be generated.", className="alert-heading"),
-                html.P(detail_message)
-            ], color="info")
+            empty_fig = go.Figure()
+            empty_fig.update_layout(
+                title=detail_message,
+                xaxis={'visible': False}, yaxis={'visible': False},
+                height=400, paper_bgcolor='white', plot_bgcolor='white'
+            )
+            return dcc.Graph(id='gprofiler-clustergram-graph', figure=empty_fig, config={'displayModeBar': True})
 
         heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
 
