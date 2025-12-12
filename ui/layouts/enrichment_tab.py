@@ -198,6 +198,7 @@ def create_gprofiler_layout(organism_options):
         html.Hr(className="my-4"),
         
         # --- Manhattan Plot Card ---
+        html.Div(id="gprofiler-manhattan-wrapper", children=[
         dbc.Card([
             dbc.CardHeader([
                 html.Div([
@@ -238,9 +239,11 @@ def create_gprofiler_layout(organism_options):
                     type="default"
                 )
             ])
-        ], className="mb-4 shadow-sm border-0"), 
+        ], className="mb-4 shadow-sm border-0")
+        ]), 
         
         # --- Clustergram Card ---
+        html.Div(id="gprofiler-clustergram-wrapper", children=[
         dbc.Card([
             dbc.CardHeader([
                 html.Div([
@@ -269,7 +272,8 @@ def create_gprofiler_layout(organism_options):
                     type="default"
                 )
             ])
-        ], className="mb-4 shadow-sm border-0"),
+        ], className="mb-4 shadow-sm border-0")
+        ]),
 
         # Modal de confirmación de adjuntos
         dcc.Store(id='attachment-modal-context', data={}),
@@ -476,71 +480,73 @@ def create_reactome_layout(organism_options):
             type="default"
         ),
         
-        dbc.Row([
-            dbc.Col([
-                    dbc.Card([
-                    dbc.CardHeader([
-                        html.Div([
+        html.Div(id="reactome-visual-wrapper", style={"display": "none"}, children=[
+            dbc.Row([
+                dbc.Col([
+                        dbc.Card([
+                        dbc.CardHeader([
                             html.Div([
-                                html.I(className="bi bi-diagram-3-fill me-2"),
-                                html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
+                                html.Div([
+                                    html.I(className="bi bi-diagram-3-fill me-2"),
+                                    html.H6("Reactome Pathway Visualization", className="d-inline-block m-0 fw-bold"),
+                                    html.I(
+                                        id="reactome-vis-help-icon",
+                                        className="bi bi-question-circle-fill text-muted ms-2",
+                                        style={'cursor': 'pointer', 'fontSize': '1rem'}
+                                    ),
+                                    html.Div(
+                                        dcc.Loading(
+                                            id="loading-reactome-diagram-spinner", 
+                                            children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
+                                            type="circle",
+                                            color="#ffc107",
+                                        ),
+                                        className="ms-3 d-flex align-items-center justify-content-center",
+                                        style={'height': '20px', 'width': '20px'}
+                                    )
+                                ], className="d-flex align-items-center text-primary"),
+                                dbc.Button("Capture Pathway", id="attach-reactome-pathway-btn",
+                                           color="secondary", outline=True, size="sm")
+                            ], className="d-flex align-items-center justify-content-between")
+                        ], className="bg-white border-bottom"),
+                        
+                        dbc.CardBody([
+                            pathway_vis_help_popover, # Insertar Popover
+                            html.Div(id='reactome-diagram-output', children=[
+                                dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-center text-muted border-0")
+                            ], className="p-1")
+                        ])
+                    ], className="h-100 shadow-sm border-0")
+                ], width=12)
+            ], className="g-4 mb-4 mt-2"),
+            
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.Div([
+                                html.I(className="bi bi-stars me-2"),
+                                html.H6("Global Pathway Overview (Fireworks)", className="d-inline-block m-0 fw-bold"),
+                                
+                                # Icono Ayuda Fireworks
                                 html.I(
-                                    id="reactome-vis-help-icon",
+                                    id="fireworks-help-icon",
                                     className="bi bi-question-circle-fill text-muted ms-2",
                                     style={'cursor': 'pointer', 'fontSize': '1rem'}
-                                ),
-                                html.Div(
-                                    dcc.Loading(
-                                        id="loading-reactome-diagram-spinner", 
-                                        children=html.Div(id="reactome-diagram-spinner-output", style={'display': 'none'}), 
-                                        type="circle",
-                                        color="#ffc107",
-                                    ),
-                                    className="ms-3 d-flex align-items-center justify-content-center",
-                                    style={'height': '20px', 'width': '20px'}
                                 )
-                            ], className="d-flex align-items-center text-primary"),
-                            dbc.Button("Capture Pathway", id="attach-reactome-pathway-btn",
-                                       color="secondary", outline=True, size="sm")
-                        ], className="d-flex align-items-center justify-content-between")
-                    ], className="bg-white border-bottom"),
-                    
-                    dbc.CardBody([
-                        pathway_vis_help_popover, # Insertar Popover
-                        html.Div(id='reactome-diagram-output', children=[
-                            dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-center text-muted border-0")
-                        ], className="p-1")
-                    ])
-                ], className="h-100 shadow-sm border-0")
-            ], width=12)
-        ], className="g-4 mb-4 mt-2"),
-        
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardHeader([
-                        html.Div([
-                            html.I(className="bi bi-stars me-2"),
-                            html.H6("Global Pathway Overview (Fireworks)", className="d-inline-block m-0 fw-bold"),
-                            
-                            # Icono Ayuda Fireworks
-                            html.I(
-                                id="fireworks-help-icon",
-                                className="bi bi-question-circle-fill text-muted ms-2",
-                                style={'cursor': 'pointer', 'fontSize': '1rem'}
-                            )
-                        ], className="d-flex align-items-center text-primary")
-                    ], className="bg-white border-bottom"),
-                    
-                    dbc.CardBody([
-                        fireworks_help_popover, # Insertar Popover
-                        html.Div(id='reactome-fireworks-output', children=[
-                            dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-center text-muted border-0")
-                        ], className="p-1")
-                    ])
-                ], className="h-100 shadow-sm border-0")
-            ], width=12)
-        ], className="g-4"),
+                            ], className="d-flex align-items-center text-primary")
+                        ], className="bg-white border-bottom"),
+                        
+                        dbc.CardBody([
+                            fireworks_help_popover, # Insertar Popover
+                            html.Div(id='reactome-fireworks-output', children=[
+                                dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-center text-muted border-0")
+                            ], className="p-1")
+                        ])
+                    ], className="h-100 shadow-sm border-0")
+                ], width=12)
+            ], className="g-4")
+        ]),
         
         dcc.Store(id='reactome-scroll-fix-dummy', data=0),
         dcc.Store(id='reactome-diagram-cache-store', data=None)

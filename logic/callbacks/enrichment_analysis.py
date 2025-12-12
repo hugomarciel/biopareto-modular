@@ -918,7 +918,9 @@ def register_enrichment_callbacks(app):
     @app.callback(
         [Output('gprofiler-results-content', 'children', allow_duplicate=True),
          Output('clear-gprofiler-results-btn', 'disabled', allow_duplicate=True),
-         Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True)], 
+         Output('gprofiler-manhattan-plot', 'figure', allow_duplicate=True),
+         Output('gprofiler-manhattan-wrapper', 'style', allow_duplicate=True),
+         Output('gprofiler-clustergram-wrapper', 'style', allow_duplicate=True)], 
         [Input('gprofiler-results-store', 'data'),
          Input('gprofiler-threshold-input', 'value'),
          Input('main-tabs', 'active_tab'),
@@ -936,10 +938,12 @@ def register_enrichment_callbacks(app):
         }
         
         if not stored_data:
-            return html.Div("Click 'Run Analysis' to display results.", className="text-muted text-center p-4"), True, go.Figure()
+            placeholder = html.Div("Click 'Run Analysis' to display results.", className="text-muted text-center p-4")
+            return placeholder, True, go.Figure(), {'display': 'none'}, {'display': 'none'}
 
         if stored_data.get('results') is None:
-             return dbc.Alert("Error connecting to g:Profiler API.", color="danger"), True, go.Figure()
+             alert = dbc.Alert("Error connecting to g:Profiler API.", color="danger")
+             return alert, True, go.Figure(), {'display': 'none'}, {'display': 'none'}
 
         enrichment_data_list = stored_data.get('results', [])
         gene_list_validated = stored_data.get('gene_list_validated', [])
@@ -1129,14 +1133,26 @@ def register_enrichment_callbacks(app):
         ]
         
         if not display_df.empty:
-            return html.Div(results_content), False, manhattan_fig
+            return html.Div(results_content), False, manhattan_fig, {}, {}
         else:
             alert_color = "info" if genes_analyzed_count > 0 else "warning"
             if genes_analyzed_count == 0 and gene_list_original_count > 0:
                  summary_content.append(dcc.Markdown("\n\n**Action Failed:** No input IDs were validated.", className="text-danger"))
-            
-            return html.Div(dbc.Alert(summary_content, color=alert_color, className="mt-3 shadow-sm")), False, manhattan_fig
+            placeholder = html.Div(dbc.Alert(summary_content, color=alert_color, className="mt-3 shadow-sm"))
+            return placeholder, False, manhattan_fig, {'display': 'none'}, {'display': 'none'}
 
+    # --- Deshabilitar botones de adjunto g:Profiler cuando no hay resultados ---
+    @app.callback(
+        [Output('attach-gprofiler-table-btn', 'disabled', allow_duplicate=True),
+         Output('attach-gprofiler-manhattan-btn', 'disabled', allow_duplicate=True),
+         Output('attach-gprofiler-heatmap-btn', 'disabled', allow_duplicate=True)],
+        Input('gprofiler-results-store', 'data'),
+        prevent_initial_call='initial_duplicate'
+    )
+    def toggle_gprofiler_attach_buttons(gprof_data):
+        has_results = bool(gprof_data and gprof_data.get('results'))
+        disabled = not has_results
+        return disabled, disabled, disabled
    # 4.6. Limpiar g:Profiler
     @app.callback(
         [Output('gprofiler-results-store', 'data', allow_duplicate=True),
@@ -1297,12 +1313,24 @@ def register_enrichment_callbacks(app):
         
         raise PreventUpdate
 
+    # --- Deshabilitar botones de adjunto Reactome cuando no hay resultados ---
+    @app.callback(
+        [Output('attach-reactome-table-btn', 'disabled', allow_duplicate=True),
+         Output('attach-reactome-pathway-btn', 'disabled', allow_duplicate=True)],
+        Input('reactome-results-store', 'data'),
+        prevent_initial_call='initial_duplicate'
+    )
+    def toggle_reactome_attach_buttons(reactome_data):
+        has_results = bool(reactome_data and reactome_data.get('results'))
+        disabled = not has_results
+        return disabled, disabled
     # 5.5 Display Reactome Results (CORREGIDO: Typo en variable de retorno)
     @app.callback(
         [Output('reactome-results-content', 'children'),
          Output('clear-reactome-results-btn', 'disabled'),
          Output('reactome-diagram-output', 'children', allow_duplicate=True),
-        Output('reactome-fireworks-output', 'children', allow_duplicate=True)], 
+         Output('reactome-fireworks-output', 'children', allow_duplicate=True),
+         Output('reactome-visual-wrapper', 'style', allow_duplicate=True)], 
         Input('reactome-results-store', 'data'),
         prevent_initial_call='initial_duplicate'
     )
@@ -1311,15 +1339,16 @@ def register_enrichment_callbacks(app):
         placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-muted text-center border-0"), className="p-1")
         
         logger.info(f"[Reactome][Display] stored_data keys={list(stored_data.keys()) if isinstance(stored_data, dict) else 'none'} cleared={stored_data.get('cleared') if isinstance(stored_data, dict) else 'n/a'} len_results={len(stored_data.get('results', [])) if isinstance(stored_data, dict) else 0}")
-        # Solo mostramos el alert si explícitamente se limpió (cleared=True).
-        # Si el store está vacío por un re-render inicial, no sobrescribimos la vista existente.
+        # Si el store no está listo (re-render inicial) no tocamos la vista.
         if stored_data is None or not isinstance(stored_data, dict):
             raise PreventUpdate
+        # Si se limpió explícitamente: alert + ocultar visualización.
         if stored_data.get('cleared'):
             empty_message = dbc.Alert("Run Reactome analysis to view results.", color="light", className="text-muted text-center border-0")
-            return empty_message, True, placeholder_diagram, placeholder_fireworks
+            return dash.no_update, dash.no_update, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
+        # Si no hay resultados (pero no cleared): no pisar la tabla, solo ocultar la visualización.
         if not stored_data.get('results'):
-            raise PreventUpdate
+            return dash.no_update, dash.no_update, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
         
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
@@ -1380,7 +1409,7 @@ def register_enrichment_callbacks(app):
             results_content = html.Div(dbc.Card(dbc.CardBody(summary_content), className="mt-3 shadow-sm bg-light border-light"))
             
             # RETORNO CORREGIDO: 'fireworks_content' (con 't')
-            return results_content, False, placeholder_diagram, fireworks_content
+            return results_content, False, placeholder_diagram, fireworks_content, {}
 
         df = pd.DataFrame(enrichment_data_list).sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
@@ -1454,7 +1483,7 @@ def register_enrichment_callbacks(app):
         # RETORNO FINAL CORREGIDO
         logger.info(f"[Reactome][Display] rendering table rows={len(display_df)}, columns={len(display_columns)}")
         logger.info(f"[Reactome][Display] returning children types={ [type(c).__name__ for c in results_content] }")
-        return html.Div(results_content), False, placeholder_diagram, fireworks_content
+        return html.Div(results_content), False, placeholder_diagram, fireworks_content, {}
 
     # 6. Visualizar Diagrama Reactome
     @app.callback(
