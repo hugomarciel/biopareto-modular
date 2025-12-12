@@ -1001,6 +1001,7 @@ def register_enrichment_callbacks(app):
              pathways_message = f"No significant pathways found {filter_message}."
         
         summary_content = [
+            html.H5("g:Profiler Enrichment Summary", className="fw-bold text-primary mb-2"),
             dcc.Markdown(pathways_message, className="mb-0"),
             dcc.Markdown(input_message, className="mb-0"),
             validation_card
@@ -1391,9 +1392,11 @@ def register_enrichment_callbacks(app):
         pathways_message = f"Found **{len(enrichment_data_list)}** significant Reactome pathways."
         
         summary_content = [
+            html.H5("Reactome Enrichment Summary", className="fw-bold text-primary mb-2"),
             dcc.Markdown(pathways_message, className="mb-0"),
             html.Hr(style={'margin': '0.5rem 0'}),
             dcc.Markdown(input_message, className="mb-0"),
+            dcc.Markdown(f"**Token:** {analysis_token}", className="mb-0 text-muted"),
             validation_card
         ]
 

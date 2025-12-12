@@ -230,6 +230,7 @@ def create_gprofiler_layout(organism_options):
                 dcc.Loading(
                     dcc.Graph(
                         id='gprofiler-manhattan-plot',
+                        style={'height': '600px'},
                         config={
                             'scrollZoom': True,  
                             'responsive': True,  
