@@ -1197,8 +1197,9 @@ def register_enrichment_callbacks(app):
         logger.info(f"[Reactome] trigger={trigger_id}, run_clicks={run_clicks}, clear_clicks={clear_clicks}")
 
         if trigger_id == 'clear-reactome-results-btn':
-            logger.info("[Reactome] Clearing store -> empty data and clear_data=True")
-            return {'results': [], 'token': None, 'cleared': True}, True, None, items
+            logger.info("[Reactome] Clearing store -> empty data and clear_data=False")
+            logger.info(f"[Reactome][Clear] items_count={len(items) if items else 0}")
+            return {'results': [], 'token': None, 'cleared': True}, False, None, items
 
         if trigger_id == 'run-reactome-btn':
             # Evitar ejecuciones cuando no hay clic real (re-render del tab)
@@ -1328,6 +1329,7 @@ def register_enrichment_callbacks(app):
     # 5.5 Display Reactome Results (CORREGIDO: Typo en variable de retorno)
     @app.callback(
         [Output('reactome-results-content', 'children'),
+         Output('reactome-results-content', 'style', allow_duplicate=True),
          Output('clear-reactome-results-btn', 'disabled'),
          Output('reactome-diagram-output', 'children', allow_duplicate=True),
          Output('reactome-fireworks-output', 'children', allow_duplicate=True),
@@ -1338,18 +1340,83 @@ def register_enrichment_callbacks(app):
     def display_reactome_results(stored_data):
         placeholder_diagram = html.Div(dbc.Alert("Select a pathway from the table above to visualize gene overlap.", color="light", className="text-muted text-center border-0"), className="p-1")
         placeholder_fireworks = html.Div(dbc.Alert("Run analysis to view the genome-wide enrichment distribution.", color="light", className="text-muted text-center border-0"), className="p-1")
-        
+
+        column_map = {
+            'fdr_value': {'name': 'FDR\n(Corrected P)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'entities_found': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'entities_total': {'name': 'Pathway\nSize', 'type': 'numeric'},
+            'term_name': {'name': 'Pathway Name', 'type': 'text'},
+            'description': {'name': 'ST_ID', 'type': 'text'},
+        }
+        empty_columns = [
+            {'name': column_map[c]['name'], 'id': c, 'type': column_map[c]['type'], 'format': column_map[c].get('format')} 
+            for c in ['term_name', 'fdr_value', 'p_value', 'entities_found', 'entities_total', 'description']
+        ]
+
+        def _empty_children():
+            alert = dbc.Alert("Run Reactome analysis to view results.", color="light",
+                              className="text-muted text-center border-0")
+            table_header = html.Div([
+                html.Div([
+                    html.H5("Reactome Results Table", className="fw-bold m-0 text-dark"),
+                    html.I(id="reactome-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2",
+                           style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+                ], className="d-flex align-items-center"),
+                dbc.Button("Attach Table", id="attach-reactome-table-btn", color="primary", outline=True, size="sm", className="ms-3")
+            ], className="d-flex align-items-center justify-content-between mb-2")
+
+            table = dash_table.DataTable(
+                id='enrichment-results-table-reactome',
+                data=[],
+                columns=empty_columns,
+                hidden_columns=['description'],
+                row_selectable='single', selected_rows=[],
+                sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=10,
+                style_table={'overflowX': 'auto', 'minWidth': '100%'},
+                style_header={'backgroundColor': '#f8f9fa', 'color': '#333', 'fontWeight': 'bold',
+                              'borderBottom': '2px solid #dee2e6', 'whiteSpace': 'normal',
+                              'height': 'auto', 'padding': '10px 8px'},
+                style_filter={'backgroundColor': 'rgb(220, 235, 255)', 'border': '1px solid rgb(180, 200, 220)',
+                              'fontWeight': 'bold', 'color': '#333'},
+                style_cell={'textAlign': 'center', 'padding': '8px', 'fontSize': '0.9rem',
+                            'fontFamily': 'sans-serif', 'whiteSpace': 'normal', 'height': 'auto'},
+                style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+                style_cell_conditional=[
+                    {'if': {'column_id': 'term_name'}, 'width': '50%', 'minWidth': '150px', 'textAlign': 'left'},
+                    {'if': {'column_id': 'fdr_value'}, 'width': '15%', 'minWidth': '80px'},
+                    {'if': {'column_id': 'p_value'}, 'width': '15%', 'minWidth': '80px'},
+                ],
+            )
+
+            return html.Div([
+                dbc.Popover(
+                    [
+                        dbc.PopoverHeader("Table Filtering & Sorting Help"),
+                        dbc.PopoverBody([
+                            html.Div([html.Strong("To Sort:"), html.Span(" Click arrows (↑/↓) in header.", className="small text-muted")], className="mb-2"),
+                            html.Div([html.Strong("Numeric Filters:"), html.Span(" Use ", className="small text-muted"), html.Code("< 0.05", className="small")], className="mb-0"),
+                        ])
+                    ],
+                    id="reactome-table-help", target="reactome-table-help-icon", trigger="legacy", placement="left"
+                ),
+                alert,
+                table_header,
+                table
+            ], style={'display': 'none'})
+
+        # Log de estado
         logger.info(f"[Reactome][Display] stored_data keys={list(stored_data.keys()) if isinstance(stored_data, dict) else 'none'} cleared={stored_data.get('cleared') if isinstance(stored_data, dict) else 'n/a'} len_results={len(stored_data.get('results', [])) if isinstance(stored_data, dict) else 0}")
-        # Si el store no está listo (re-render inicial) no tocamos la vista.
-        if stored_data is None or not isinstance(stored_data, dict):
-            raise PreventUpdate
-        # Si se limpió explícitamente: alert + ocultar visualización.
-        if stored_data.get('cleared'):
-            empty_message = dbc.Alert("Run Reactome analysis to view results.", color="light", className="text-muted text-center border-0")
-            return dash.no_update, dash.no_update, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
-        # Si no hay resultados (pero no cleared): no pisar la tabla, solo ocultar la visualización.
+
+        # Store no listo -> no tocar la vista actual
+        if stored_data is None or not isinstance(stored_data, dict) or stored_data.get('cleared'):
+            if stored_data is None or not isinstance(stored_data, dict):
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            empty_children = _empty_children()
+            return empty_children, {'display': 'none'}, True, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
         if not stored_data.get('results'):
-            return dash.no_update, dash.no_update, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
+            empty_children = _empty_children()
+            return empty_children, {'display': 'none'}, True, placeholder_diagram, placeholder_fireworks, {'display': 'none'}
         
         enrichment_data_list = stored_data.get('results', [])
         analysis_token = stored_data.get('token', 'N/A')
@@ -1412,7 +1479,7 @@ def register_enrichment_callbacks(app):
             results_content = html.Div(dbc.Card(dbc.CardBody(summary_content), className="mt-3 shadow-sm bg-light border-light"))
             
             # RETORNO CORREGIDO: 'fireworks_content' (con 't')
-            return results_content, False, placeholder_diagram, fireworks_content, {}
+            return results_content, {}, False, placeholder_diagram, fireworks_content, {}
 
         df = pd.DataFrame(enrichment_data_list).sort_values(by=['fdr_value', 'entities_found'], ascending=[True, False])
         display_df = df[['term_name', 'description', 'fdr_value', 'p_value', 'entities_found', 'entities_total']].copy()
@@ -1486,7 +1553,7 @@ def register_enrichment_callbacks(app):
         # RETORNO FINAL CORREGIDO
         logger.info(f"[Reactome][Display] rendering table rows={len(display_df)}, columns={len(display_columns)}")
         logger.info(f"[Reactome][Display] returning children types={ [type(c).__name__ for c in results_content] }")
-        return html.Div(results_content), False, placeholder_diagram, fireworks_content, {}
+        return html.Div(results_content), {}, False, placeholder_diagram, fireworks_content, {}
 
     # 6. Visualizar Diagrama Reactome
     @app.callback(
