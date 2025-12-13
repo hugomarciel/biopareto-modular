@@ -386,7 +386,12 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
     comment = item.get('comment', '')
     data = item.get('data', {}) or {}
     attachments = item.get('attachments', []) or []
+    def _is_validated(vs):
+        meta = vs.get('meta') or {}
+        return bool(vs.get('genes')) and bool(meta.get('validation') is True or vs.get('validation') is True)
+
     validated_sets = data.get('validated_sets', []) or []
+    validated_sets = [vs for vs in validated_sets if _is_validated(vs)]
     analysis_meta = data.get('analysis_meta', []) or []
 
     story.append(Paragraph(f"Report: {name}", styles['ItemTitle']))
@@ -444,16 +449,22 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
             enabled_opts = ", ".join([opt_labels.get(k, k) for k, v in opts.items() if v])
             token = am.get('token')
             fireworks_url = am.get('fireworks_url')
-            line = f"{origin_am} | Organism: {org} | Namespace: {ns} | Validation: {val_txt}"
+            parts = [
+                f"Organism: {org}",
+                f"Namespace: {ns}",
+                f"Validation: {val_txt}"
+            ]
             if sources:
-                line += f" | Sources: {sources}"
+                parts.append(f"Sources: {sources}")
             if enabled_opts:
-                line += f" | Options: {enabled_opts}"
+                parts.append(f"Options: {enabled_opts}")
             if token:
-                line += f" | Token: {token}"
+                parts.append(f"Token: {token}")
             if fireworks_url:
-                line += f" | Fireworks: {fireworks_url}"
-            story.append(Paragraph(line, styles['ItemText']))
+                parts.append(f"Fireworks: {fireworks_url}")
+
+            line = "<br/>".join(parts)
+            story.append(Paragraph(f"<b>{origin_am}</b><br/>{line}", styles['ItemText']))
         story.append(Spacer(1, 0.1 * inch))
 
     # Validated gene sets (solo primer set por namespace ya filtrado aguas arriba)
@@ -477,7 +488,32 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
         story.append(tbl)
         story.append(Spacer(1, 0.15 * inch))
 
-    # Pareto plot global (opcional) después de meta/validated sets
+    # Listas de genes completas (original / validadas incluidas) en página aparte
+    original_genes = data.get('gene_list_original') or data.get('genes') or data.get('selected_genes') or []
+    converted_genes_full = data.get('gene_list_validated') or data.get('validated_genes') or []
+    included_validated_sets = [vs for vs in validated_sets if vs.get('include', True)]
+    if original_genes or (converted_genes_full or included_validated_sets) or pareto_block:
+        story.append(PageBreak())
+
+    if original_genes:
+        story.append(Paragraph("Original gene list", styles['ItemHeading']))
+        story.append(Paragraph(f"Total genes: {len(original_genes)}", styles['ItemText']))
+        story.append(Paragraph(", ".join(original_genes), styles['ItemText']))
+        story.append(Spacer(1, 0.15 * inch))
+
+    # Si hay listas validadas incluidas, mostrar la primera marcada (o todas marcadas)
+    if included_validated_sets:
+        story.append(Paragraph("Validated gene list(s)", styles['ItemHeading']))
+        for vs in included_validated_sets:
+            genes_vs = vs.get('genes') or []
+            source_vs = vs.get('origin', 'analysis')
+            ns_vs = vs.get('namespace') or 'N/A'
+            story.append(Paragraph(f"{source_vs} | Namespace: {ns_vs} | Genes: {len(genes_vs)}", styles['ItemText']))
+            story.append(Paragraph(", ".join(genes_vs), styles['ItemText']))
+            story.append(Spacer(1, 0.1 * inch))
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Pareto plot global (opcional) después de listas
     if pareto_block:
         try:
             objectives = None

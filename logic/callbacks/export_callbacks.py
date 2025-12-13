@@ -179,6 +179,11 @@ def register_export_callbacks(app):
         analysis_meta = data.get('analysis_meta', []) or []
         attachments = item.get('attachments', []) or []
         validated_sets = data.get('validated_sets', []) or []
+        # Solo mostrar conjuntos realmente validados (g:Convert u otro step de validación)
+        def _is_validated(vs):
+            meta = vs.get('meta') or {}
+            return bool(vs.get('genes')) and bool(meta.get('validation') is True or vs.get('validation') is True)
+        validated_sets = [vs for vs in validated_sets if _is_validated(vs)]
         converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
         if not converted_genes and attachments:
             # Buscar si alg?n adjunto trae la lista validada (p.ej. g:Profiler)
