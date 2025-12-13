@@ -33,34 +33,54 @@ logger = logging.getLogger(__name__)
 # --- 1. Generación de Gráficos (Auxiliares) ---
 
 def create_pareto_plot_for_pdf(fronts_data, objectives):
-    """Create a static Pareto plot figure using Plotly, saved as PNG in a buffer."""
+    """
+    Genera una figura de Pareto alineada con la lógica del UI:
+    - Usa los mismos ejes (main/explicit objectives).
+    - Ordena puntos por eje X y dibuja líneas del frente.
+    - Solo usa fronts visibles (si traen flag visible).
+    """
     if not fronts_data or not objectives or len(fronts_data) == 0:
         return None
 
     x_axis = objectives[0]
     y_axis = objectives[1] if len(objectives) > 1 else objectives[0]
-    
-    fig = go.Figure()
 
-    colors_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    fig = go.Figure()
+    colors_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
     for idx, front in enumerate(fronts_data):
-        df = pd.DataFrame(front["data"])
-        
-        if x_axis not in df.columns or y_axis not in df.columns:
+        if front.get("visible") is False:
             continue
-            
+        df = pd.DataFrame(front.get("data", []))
+        if df.empty or x_axis not in df.columns or y_axis not in df.columns:
+            continue
+
         color = colors_palette[idx % len(colors_palette)]
-        
+
+        # Línea del frente ordenada
+        df_line = df.drop_duplicates(subset=[x_axis, y_axis], keep='first')
+        df_sorted = df_line.sort_values(by=[x_axis, y_axis], ascending=True)
         fig.add_trace(go.Scatter(
-            x=df[x_axis],
-            y=df[y_axis],
-            mode='lines+markers',
-            name=front["name"],
+            x=df_sorted[x_axis],
+            y=df_sorted[y_axis],
+            mode='lines',
+            name=front.get("name", f"Front {idx+1}"),
             line=dict(color=color, width=1.5),
-            marker=dict(size=8, color=color),
-            hovertemplate=None,
-            showlegend=True
+            hoverinfo='skip',
+            legendgroup=front.get("name", f"Front {idx+1}")
+        ))
+
+        # Puntos
+        fig.add_trace(go.Scatter(
+            x=df_sorted[x_axis],
+            y=df_sorted[y_axis],
+            mode='markers',
+            name=front.get("name", f"Front {idx+1}"),
+            marker=dict(size=9, color=color, line=dict(width=1, color='white')),
+            hovertemplate="<b>%{text}</b><br>X: %{x}<br>Y: %{y}<extra></extra>",
+            text=df_sorted.get('solution_id') if 'solution_id' in df_sorted.columns else None,
+            legendgroup=front.get("name", f"Front {idx+1}"),
+            showlegend=False  # ya se muestra en la línea
         ))
 
     fig.update_layout(
@@ -69,13 +89,14 @@ def create_pareto_plot_for_pdf(fronts_data, objectives):
         yaxis_title=y_axis.replace('_', ' ').title(),
         plot_bgcolor='white',
         paper_bgcolor='white',
-        font=dict(size=12),
-        margin=dict(l=60, r=60, t=60, b=60),
+        font=dict(size=14),
+        margin=dict(l=80, r=80, t=60, b=80),
+        width=1200,
+        height=650,
     )
-    
-    # Render Plotly figure to static image buffer (PNG)
+
     buffer = BytesIO()
-    fig.write_image(buffer, format='png', width=700, height=500, scale=1.5)
+    fig.write_image(buffer, format='png', width=1200, height=650, scale=1.2)
     buffer.seek(0)
     return buffer
 
@@ -316,7 +337,7 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
 
 
 # --- 3. Reporte PDF de un solo Item (horizontal) ---
-def generate_item_pdf(item):
+def generate_item_pdf(item, include_pareto=False, data_store=None):
     """Genera un PDF simple para un item del panel de interés en orientación horizontal."""
     if not item:
         return None
@@ -400,6 +421,10 @@ def generate_item_pdf(item):
             story.append(Paragraph(line, styles['ItemText']))
         story.append(Spacer(1, 0.1 * inch))
 
+    # Pareto plot global (opcional) despuŽ's del resumen/meta
+    pareto_block = None
+    if include_pareto:
+        pareto_block = True
     # Meta de análisis
     if analysis_meta:
         story.append(Paragraph("Analysis settings", styles['ItemHeading']))
@@ -432,6 +457,7 @@ def generate_item_pdf(item):
         story.append(Spacer(1, 0.1 * inch))
 
     # Validated gene sets (solo primer set por namespace ya filtrado aguas arriba)
+    validated_sets = [vs for vs in validated_sets if vs.get('include', True)]
     if validated_sets:
         story.append(Paragraph("Validated gene sets", styles['ItemHeading']))
         tbl_data = [["Source", "Namespace", "Genes (count)"]]
@@ -451,8 +477,33 @@ def generate_item_pdf(item):
         story.append(tbl)
         story.append(Spacer(1, 0.15 * inch))
 
+    # Pareto plot global (opcional) después de meta/validated sets
+    if pareto_block:
+        try:
+            objectives = None
+            fronts = []
+            if data_store:
+                objectives = data_store.get('explicit_objectives') or data_store.get('main_objectives')
+                fronts = [f for f in data_store.get('fronts', []) if f.get('visible', True)]
+            story.append(PageBreak())
+            if objectives and fronts:
+                buf = create_pareto_plot_for_pdf(fronts, objectives)
+                if buf:
+                    story.append(Paragraph("Pareto Plot (global)", styles['ItemHeading']))
+                    img = Image(buf)
+                    img._restrictSize(11 * inch, 6.5 * inch)
+                    story.append(img)
+                    story.append(Spacer(1, 0.15 * inch))
+                else:
+                    story.append(Paragraph("Pareto plot not available (missing fronts/objectives).", styles['ItemText']))
+            else:
+                story.append(Paragraph("Pareto plot not available (missing fronts/objectives).", styles['ItemText']))
+        except Exception as exc:
+            logger.exception("PDF pareto render failed: %s", exc)
+
     # Adjuntos (incluye tablas renderizadas)
-    if attachments:
+    filtered_attachments = [a for a in attachments if a.get('include', True)]
+    if filtered_attachments:
         # Ordenar adjuntos agrupando por source y tablas primero
         type_rank = {'table': 0, 'manhattan': 1, 'heatmap': 1, 'pathway': 1}
         source_rank = {'gprofiler': 0, 'reactome': 1}
@@ -463,7 +514,7 @@ def generate_item_pdf(item):
             created = att.get('created_at', '')
             return (source_rank.get(src, 99), type_rank.get(t, 5), created)
 
-        ordered_attachments = sorted(attachments, key=att_key)
+        ordered_attachments = sorted(filtered_attachments, key=att_key)
 
         # Render de tablas (primeros 50 registros, ya vienen en payload) e imágenes
         for att in ordered_attachments:

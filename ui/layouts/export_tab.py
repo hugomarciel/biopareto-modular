@@ -71,6 +71,13 @@ def create_export_tab():
                                     size="sm",
                                     className="ms-auto"
                                 ),
+                                dbc.Checkbox(
+                                    id="export-include-pareto",
+                                    value=False,
+                                    className="ms-3",
+                                    label="Include Pareto plot",
+                                    label_class_name="ms-1 mb-0 small text-muted"
+                                ),
                                 dcc.Download(id="export-item-pdf-download")
                             ], className="d-flex align-items-center gap-2"),
                             className="bg-white border-bottom position-relative"

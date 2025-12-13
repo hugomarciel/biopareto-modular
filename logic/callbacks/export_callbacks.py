@@ -219,6 +219,7 @@ def register_export_callbacks(app):
                 rest_genes = genes_vs[5:]
                 collapse_id = {'type': 'validated-collapse', 'origin': origin_vs, 'namespace': ns_vs}
                 toggle_id = {'type': 'validated-toggle', 'origin': origin_vs, 'namespace': ns_vs}
+                include_flag = bool(vs.get('include', True))
                 meta_parts = []
                 if meta_vs.get('organism'):
                     meta_parts.append(f"Organism: {meta_vs.get('organism')}")
@@ -267,12 +268,13 @@ def register_export_callbacks(app):
                         style={'width': '90px', 'textAlign': 'center'}
                     ),
                     html.Div(
-                        dbc.Checklist(
-                            options=[{"label": "Include in export", "value": "include"}],
-                            value=["include"],
-                            switch=True,
-                            className="ms-2"
-                        ),
+                                dbc.Checklist(
+                                    options=[{"label": "Include in export", "value": "include"}],
+                                    value=["include"] if include_flag else [],
+                                    switch=True,
+                                    className="ms-2",
+                                    id={'type': 'validated-include', 'origin': origin_vs, 'namespace': ns_vs}
+                                ),
                         style={'width': '140px', 'textAlign': 'right'}
                     )
                 ],
@@ -297,6 +299,7 @@ def register_export_callbacks(app):
             rest_genes = converted_genes[5:]
             collapse_id = {'type': 'validated-collapse', 'origin': 'validated', 'namespace': 'default'}
             toggle_id = {'type': 'validated-toggle', 'origin': 'validated', 'namespace': 'default'}
+            include_flag = True
             converted_sections.append(
                 dbc.Card(
                     [
@@ -322,12 +325,13 @@ def register_export_callbacks(app):
                                         style={'width': '90px', 'textAlign': 'center'}
                                     ),
                                     html.Div(
-                                        dbc.Checklist(
-                                            options=[{"label": "Include in export", "value": "include"}],
-                                            value=["include"],
-                                            switch=True,
-                                            className="ms-2"
-                                        ),
+                                    dbc.Checklist(
+                                        options=[{"label": "Include in export", "value": "include"}],
+                                        value=["include"] if include_flag else [],
+                                        switch=True,
+                                        className="ms-2",
+                                        id={'type': 'validated-include', 'origin': 'validated', 'namespace': 'default'}
+                                    ),
                                         style={'width': '140px', 'textAlign': 'right'}
                                     )
                                 ],
@@ -594,20 +598,91 @@ def register_export_callbacks(app):
         Input('export-download-item-pdf', 'n_clicks'),
         State('export-selected-indices-store', 'data'),
         State('interest-panel-store', 'data'),
+        State('data-store', 'data'),
+        State('export-include-pareto', 'value'),
         prevent_initial_call=True
     )
-    def download_item_pdf(n_clicks, selected_indices, items):
+    def download_item_pdf(n_clicks, selected_indices, items, data_store, include_flags):
         if not n_clicks or not selected_indices or not items:
             raise PreventUpdate
         idx = selected_indices[0]
         if idx >= len(items):
             raise PreventUpdate
         item = items[idx]
-        pdf_bytes = generate_item_pdf(item)
+        include_pareto = bool(include_flags)
+        pdf_bytes = generate_item_pdf(item, include_pareto=include_pareto, data_store=data_store)
         if not pdf_bytes:
             raise PreventUpdate
         filename = f"{item.get('name','item')}_report.pdf"
         return dcc.send_bytes(pdf_bytes.getvalue(), filename)
+
+    # Guardar include de adjuntos
+    @app.callback(
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input({'type': 'export-attachment-include', 'att_id': ALL}, 'value'),
+        State({'type': 'export-attachment-include', 'att_id': ALL}, 'id'),
+        State('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=True
+    )
+    def update_attachment_include(values, ids, selected_indices, items):
+        if items is None or not selected_indices:
+            raise PreventUpdate
+        if values is None or ids is None:
+            raise PreventUpdate
+        idx = selected_indices[0]
+        if idx >= len(items):
+            raise PreventUpdate
+        value_map = {}
+        for val, cid in zip(values, ids):
+            if isinstance(cid, dict):
+                value_map[cid.get('att_id')] = bool(val and 'include' in val)
+        updated = list(items)
+        item = dict(updated[idx])
+        atts = []
+        for att in item.get('attachments', []) or []:
+            a = dict(att)
+            if a.get('id') in value_map:
+                a['include'] = value_map[a.get('id')]
+            atts.append(a)
+        item['attachments'] = atts
+        updated[idx] = item
+        return updated
+
+    # Guardar include de validated gene sets
+    @app.callback(
+        Output('interest-panel-store', 'data', allow_duplicate=True),
+        Input({'type': 'validated-include', 'origin': ALL, 'namespace': ALL}, 'value'),
+        State({'type': 'validated-include', 'origin': ALL, 'namespace': ALL}, 'id'),
+        State('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=True
+    )
+    def update_validated_include(values, ids, selected_indices, items):
+        if items is None or not selected_indices:
+            raise PreventUpdate
+        if values is None or ids is None:
+            raise PreventUpdate
+        idx = selected_indices[0]
+        if idx >= len(items):
+            raise PreventUpdate
+        include_map = {}
+        for val, cid in zip(values, ids):
+            if isinstance(cid, dict):
+                key = (cid.get('origin'), cid.get('namespace'))
+                include_map[key] = bool(val and 'include' in val)
+        updated = list(items)
+        item = dict(updated[idx])
+        data = dict(item.get('data') or {})
+        vsets = data.get('validated_sets', []) or []
+        for vs in vsets:
+            key = (vs.get('origin'), vs.get('namespace'))
+            if key in include_map:
+                vs['include'] = include_map[key]
+        data['validated_sets'] = vsets
+        item['data'] = data
+        updated[idx] = item
+        return updated
 
     # Toggle para listas validadas (show more)
     @app.callback(
