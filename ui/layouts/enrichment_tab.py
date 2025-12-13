@@ -638,7 +638,7 @@ def create_enrichment_tab_modified():
                         # --- ALERT: No Selection (Visible by default if no selection) ---
                         dbc.Alert([
                             html.I(className="bi bi-arrow-up-circle me-2"),
-                            "Please select at least one item from the selection panel above to start the analysis."
+                            "Please select one item from the selection panel above to start the analysis."
                         ], id="enrichment-empty-alert", color="info", className="d-flex align-items-center border-0 shadow-sm"),
 
                         # --- ANALYSIS MODULES (Hidden by default) ---

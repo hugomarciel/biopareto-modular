@@ -931,6 +931,44 @@ def register_enrichment_callbacks(app):
         if main_active_tab != 'enrichment-tab':
             raise PreventUpdate
         
+        # Placeholder con botón y tabla vacía (IDs siempre presentes)
+        column_map = {
+            'source': {'name': 'Source', 'type': 'text'},
+            'term_name': {'name': 'Term Name', 'type': 'text'},
+            'description': {'name': 'Description', 'type': 'text'},
+            'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
+            'intersection_size': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'term_size': {'name': 'Term\nSize', 'type': 'numeric'},
+            'precision': {'name': 'Precision', 'type': 'numeric', 'format': {'specifier': '.3f'}},
+            'recall': {'name': 'Recall', 'type': 'numeric', 'format': {'specifier': '.3f'}},
+            'source_order_display': {'name': 'Source\nOrder', 'type': 'text'},
+        }
+        empty_columns = [{'name': column_map[c]['name'], 'id': c, 'type': column_map[c]['type'], 'format': column_map[c].get('format')} for c in column_map]
+
+        def _empty_children():
+            return html.Div([
+                dbc.Popover(
+                    [
+                        dbc.PopoverHeader("Table Filtering & Sorting Help"),
+                        dbc.PopoverBody([])
+                    ],
+                    id="gprofiler-table-help", target="gprofiler-table-help-icon", trigger="legacy", placement="left"
+                ),
+                html.Div([
+                    html.H5("g:Profiler Results Table", className="fw-bold m-0 text-dark"),
+                    html.I(id="gprofiler-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Filter help")
+                ], className="d-flex align-items-center justify-content-between mb-2"),
+                dash_table.DataTable(
+                    id='enrichment-results-table-gprofiler',
+                    data=[],
+                    columns=empty_columns,
+                    hidden_columns=['description', 'source_order_display'],
+                    sort_action="native", filter_action="native", page_action="native", page_current=0, page_size=15,
+                    style_table={'overflowX': 'auto', 'minWidth': '100%'}
+                ),
+                dbc.Button("Attach Table", id="attach-gprofiler-table-btn", color="primary", outline=True, size="sm", className="ms-3", style={'display': 'none'})
+            ], style={'display': 'none'})
+        
         organism_map = {
             'hsapiens': 'Homo sapiens', 'mmusculus': 'Mus musculus', 
             'rnorvegicus': 'Rattus norvegicus', 'drerio': 'Danio rerio', 
@@ -938,7 +976,11 @@ def register_enrichment_callbacks(app):
         }
         
         if not stored_data:
-            placeholder = html.Div("Click 'Run Analysis' to display results.", className="text-muted text-center p-4")
+            placeholder = _empty_children()
+            return placeholder, True, go.Figure(), {'display': 'none'}, {'display': 'none'}
+
+        if not stored_data.get('results'):
+            placeholder = _empty_children()
             return placeholder, True, go.Figure(), {'display': 'none'}, {'display': 'none'}
 
         if stored_data.get('results') is None:
