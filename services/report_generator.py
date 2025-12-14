@@ -388,7 +388,12 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
     attachments = item.get('attachments', []) or []
     def _is_validated(vs):
         meta = vs.get('meta') or {}
-        return bool(vs.get('genes')) and bool(meta.get('validation') is True or vs.get('validation') is True)
+        origin = (vs.get('origin') or '').lower()
+        return (
+            bool(vs.get('genes'))
+            and origin in {'gprofiler', 'reactome'}
+            and (meta.get('validation') is True or vs.get('validation') is True)
+        )
 
     validated_sets = data.get('validated_sets', []) or []
     validated_sets = [vs for vs in validated_sets if _is_validated(vs)]
@@ -490,7 +495,10 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
 
     # Listas de genes completas (original / validadas incluidas) en página aparte
     original_genes = data.get('gene_list_original') or data.get('genes') or data.get('selected_genes') or []
-    converted_genes_full = data.get('gene_list_validated') or data.get('validated_genes') or []
+    meta = data.get('meta') or {}
+    converted_genes_full = []
+    if meta.get('validation') is True:
+        converted_genes_full = data.get('gene_list_validated') or data.get('validated_genes') or []
     included_validated_sets = [vs for vs in validated_sets if vs.get('include', True)]
     if original_genes or (converted_genes_full or included_validated_sets) or pareto_block:
         story.append(PageBreak())

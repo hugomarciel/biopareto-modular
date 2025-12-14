@@ -182,9 +182,16 @@ def register_export_callbacks(app):
         # Solo mostrar conjuntos realmente validados (g:Convert u otro step de validación)
         def _is_validated(vs):
             meta = vs.get('meta') or {}
-            return bool(vs.get('genes')) and bool(meta.get('validation') is True or vs.get('validation') is True)
+            origin = (vs.get('origin') or '').lower()
+            is_allowed_origin = origin in {'gprofiler', 'reactome'}
+            is_validated = meta.get('validation') is True or vs.get('validation') is True
+            return bool(vs.get('genes')) and is_validated and is_allowed_origin
         validated_sets = [vs for vs in validated_sets if _is_validated(vs)]
-        converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
+
+        meta = data.get('meta') or {}
+        converted_genes = []
+        if meta.get('validation'):
+            converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
         if not converted_genes and attachments:
             # Buscar si alg?n adjunto trae la lista validada (p.ej. g:Profiler)
             for att in attachments:
