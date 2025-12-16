@@ -579,6 +579,14 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
                     txt = "" if val is None else str(val)
                     return Paragraph(txt, head_style if head else body_style)
 
+                # Si es gprofiler, eliminar la columna intersection_genes para evitar desbordes
+                if att.get('source') == 'gprofiler' and 'intersection_genes' in cols:
+                    cols = [c for c in cols if c != 'intersection_genes']
+                    rows = [
+                        {k: v for k, v in r.items() if k != 'intersection_genes'}
+                        for r in rows
+                    ]
+
                 # Encabezados amigables (romper por underscore)
                 def header_label(col):
                     if 'intersection_genes' in col:
