@@ -1283,53 +1283,38 @@ def register_enrichment_callbacks(app):
                 logger.info("[Reactome] No valid genes after cleanup; returning empty store")
                 return store, False, None, items
             
-            try:
-                res = ReactomeService.get_enrichment(
-                    clean, 
-                    organism_name=organism_name,
-                    projection=projection,
-                    interactors=interactors,
-                    include_disease=include_disease
-                )
-            except Exception as e:
-                 logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
-                 return store, False, None, items
+        try:
+            res = ReactomeService.get_enrichment(
+                clean,
+                organism_name=organism_name,
+                projection=projection,
+                interactors=interactors,
+                include_disease=include_disease
+            )
+        except Exception as e:
+            logger.error(f"CRITICAL CRASH in ReactomeService: {e}")
+            return store, False, None, items
 
-            if res:
-                res['gene_list_original'] = raw
-                res['gene_list_validated'] = clean
-                token = res.get('token')
-                fireworks_url = None
-                if token and organism_name:
-                    organism_encoded = str(organism_name).replace(' ', '%20')
-                    fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={token}"
-                updated_items = list(items)
-                for idx in selected_indices:
-                    if idx < len(updated_items):
-                        it_copy = dict(updated_items[idx])
-                        data_copy = dict(it_copy.get('data', {}))
-                        validated_sets = list(data_copy.get('validated_sets', []))
-                        analysis_meta = list(data_copy.get('analysis_meta', []))
-                        ns = target_namespace or 'default'
-                        # Solo conservar la primera conversi�n por namespace
-                        exists_ns = any((vs.get('namespace') == ns) for vs in validated_sets)
-                        if not exists_ns:
-                            meta = {
-                                'origin': 'reactome',
-                                'organism': organism_name,
-                                'namespace': ns,
-                                'validation': bool(use_validation),
-                                'options': {
-                                    'project_to_human': projection,
-                                    'include_disease': include_disease,
-                                    'interactors': interactors
-                                },
-                                'token': token,
-                                'fireworks_url': fireworks_url
-                            }
-                            validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean, 'meta': meta})
-                        analysis_meta = [m for m in analysis_meta if not (m.get('origin') == 'reactome' and m.get('namespace') == ns)]
-                        analysis_meta.append({
+        if res:
+            res['gene_list_original'] = raw
+            res['gene_list_validated'] = clean
+            token = res.get('token')
+            fireworks_url = None
+            if token and organism_name:
+                organism_encoded = str(organism_name).replace(' ', '%20')
+                fireworks_url = f"https://reactome.org/PathwayBrowser/?species={organism_encoded}#DTAB=AN&ANALYSIS={token}"
+            updated_items = list(items)
+            for idx in selected_indices:
+                if idx < len(updated_items):
+                    it_copy = dict(updated_items[idx])
+                    data_copy = dict(it_copy.get('data', {}))
+                    validated_sets = list(data_copy.get('validated_sets', []))
+                    analysis_meta = list(data_copy.get('analysis_meta', []))
+                    ns = target_namespace or 'default'
+                    # Solo conservar la primera conversi?n por namespace
+                    exists_ns = any((vs.get('namespace') == ns) for vs in validated_sets)
+                    if not exists_ns:
+                        meta = {
                             'origin': 'reactome',
                             'organism': organism_name,
                             'namespace': ns,
@@ -1341,19 +1326,34 @@ def register_enrichment_callbacks(app):
                             },
                             'token': token,
                             'fireworks_url': fireworks_url
-                        })
-                        if 'validated_genes' not in data_copy:
-                            data_copy['validated_genes'] = clean
-                        data_copy['validated_sets'] = validated_sets
-                        data_copy['analysis_meta'] = analysis_meta
-                        it_copy['data'] = data_copy
-                        updated_items[idx] = it_copy
+                        }
+                        validated_sets.append({'origin': 'reactome', 'namespace': ns, 'genes': clean, 'meta': meta})
+                    analysis_meta = [m for m in analysis_meta if not (m.get('origin') == 'reactome' and m.get('namespace') == ns)]
+                    analysis_meta.append({
+                        'origin': 'reactome',
+                        'organism': organism_name,
+                        'namespace': ns,
+                        'validation': bool(use_validation),
+                        'options': {
+                            'project_to_human': projection,
+                            'include_disease': include_disease,
+                            'interactors': interactors
+                        },
+                        'token': token,
+                        'fireworks_url': fireworks_url
+                    })
+                    if 'validated_genes' not in data_copy:
+                        data_copy['validated_genes'] = clean
+                    data_copy['validated_sets'] = validated_sets
+                    data_copy['analysis_meta'] = analysis_meta
+                    it_copy['data'] = data_copy
+                    updated_items[idx] = it_copy
 
-                logger.info(f"[Reactome] Enrichment OK. Results={len(res.get('results', []))}, token={res.get('token')}")
-                return res, False, None, updated_items
+            logger.info(f"[Reactome] Enrichment OK. Results={len(res.get('results', []))}, token={res.get('token')}")
+            return res, False, None, updated_items
 
-            logger.info("[Reactome] Service returned no results; returning empty store")
-            return store, False, None, items
+        logger.info("[Reactome] Service returned no results; returning empty store")
+        return store, False, None, items
         
         raise PreventUpdate
 
@@ -1726,22 +1726,62 @@ def register_enrichment_callbacks(app):
 
         return dcc.Graph(id='gprofiler-clustergram-graph', figure=heatmap_fig, config={'displayModeBar': True})
 
-    # --- Modal de confirmación para adjuntos (g:Profiler) ---
+    # --- Modal de confirmaci para adjuntos (g:Profiler) ---
     @app.callback(
         [Output('attachment-modal-context', 'data'),
          Output('attachment-title-input', 'value'),
          Output('attachment-comment-input', 'value'),
          Output('attachment-saving-indicator', 'children', allow_duplicate=True),
-         Output('attachment-confirm-modal', 'is_open', allow_duplicate=True),
-         Output('interest-panel-store', 'data', allow_duplicate=True),
-         Output('reactome-diagram-cache-store', 'data', allow_duplicate=True)],
+         Output('attachment-confirm-modal', 'is_open', allow_duplicate=True)],
         [Input('attach-gprofiler-table-btn', 'n_clicks'),
          Input('attach-gprofiler-manhattan-btn', 'n_clicks'),
          Input('attach-gprofiler-heatmap-btn', 'n_clicks'),
          Input('attach-reactome-table-btn', 'n_clicks'),
          Input('attach-reactome-pathway-btn', 'n_clicks'),
-         Input('attachment-confirm-cancel', 'n_clicks'),
-         Input('attachment-confirm-submit', 'n_clicks')],
+         Input('attachment-confirm-cancel', 'n_clicks')],
+        [State('enrichment-results-table-reactome', 'selected_rows'),
+         State('enrichment-results-table-reactome', 'data')],
+        prevent_initial_call=True
+    )
+    def handle_attachment_modal_open_close(table_click, manhattan_click, heatmap_click, react_table_click, react_pathway_click, cancel_click,
+                                           react_selected_rows, react_table_data):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        trigger_val = ctx.triggered[0].get('value', None)
+
+        if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn', 'attach-reactome-table-btn', 'attach-reactome-pathway-btn']:
+            if not trigger_val:
+                raise PreventUpdate
+            if trigger_id == 'attach-gprofiler-table-btn':
+                return {'type': 'gprofiler_table'}, 'g:Profiler Results', '', None, True
+            if trigger_id == 'attach-gprofiler-manhattan-btn':
+                return {'type': 'gprofiler_manhattan'}, 'Manhattan Plot', '', None, True
+            if trigger_id == 'attach-gprofiler-heatmap-btn':
+                return {'type': 'gprofiler_heatmap'}, 'Gene-Term Heatmap', '', None, True
+            if trigger_id == 'attach-reactome-table-btn':
+                return {'type': 'reactome_table'}, 'Reactome Results', '', None, True
+            sel_idx = react_selected_rows[0] if react_selected_rows else None
+            if sel_idx is None or not react_table_data or sel_idx >= len(react_table_data):
+                raise PreventUpdate
+            row = react_table_data[sel_idx]
+            pathway_name = row.get('term_name', 'Pathway')
+            return {'type': 'reactome_pathway', 'row_index': sel_idx}, f"Pathway: {pathway_name}", '', None, True
+
+        if trigger_id == 'attachment-confirm-cancel':
+            if not cancel_click:
+                raise PreventUpdate
+            return dash.no_update, dash.no_update, dash.no_update, None, False
+
+        raise PreventUpdate
+
+    @app.callback(
+        [Output('attachment-saving-indicator', 'children', allow_duplicate=True),
+         Output('attachment-confirm-modal', 'is_open', allow_duplicate=True),
+         Output('interest-panel-store', 'data', allow_duplicate=True),
+         Output('reactome-diagram-cache-store', 'data', allow_duplicate=True)],
+        Input('attachment-confirm-submit', 'n_clicks'),
         [State('attachment-modal-context', 'data'),
          State('attachment-title-input', 'value'),
          State('attachment-comment-input', 'value'),
@@ -1758,264 +1798,213 @@ def register_enrichment_callbacks(app):
          State('reactome-diagram-cache-store', 'data')],
         prevent_initial_call=True
     )
-    def handle_attachment_modal(table_click, manhattan_click, heatmap_click, react_table_click, react_pathway_click, cancel_click, submit_click,
-                                ctx_data, title_value, comment_value, gprof_results_store, reactome_store, threshold_value,
-                                selected_indices, items, react_selected_rows, react_table_data, manhattan_fig_state, heatmap_fig_state, image_store, reactome_diagram_cache):
-        ctx = dash.callback_context
-        if not ctx.triggered:
+    def handle_attachment_modal_submit(submit_click,
+                                       ctx_data, title_value, comment_value, gprof_results_store, reactome_store, threshold_value,
+                                       selected_indices, items, react_selected_rows, react_table_data, manhattan_fig_state, heatmap_fig_state,
+                                       image_store, reactome_diagram_cache):
+        if not submit_click:
             raise PreventUpdate
-        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        trigger_val = ctx.triggered[0].get('value', None)
 
-        # Defaults
-        new_ctx = dash.no_update
-        new_title = dash.no_update
-        new_comment = dash.no_update
-        saving = dash.no_update
-        modal_open = dash.no_update
-        updated_items = dash.no_update
+        saving = dbc.Spinner(size="sm", color="primary")
         new_cache_store = dash.no_update
 
-        # Abrir modal según botón
-        if trigger_id in ['attach-gprofiler-table-btn', 'attach-gprofiler-manhattan-btn', 'attach-gprofiler-heatmap-btn', 'attach-reactome-table-btn', 'attach-reactome-pathway-btn']:
-            # Evitar apertura si el click es inicial (None/0)
-            if not trigger_val:
-                raise PreventUpdate
-            if trigger_id == 'attach-gprofiler-table-btn':
-                new_ctx = {'type': 'gprofiler_table'}
-                new_title = 'g:Profiler Results'
-            elif trigger_id == 'attach-gprofiler-manhattan-btn':
-                new_ctx = {'type': 'gprofiler_manhattan'}
-                new_title = 'Manhattan Plot'
-            elif trigger_id == 'attach-gprofiler-heatmap-btn':
-                new_ctx = {'type': 'gprofiler_heatmap'}
-                new_title = 'Gene-Term Heatmap'
-            elif trigger_id == 'attach-reactome-table-btn':
-                new_ctx = {'type': 'reactome_table'}
-                new_title = 'Reactome Results'
-            else:
-                sel_idx = react_selected_rows[0] if react_selected_rows else None
-                if sel_idx is None or not react_table_data or sel_idx >= len(react_table_data):
-                    raise PreventUpdate
+        if not ctx_data or not selected_indices or not items:
+            warn = dbc.Alert("Select an item and generate results before attaching.", color="warning", className="py-1 px-2")
+            return warn, True, dash.no_update, new_cache_store
+        ctx_type = ctx_data.get('type')
+        if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap', 'reactome_table', 'reactome_pathway']:
+            raise PreventUpdate
+        try:
+            timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            att = None
+            validated_genes = []
+            if gprof_results_store:
+                validated_genes = gprof_results_store.get('gene_list_validated') or gprof_results_store.get('validated_genes') or []
+
+            if ctx_type == 'gprofiler_table':
+                if not gprof_results_store:
+                    raise ValueError("No g:Profiler results to attach.")
+                df = pd.DataFrame(gprof_results_store.get('results', []))
+                if df.empty:
+                    raise ValueError("No table data to attach.")
+                safe_cols = ['term_name', 'description', 'p_value', 'term_size', 'intersection_size', 'precision', 'recall', 'source']
+                df_attach = df.copy()
+                if 'intersection_genes' in df_attach.columns:
+                    df_attach['intersection_genes'] = df_attach['intersection_genes'].apply(lambda x: ', '.join(x) if isinstance(x, (list, tuple)) else str(x))
+                    safe_cols.append('intersection_genes')
+                df_attach = df_attach[[c for c in safe_cols if c in df_attach.columns]]
+                att = {
+                    'id': f"att_gprof_table_{timestamp_now}",
+                    'type': 'table',
+                    'source': 'gprofiler',
+                    'name': title_value or 'g:Profiler Results',
+                    'created_at': timestamp_now,
+                    'include': True,
+                    'comment': comment_value or '',
+                    'payload': {
+                        'columns': df_attach.columns.tolist(),
+                        'rows': df_attach.head(50).to_dict('records'),
+                        'validated_genes': validated_genes
+                    }
+                }
+
+            elif ctx_type == 'gprofiler_manhattan':
+                img_b64 = None
+                img_error = None
+                if image_store and image_store.get('type') == 'gprofiler_manhattan' and image_store.get('image'):
+                    img_b64 = image_store.get('image')
+                else:
+                    fig = None
+                    if manhattan_fig_state:
+                        try:
+                            fig = go.Figure(manhattan_fig_state)
+                        except Exception:
+                            fig = None
+                    if fig is None:
+                        df = pd.DataFrame(gprof_results_store.get('results', [])) if gprof_results_store else pd.DataFrame()
+                        if df.empty:
+                            raise ValueError("No Manhattan data to attach.")
+                        fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
+                    try:
+                        img_bytes = pio.to_image(fig, format="png")
+                        img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                    except Exception as e:
+                        img_error = f"No se pudo generar la imagen del Manhattan (verifique que 'kaleido' esté instalado). Detalle: {e}"
+                att = {
+                    'id': f"att_gprof_manhattan_{timestamp_now}",
+                    'type': 'manhattan',
+                    'source': 'gprofiler',
+                    'name': title_value or 'Manhattan Plot',
+                    'created_at': timestamp_now,
+                    'include': True,
+                    'comment': comment_value or '',
+                    'payload': {
+                        'image': img_b64,
+                        'error': img_error,
+                        'validated_genes': validated_genes
+                    }
+                }
+
+            elif ctx_type == 'gprofiler_heatmap':
+                img_b64 = None
+                img_error = None
+                if image_store and image_store.get('type') == 'gprofiler_heatmap' and image_store.get('image'):
+                    img_b64 = image_store.get('image')
+                else:
+                    heatmap_fig = None
+                    if heatmap_fig_state:
+                        try:
+                            heatmap_fig = go.Figure(heatmap_fig_state)
+                        except Exception:
+                            heatmap_fig = None
+                    if heatmap_fig is None:
+                        if not gprof_results_store:
+                            raise ValueError("No heatmap data to attach.")
+                        heatmap_matrix, _dbg = process_data_for_gene_term_heatmap(gprof_results_store, threshold=0.05)
+                        if heatmap_matrix.empty:
+                            raise ValueError("Heatmap is empty.")
+                        heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
+                    try:
+                        img_bytes = pio.to_image(heatmap_fig, format="png")
+                        img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                    except Exception as e:
+                        img_error = f"No se pudo generar la imagen del heatmap (verifique que 'kaleido' esté instalado). Detalle: {e}"
+                att = {
+                    'id': f"att_gprof_heatmap_{timestamp_now}",
+                    'type': 'heatmap',
+                    'source': 'gprofiler',
+                    'name': title_value or 'Gene-Term Heatmap',
+                    'created_at': timestamp_now,
+                    'include': True,
+                    'comment': comment_value or '',
+                    'payload': {
+                        'image': img_b64,
+                        'error': img_error,
+                        'validated_genes': validated_genes
+                    }
+                }
+
+            elif ctx_type == 'reactome_table':
+                if not reactome_store:
+                    raise ValueError("No Reactome results to attach.")
+                results = reactome_store.get('results', [])
+                if not results:
+                    raise ValueError("No Reactome results to attach.")
+                df = pd.DataFrame(results)
+                cols = ['term_name', 'description', 'p_value', 'entities_found', 'entities_total', 'fdr_value', 'source']
+                df_attach = df[[c for c in cols if c in df.columns]].copy()
+                att = {
+                    'id': f"att_react_table_{timestamp_now}",
+                    'type': 'table',
+                    'source': 'reactome',
+                    'name': title_value or 'Reactome Results',
+                    'created_at': timestamp_now,
+                    'include': True,
+                    'comment': comment_value or '',
+                    'payload': {
+                        'columns': df_attach.columns.tolist(),
+                        'rows': df_attach.head(50).to_dict('records')
+                    }
+                }
+
+            elif ctx_type == 'reactome_pathway':
+                sel_idx = ctx_data.get('row_index')
+                if sel_idx is None or sel_idx < 0:
+                    raise ValueError("Select a pathway row before attaching.")
+                if not react_table_data or sel_idx >= len(react_table_data):
+                    raise ValueError("Selected pathway is not available.")
+                if not reactome_store:
+                    raise ValueError("No Reactome analysis found.")
                 row = react_table_data[sel_idx]
+                pathway_st_id = row.get('description')
                 pathway_name = row.get('term_name', 'Pathway')
-                new_ctx = {'type': 'reactome_pathway', 'row_index': sel_idx}
-                new_title = f"Pathway: {pathway_name}"
-            new_comment = ''
-            saving = None
-            modal_open = True
-            return new_ctx, new_title, new_comment, saving, modal_open, dash.no_update, new_cache_store
-
-        # Cancelar modal
-        if trigger_id == 'attachment-confirm-cancel':
-            if not cancel_click:
-                raise PreventUpdate
-            return dash.no_update, dash.no_update, dash.no_update, None, False, dash.no_update, new_cache_store
-
-        # Confirmar adjunto
-        if trigger_id == 'attachment-confirm-submit':
-            if not submit_click:
-                raise PreventUpdate
-            # mostrar indicador de carga mientras se procesa
-            saving = dbc.Spinner(size="sm", color="primary")
-            if not ctx_data or not selected_indices or not items:
-                warn = dbc.Alert("Select an item and generate results before attaching.", color="warning", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, warn, True, dash.no_update, new_cache_store
-            ctx_type = ctx_data.get('type')
-            if ctx_type not in ['gprofiler_table', 'gprofiler_manhattan', 'gprofiler_heatmap', 'reactome_table', 'reactome_pathway']:
-                raise PreventUpdate
-
-            try:
-                timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                att = None
-                validated_genes = []
-                if gprof_results_store:
-                    validated_genes = gprof_results_store.get('gene_list_validated') or gprof_results_store.get('validated_genes') or []
-
-                if ctx_type == 'gprofiler_table':
-                    if not gprof_results_store:
-                        raise ValueError("No g:Profiler results to attach.")
-                    df = pd.DataFrame(gprof_results_store.get('results', []))
-                    if df.empty:
-                        raise ValueError("No table data to attach.")
-                    safe_cols = ['term_name', 'description', 'p_value', 'term_size', 'intersection_size', 'precision', 'recall', 'source']
-                    df_attach = df.copy()
-                    if 'intersection_genes' in df_attach.columns:
-                        df_attach['intersection_genes'] = df_attach['intersection_genes'].apply(lambda x: ', '.join(x) if isinstance(x, (list, tuple)) else str(x))
-                        safe_cols.append('intersection_genes')
-                    df_attach = df_attach[[c for c in safe_cols if c in df_attach.columns]]
-                    att = {
-                        'id': f"att_gprof_table_{timestamp_now}",
-                        'type': 'table',
-                        'source': 'gprofiler',
-                        'name': title_value or 'g:Profiler Results',
-                        'created_at': timestamp_now,
-                        'include': True,
-                        'comment': comment_value or '',
-                        'payload': {
-                            'columns': df_attach.columns.tolist(),
-                            'rows': df_attach.head(50).to_dict('records'),
-                            'validated_genes': validated_genes
-                        }
+                token = reactome_store.get('token')
+                if not pathway_st_id or not token:
+                    raise ValueError("Missing pathway identifier or Reactome token.")
+                # Reutilizar imagen cacheada si coincide con el ST_ID; si no, descargarla.
+                img = None
+                if reactome_diagram_cache and reactome_diagram_cache.get('st_id') == pathway_st_id:
+                    img = reactome_diagram_cache.get('image')
+                    logger.info(f"[Reactome][Attach] cache hit for st_id={pathway_st_id} (len={len(img) if img else 0})")
+                    new_cache_store = None  # limpiar cache tras adjuntar
+                if not img:
+                    logger.info(f"[Reactome][Attach] cache miss -> downloading st_id={pathway_st_id}")
+                    img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
+                    if img is None:
+                        raise ValueError("Unable to retrieve pathway image.")
+                    new_cache_store = None
+                att = {
+                    'id': f"att_react_pathway_{timestamp_now}",
+                    'type': 'pathway',
+                    'source': 'reactome',
+                    'name': title_value or f"Pathway: {pathway_name}",
+                    'created_at': timestamp_now,
+                    'include': True,
+                    'comment': comment_value or '',
+                    'payload': {
+                        'image_url': img,
+                        'link_url': f"https://reactome.org/content/detail/{pathway_st_id}?analysis={token}"
                     }
+                }
 
-                elif ctx_type == 'gprofiler_manhattan':
-                    img_b64 = None
-                    img_error = None
-                    if image_store and image_store.get('type') == 'gprofiler_manhattan' and image_store.get('image'):
-                        img_b64 = image_store.get('image')
-                    else:
-                        fig = None
-                        if manhattan_fig_state:
-                            try:
-                                fig = go.Figure(manhattan_fig_state)
-                            except Exception:
-                                fig = None
-                        if fig is None:
-                            df = pd.DataFrame(gprof_results_store.get('results', [])) if gprof_results_store else pd.DataFrame()
-                            if df.empty:
-                                raise ValueError("No Manhattan data to attach.")
-                            fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
-                        try:
-                            img_bytes = pio.to_image(fig, format="png")
-                            img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
-                        except Exception as e:
-                            img_error = f"No se pudo generar la imagen del Manhattan (verifique que 'kaleido' esté instalado). Detalle: {e}"
-                    att = {
-                        'id': f"att_gprof_manhattan_{timestamp_now}",
-                        'type': 'manhattan',
-                        'source': 'gprofiler',
-                        'name': title_value or 'Manhattan Plot',
-                        'created_at': timestamp_now,
-                        'include': True,
-                        'comment': comment_value or '',
-                        'payload': {
-                            'image': img_b64,
-                            'error': img_error,
-                            'validated_genes': validated_genes
-                        }
-                    }
+            updated_items = []
+            for idx_item, it in enumerate(items):
+                it_copy = dict(it)
+                if idx_item in selected_indices:
+                    atts = list(it_copy.get('attachments', []))
+                    if ctx_type == 'gprofiler_table':
+                        atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'gprofiler')]
+                    if ctx_type == 'reactome_table':
+                        atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
+                    atts.append(att)
+                    it_copy['attachments'] = atts
+                updated_items.append(it_copy)
 
-                elif ctx_type == 'gprofiler_heatmap':
-                    img_b64 = None
-                    img_error = None
-                    if image_store and image_store.get('type') == 'gprofiler_heatmap' and image_store.get('image'):
-                        img_b64 = image_store.get('image')
-                    else:
-                        heatmap_fig = None
-                        if heatmap_fig_state:
-                            try:
-                                heatmap_fig = go.Figure(heatmap_fig_state)
-                            except Exception:
-                                heatmap_fig = None
-                        if heatmap_fig is None:
-                            if not gprof_results_store:
-                                raise ValueError("No heatmap data to attach.")
-                            heatmap_matrix, _dbg = process_data_for_gene_term_heatmap(gprof_results_store, threshold=0.05)
-                            if heatmap_matrix.empty:
-                                raise ValueError("Heatmap is empty.")
-                            heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
-                        try:
-                            img_bytes = pio.to_image(heatmap_fig, format="png")
-                            img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
-                        except Exception as e:
-                            img_error = f"No se pudo generar la imagen del heatmap (verifique que 'kaleido' esté instalado). Detalle: {e}"
-                    att = {
-                        'id': f"att_gprof_heatmap_{timestamp_now}",
-                        'type': 'heatmap',
-                        'source': 'gprofiler',
-                        'name': title_value or 'Gene-Term Heatmap',
-                        'created_at': timestamp_now,
-                        'include': True,
-                        'comment': comment_value or '',
-                        'payload': {
-                            'image': img_b64,
-                            'error': img_error,
-                            'validated_genes': validated_genes
-                        }
-                    }
+            spinner = dbc.Alert("Attachment saved.", color="success", className="py-1 px-2")
+            return spinner, False, updated_items, new_cache_store
 
-                elif ctx_type == 'reactome_table':
-                    if not reactome_store:
-                        raise ValueError("No Reactome results to attach.")
-                    results = reactome_store.get('results', [])
-                    if not results:
-                        raise ValueError("No Reactome results to attach.")
-                    df = pd.DataFrame(results)
-                    cols = ['term_name', 'description', 'p_value', 'entities_found', 'entities_total', 'fdr_value', 'source']
-                    df_attach = df[[c for c in cols if c in df.columns]].copy()
-                    att = {
-                        'id': f"att_react_table_{timestamp_now}",
-                        'type': 'table',
-                        'source': 'reactome',
-                        'name': title_value or 'Reactome Results',
-                        'created_at': timestamp_now,
-                        'include': True,
-                        'comment': comment_value or '',
-                        'payload': {
-                            'columns': df_attach.columns.tolist(),
-                            'rows': df_attach.head(50).to_dict('records')
-                        }
-                    }
-
-                elif ctx_type == 'reactome_pathway':
-                    sel_idx = ctx_data.get('row_index')
-                    if sel_idx is None or sel_idx < 0:
-                        raise ValueError("Select a pathway row before attaching.")
-                    if not react_table_data or sel_idx >= len(react_table_data):
-                        raise ValueError("Selected pathway is not available.")
-                    if not reactome_store:
-                        raise ValueError("No Reactome analysis found.")
-                    row = react_table_data[sel_idx]
-                    pathway_st_id = row.get('description')
-                    pathway_name = row.get('term_name', 'Pathway')
-                    token = reactome_store.get('token')
-                    if not pathway_st_id or not token:
-                        raise ValueError("Missing pathway identifier or Reactome token.")
-                    # Reutilizar imagen cacheada si coincide con el ST_ID; si no, descargarla.
-                    img = None
-                    if reactome_diagram_cache and reactome_diagram_cache.get('st_id') == pathway_st_id:
-                        img = reactome_diagram_cache.get('image')
-                        logger.info(f"[Reactome][Attach] cache hit for st_id={pathway_st_id} (len={len(img) if img else 0})")
-                        new_cache_store = None  # limpiar cache tras adjuntar
-                    if not img:
-                        logger.info(f"[Reactome][Attach] cache miss -> downloading st_id={pathway_st_id}")
-                        img = ReactomeService.get_diagram_image_base64(pathway_st_id=pathway_st_id, analysis_token=token)
-                        if img is None:
-                            raise ValueError("Unable to retrieve pathway image.")
-                        new_cache_store = None
-                    att = {
-                        'id': f"att_react_pathway_{timestamp_now}",
-                        'type': 'pathway',
-                        'source': 'reactome',
-                        'name': title_value or f"Pathway: {pathway_name}",
-                        'created_at': timestamp_now,
-                        'include': True,
-                        'comment': comment_value or '',
-                        'payload': {
-                            'image_url': img,
-                            'link_url': f"https://reactome.org/content/detail/{pathway_st_id}?analysis={token}"
-                        }
-                    }
-
-                updated_items = []
-                for idx_item, it in enumerate(items):
-                    it_copy = dict(it)
-                    if idx_item in selected_indices:
-                        atts = list(it_copy.get('attachments', []))
-                        if ctx_type == 'gprofiler_table':
-                            atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'gprofiler')]
-                        if ctx_type == 'reactome_table':
-                            atts = [a for a in atts if not (a.get('type') == 'table' and a.get('source') == 'reactome')]
-                        atts.append(att)
-                        it_copy['attachments'] = atts
-                    updated_items.append(it_copy)
-
-                spinner = dbc.Alert("Attachment saved.", color="success", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, spinner, False, updated_items, new_cache_store
-
-            except Exception as e:
-                err = dbc.Alert(f"Error al adjuntar: {e}", color="danger", className="py-1 px-2")
-                return dash.no_update, dash.no_update, dash.no_update, err, True, dash.no_update, new_cache_store
+        except Exception as e:
+            err = dbc.Alert(f"Error al adjuntar: {e}", color="danger", className="py-1 px-2")
+            return err, True, dash.no_update, new_cache_store
 
         raise PreventUpdate
