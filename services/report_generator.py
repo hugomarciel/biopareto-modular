@@ -171,6 +171,7 @@ def generate_pdf_report(data_store, enrichment_data, title="BioPareto Analysis R
     # Logo helpers (watermark-style en esquina superior derecha)
     base_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "bioparetologoFblanco.png"))
+    lai_logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "LAI2BPDF.png"))
     if not os.path.exists(logo_path):
         logger.warning("PDF logo not found at %s", logo_path)
         print(f"[PDF] Logo not found at {logo_path}")
@@ -362,6 +363,7 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
     # Logo helpers para item PDF (canvas)
     base_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "bioparetologoFblanco.png"))
+    lai_logo_path = os.path.abspath(os.path.join(base_dir, "..", "assets", "LAI2BPDF.png"))
 
     def draw_item_logo(canvas_obj, doc_obj):
         if not logo_path or not os.path.exists(logo_path):
@@ -373,6 +375,12 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
             y_pos = doc_obj.pagesize[1] - doc_obj.topMargin - logo_h + 0.1 * inch
             canvas_obj.saveState()
             canvas_obj.drawImage(logo_path, x_pos, y_pos, width=logo_w, height=logo_h, preserveAspectRatio=True, mask='auto')
+            if lai_logo_path and os.path.exists(lai_logo_path):
+                lai_w = 1.8 * inch
+                lai_h = 1.0 * inch
+                lai_x = x_pos + (logo_w - lai_w) - 0.08 * inch
+                lai_y = y_pos - lai_h - 0.15 * inch
+                canvas_obj.drawImage(lai_logo_path, lai_x, lai_y, width=lai_w, height=lai_h, preserveAspectRatio=True, mask='auto')
             canvas_obj.restoreState()
             print(f"[PDF] Item logo drawn at x={x_pos:.1f}, y={y_pos:.1f}")
         except Exception as exc:
