@@ -368,7 +368,7 @@ def register_pareto_plot_callbacks(app):
                     html.Details([
                         html.Summary([
                             html.I(className="bi bi-dna me-1 text-info"),
-                            f"View {genes_count} Genes",
+                            f"View {genes_count} Genes/Probes",
                         ], style={'cursor': 'pointer', 'fontSize': '0.85rem', 'color': '#0d6efd', 'fontWeight': 'bold'}),
                         
                         html.Div(
@@ -498,7 +498,7 @@ def register_pareto_plot_callbacks(app):
                             className="p-2", 
                             style={'fontSize': '0.85rem', 'maxHeight': '150px', 'overflowY': 'auto', 'backgroundColor': '#f9f9f9'}
                         ),
-                        title=f"Genes ({len(sol.get('selected_genes', []))})",
+                        title=f"Genes/Probes ({len(sol.get('selected_genes', []))})",
                     )
                 ], start_collapsed=True, flush=True)
             ]

@@ -75,7 +75,7 @@ def register_genes_analysis_callbacks(app):
                     dbc.CardBody([
                         html.Div([
                             html.Div([
-                                html.H6("🎯 Conserved Genes (100% Frequency)", className="fw-bold text-success mb-1"),
+                                html.H6("🎯 Conserved Genes/Probes (100% Frequency)", className="fw-bold text-success mb-1"),
                                 html.Small(f"These {len(genes_100_percent)} genes appear in all {total_solutions} solutions.", className="text-muted")
                             ]),
                             dbc.Button(
@@ -201,7 +201,7 @@ def register_genes_analysis_callbacks(app):
             
             if col == 'front_name': col_def.update({'name': 'Front'})
             elif col == 'solution_id': col_def.update({'name': 'Solution'})
-            elif col == 'gene': col_def.update({'name': 'Gene', 'presentation': 'markdown'}) 
+            elif col == 'gene': col_def.update({'name': 'Gene/Probe', 'presentation': 'markdown'}) 
             
             if col in [o['value'] for o in objective_options]:
                 col_def.update({'type': 'numeric', 'format': {'specifier': '.3f'} if genes_df[col].dtype == 'float64' else None})
@@ -402,7 +402,7 @@ def register_genes_analysis_callbacks(app):
                 html.H6([
                     html.I(className="bi bi-diagram-2-fill me-2 text-primary"),
                     f"Group: {clicked_percentage}% Frequency ",
-                    dbc.Badge(f"{len(genes_at_percentage)} Genes", color="light", text_color="primary", className="ms-1 border"),
+                    dbc.Badge(f"{len(genes_at_percentage)} Genes/Probes", color="light", text_color="primary", className="ms-1 border"),
                     html.I(id="freq-table-help-icon", className="bi bi-question-circle-fill text-muted ms-2", style={'cursor': 'pointer', 'fontSize': '1rem'}, title="Click for filter help")
                 ], className="m-0 fw-bold d-flex align-items-center")
             ], width=True, className="d-flex align-items-center"),
@@ -415,7 +415,7 @@ def register_genes_analysis_callbacks(app):
         data_table = dash_table.DataTable(
             id='frequency-detail-table',
             data=genes_at_percentage,
-            columns=[{'name': 'Gene Name', 'id': 'gene'}, {'name': 'Occurrence (Count)', 'id': 'count'}, {'name': 'Frequency', 'id': 'frequency'}],
+            columns=[{'name': 'Gene/Probe', 'id': 'gene'}, {'name': 'Occurrence (Count)', 'id': 'count'}, {'name': 'Frequency', 'id': 'frequency'}],
             page_size=10,
             sort_action='native',
             filter_action='native',
@@ -584,7 +584,7 @@ def register_genes_analysis_callbacks(app):
                     html.Div(html.I(className="bi bi-dna fs-4 text-success"), className="me-3"),
                     html.Div([
                         html.H4(f"{unique_genes:,}", className="mb-0 text-success fw-bold fs-3"),
-                        html.Small("Unique Genes", className="text-muted fw-bold text-uppercase", style={'fontSize': '0.7rem'})
+                        html.Small("Unique Genes/Probes", className="text-muted fw-bold text-uppercase", style={'fontSize': '0.7rem'})
                     ])
                 ], className="d-flex align-items-center")
             ]), className="h-100 shadow-sm border-start border-success border-5"), width=12, md=4, className="mb-2"),
@@ -747,7 +747,7 @@ def register_genes_analysis_callbacks(app):
             group_name = f"Visible Group ({selected_metric})"
             source_display = f"Visible group from '{selected_metric}' analysis"
             
-            title = "Add Genes to Interest Panel"
+            title = "Add Genes/Probes to Interest Panel"
             body = html.Div([
                 html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
                 html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
@@ -789,7 +789,7 @@ def register_genes_analysis_callbacks(app):
                     gene_name = clicked_category
                     source_display = "Graph click (Gene metric)"
                     
-                    title = "Add Genes to Interest Panel"
+                    title = "Add Genes/Probes to Interest Panel"
                     body = html.Div([
                         html.P([html.Strong("Type: "), html.Span("🔬 Individual Gene", className="text-info")]),
                         html.P([html.Strong("Gene: "), html.Code(gene_name, className="text-primary")]),
@@ -838,7 +838,7 @@ def register_genes_analysis_callbacks(app):
                     body = html.Div([
                         html.P([html.Strong("Type: "), html.Span("💎 Single Solution", className="text-primary")]),
                         html.P([html.Strong("Solution: "), html.Code(f"{sol_id} ({front_name})")]),
-                        html.P([html.Strong("Genes: "), html.Span(f"{len(genes_in_sol)}")]),
+                        html.P([html.Strong("Genes/Probes: "), html.Span(f"{len(genes_in_sol)}")]),
                         html.P([html.Strong("Data: "), html.Span(objs_display, className="small text-muted")]),
                         dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
                         dbc.Textarea(
@@ -868,10 +868,10 @@ def register_genes_analysis_callbacks(app):
                     category_df = filtered_df[filtered_df[selected_metric] == clicked_category]
                     genes_in_category = sorted(category_df['gene'].unique())
                     
-                    group_name = f"Genes from '{clicked_category}'"
+                    group_name = f"Genes/Probes from '{clicked_category}'"
                     source_display = f"Graph click ({selected_metric} = {clicked_category})"
                     
-                    title = "Add Genes to Interest Panel"
+                    title = "Add Genes/Probes to Interest Panel"
                     body = html.Div([
                         html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
                         html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
@@ -880,7 +880,7 @@ def register_genes_analysis_callbacks(app):
                         dbc.Label("Add a comment or note:", className="fw-bold mt-3"),
                         dbc.Textarea(
                             id='genes-graph-modal-comment-input',
-                            placeholder="e.g., 'Genes from selected category'...",
+                            placeholder="e.g., 'Genes/Probes from selected category'...",
                             style={'height': '100px'},
                             className='mb-2',
                             value=f"Group of {len(genes_in_category)} genes from category '{clicked_category}'."
@@ -928,10 +928,10 @@ def register_genes_analysis_callbacks(app):
                     
                     genes_in_bin = sorted(bin_data['gene'].unique())
 
-                    group_name = f"Genes from Bin '{clicked_bin_label}'"
+                    group_name = f"Genes/Probes from Bin '{clicked_bin_label}'"
                     source_display = f"Graph click ({selected_metric} bin: {clicked_bin_label})"
                     
-                    title = "Add Genes to Interest Panel"
+                    title = "Add Genes/Probes to Interest Panel"
                     body = html.Div([
                         html.P([html.Strong("Type: "), html.Span("🧬 Gene Group", className="text-success")]),
                         html.P([html.Strong("Group Name: "), html.Code(group_name, className="text-primary")]),
@@ -1009,7 +1009,7 @@ def register_genes_analysis_callbacks(app):
             
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Caso 1: Guardar un Grupo de Genes (gene_set)
+        # Caso 1: Guardar un Grupo de Genes/Probes (gene_set)
         if temp_data.get('type') == 'gene_set':
             new_item = {
                 'type': 'gene_set',

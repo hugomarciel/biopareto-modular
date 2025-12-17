@@ -30,13 +30,13 @@ def create_pareto_modal():
 def create_genes_modal():
     """Modal for Genes Tab (Gene Groups/Individual Genes)"""
     return dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Add Genes to Interest Panel")),
+        dbc.ModalHeader(dbc.ModalTitle("Add Genes/Probes to Interest Panel")),
         dbc.ModalBody([
             html.Div(id='genes-tab-modal-item-info', className='mb-3'),
             dbc.Label("Add a comment or note:", className="fw-bold"),
             dbc.Textarea(
                 id='genes-tab-comment-input',
-                placeholder="e.g., 'Key genes for analysis', 'High frequency gene group'...",
+                placeholder="e.g., 'Key genes/probes for analysis', 'High frequency gene/probe group'...",
                 style={'height': '100px'},
                 className='mb-2'
             )

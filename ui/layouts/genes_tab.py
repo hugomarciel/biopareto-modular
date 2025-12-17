@@ -33,8 +33,8 @@ def create_genes_tab():
                     html.Strong("📊 Frequency Chart:"),
                     html.Span(" Shows the distribution of the remaining genes.", className="small text-muted"),
                     html.Div([
-                        html.Div("• Right side (High %): Genes appearing in most solutions.", className="small text-muted ps-2"),
-                        html.Div("• Left side (Low %): Genes specific to fewer solutions.", className="small text-muted ps-2")
+                        html.Div("• Right side (High %): Genes/Probes appearing in most solutions.", className="small text-muted ps-2"),
+                        html.Div("• Left side (Low %): Genes/Probes specific to fewer solutions.", className="small text-muted ps-2")
                     ], className="mt-1")
                 ], className="mb-2"),
 

@@ -316,13 +316,13 @@ app.layout = dbc.Container([
     ], id="pareto-front-tab-interest-modal", is_open=False),
 
     dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("Add Genes to Interest Panel")),
+        dbc.ModalHeader(dbc.ModalTitle("Add Genes/Probes to Interest Panel")),
         dbc.ModalBody([
             html.Div(id='genes-tab-modal-item-info', className='mb-3'),
             dbc.Label("Add a comment or note:", className="fw-bold"),
             dbc.Textarea(
                 id='genes-tab-comment-input',
-                placeholder="e.g., 'Key genes for analysis', 'High frequency gene group'...",
+                placeholder="e.g., 'Key genes/probes for analysis', 'High frequency gene/probe group'...",
                 style={'height': '100px'},
                 className='mb-2'
             )
@@ -414,7 +414,7 @@ app.layout = dbc.Container([
                 
                 # Pestaña 3: Genes
                 dbc.Tab(
-                    label="🧬 Genes Analysis", 
+                    label="🧬 Genes/Probes Analysis", 
                     tab_id="genes-tab",
                     id="tab-genes-control",
                     disabled=True,
@@ -423,7 +423,7 @@ app.layout = dbc.Container([
                 
                 # Pestaña 4: GGA
                 dbc.Tab(
-                    label="🧪 Gene Groups", 
+                    label="🧪 Gene/Probes Groups", 
                     tab_id="gene-groups-tab",
                     id="tab-gga-control",
                     disabled=True,
@@ -954,14 +954,14 @@ def open_modal_for_gene_groups(n_clicks_list, data):
             gene_list = sorted(genes_100_percent.index.tolist())
 
             item_info = html.Div([
-                html.P([html.Strong("Adding Gene Group: "), html.Span("Genes Present in 100% of Solutions")]),
-                html.P([html.Strong("Number of genes: "), html.Span(f"{len(gene_list)}")])
+                html.P([html.Strong("Adding Gene Group: "), html.Span("Genes/Probes Present in 100% of Solutions")]),
+                html.P([html.Strong("Number of genes/probes: "), html.Span(f"{len(gene_list)}")])
             ])
-            default_comment = "Genes appearing in all solutions"
+            default_comment = "Genes/Probes appearing in all solutions"
 
             gene_group_data = {
                 'type': 'gene_set',
-                'name': 'Genes Present in 100% of Solutions',
+                'name': 'Genes/Probes Present in 100% of Solutions',
                 'frequency': 100.0,
                 'genes': gene_list,
                 'count': len(gene_list)
@@ -985,14 +985,14 @@ def open_modal_for_gene_groups(n_clicks_list, data):
         if genes_at_percentage:
             gene_list = sorted(genes_at_percentage)
             item_info = html.Div([
-                html.P([html.Strong("Adding Gene Group: "), html.Span(f"Genes with {clicked_percentage}% frequency")]),
-                html.P([html.Strong("Number of genes: "), html.Span(f"{len(gene_list)}")])
+                html.P([html.Strong("Adding Gene Group: "), html.Span(f"Genes/Probes with {clicked_percentage}% frequency")]),
+                html.P([html.Strong("Number of genes/probes: "), html.Span(f"{len(gene_list)}")])
             ])
-            default_comment = f"Gene group at {clicked_percentage}% frequency"
+            default_comment = f"Gene/probe group at {clicked_percentage}% frequency"
 
             gene_group_data = {
                 'type': 'gene_set',
-                'name': f'Genes with {clicked_percentage}% frequency',
+                'name': f'Genes/Probes with {clicked_percentage}% frequency',
                 'frequency': clicked_percentage,
                 'genes': gene_list,
                 'count': len(gene_list)
@@ -1238,7 +1238,7 @@ def render_interest_panel_content(items):
                 except (ValueError, TypeError):
                     context_line = None
             stats_line = html.Div([
-                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span(f"Genes/Probes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
                 html.Span(f"Source: {source}", className="text-muted")
             ], className="small mb-1")
@@ -1253,7 +1253,7 @@ def render_interest_panel_content(items):
                 n_genes = len(all_g)
             n_sols = len(data.get('solutions', []))
             stats_line = html.Div([
-                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span(f"Genes/Probes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
                 html.Span(f"Solutions: {n_sols}", className="text-muted")
             ], className="small mb-1")
@@ -1263,7 +1263,7 @@ def render_interest_panel_content(items):
             freq = data.get('frequency', None)
             right_text = f"Freq: {freq}%" if freq else "Source: Table"
             stats_line = html.Div([
-                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span(f"Genes/Probes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
                 html.Span(right_text, className="text-muted")
             ], className="small mb-1")
@@ -1272,7 +1272,7 @@ def render_interest_panel_content(items):
             n_genes = data.get('gene_count', len(data.get('genes', [])))
             n_sources = len(data.get('source_items', []))
             stats_line = html.Div([
-                html.Span(f"Genes: {n_genes}", className="fw-bold me-2"),
+                html.Span(f"Genes/Probes: {n_genes}", className="fw-bold me-2"),
                 html.Span("|", className="text-muted me-2"),
                 html.Span(f"Sources: {n_sources}", className="text-muted")
             ], className="small mb-1")
@@ -1615,4 +1615,3 @@ if __name__ == '__main__':
 
     port = int(os.environ.get("PORT", 80))
     app.run(debug=True, host='0.0.0.0', port=port)
-

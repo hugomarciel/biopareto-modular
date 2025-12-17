@@ -57,7 +57,7 @@ def register_export_callbacks(app):
             stats_right = ""
             if item_type == 'solution':
                 genes = data.get('selected_genes', [])
-                stats_left = f"Genes: {len(genes)}"
+                stats_left = f"Genes/Probes: {len(genes)}"
                 stats_right = f"Src: {data.get('front_name', '?')}"
             elif item_type == 'solution_set':
                 n_genes = data.get('unique_genes_count', 0)
@@ -66,18 +66,18 @@ def register_export_callbacks(app):
                     for s in data['solutions']:
                         unique_g.update(s.get('selected_genes', []))
                     n_genes = len(unique_g)
-                stats_left = f"Genes: {n_genes}"
+                stats_left = f"Genes/Probes: {n_genes}"
                 stats_right = f"Sols: {len(data.get('solutions', []))}"
             elif item_type == 'gene_set':
                 genes = data.get('genes', [])
-                stats_left = f"Genes: {len(genes)}"
+                stats_left = f"Genes/Probes: {len(genes)}"
                 freq = data.get('frequency')
                 stats_right = f"Freq: {freq}%" if freq else "Table"
             elif item_type == 'individual_gene':
                 stats_left = f"ID: {data.get('gene')}"
                 stats_right = f"Src: {data.get('source')}"
             elif item_type == 'combined_gene_group':
-                stats_left = f"Genes: {data.get('gene_count', 0)}"
+                stats_left = f"Genes/Probes: {data.get('gene_count', 0)}"
                 stats_right = f"Srcs: {len(data.get('source_items', []))}"
 
             is_selected = idx in selected_indices_list
@@ -154,7 +154,7 @@ def register_export_callbacks(app):
         info_rows = []
         if item_type == 'solution':
             genes = data.get('selected_genes', [])
-            info_rows.append(html.Li(f"Genes: {len(genes)}"))
+            info_rows.append(html.Li(f"Genes/Probes: {len(genes)}"))
             info_rows.append(html.Li(f"Front: {data.get('front_name', 'N/A')}"))
             info_rows.append(html.Li(f"Solution ID: {data.get('solution_id', 'N/A')}"))
             if genes:
@@ -165,14 +165,14 @@ def register_export_callbacks(app):
             info_rows.append(html.Li(f"Unique genes: {data.get('unique_genes_count', 'N/A')}"))
         elif item_type == 'gene_set':
             genes = data.get('genes', [])
-            info_rows.append(html.Li(f"Genes: {len(genes)}"))
+            info_rows.append(html.Li(f"Genes/Probes: {len(genes)}"))
             if genes:
                 info_rows.append(html.Li(f"Gene list: {', '.join(genes[:30])}" + (" ..." if len(genes) > 30 else "")))
         elif item_type == 'individual_gene':
             info_rows.append(html.Li(f"Gene: {data.get('gene', 'N/A')}"))
             info_rows.append(html.Li(f"Source: {data.get('source', 'N/A')}"))
         elif item_type == 'combined_gene_group':
-            info_rows.append(html.Li(f"Genes: {data.get('gene_count', 0)}"))
+            info_rows.append(html.Li(f"Genes/Probes: {data.get('gene_count', 0)}"))
             info_rows.append(html.Li(f"Source items: {len(data.get('source_items', []))}"))
 
         attachments = item.get('attachments', []) or []
@@ -206,7 +206,7 @@ def register_export_callbacks(app):
             converted_sections.append(
                 html.Div(
                     [
-                        html.H6("Validated gene sets", className="fw-bold mb-1"),
+                        html.H6("Validated gene sets by g:Convert", className="fw-bold mb-1"),
                         html.Div([
                             html.Small("Source", className="fw-bold text-muted", style={'width': '180px', 'flexShrink': 0}),
                             html.Small("Namespace", className="fw-bold text-muted", style={'width': '140px', 'flexShrink': 0}),
@@ -955,6 +955,6 @@ def register_export_callbacks(app):
         return dbc.ListGroup([
             dbc.ListGroupItem(f"Loaded Fronts: {len(fronts)}"),
             dbc.ListGroupItem(f"Total Solutions: {len(all_solutions)}"),
-            dbc.ListGroupItem(f"Unique Genes: {len(unique_genes)}"),
+            dbc.ListGroupItem(f"Unique Genes/Probes: {len(unique_genes)}"),
             dbc.ListGroupItem(f"Items in Interest Panel: {len(interest_items) if interest_items else 0}"),
         ])

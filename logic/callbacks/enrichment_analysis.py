@@ -131,7 +131,7 @@ def create_gprofiler_manhattan_plot(df, threshold_value):
 
     fig.update_traces(
         marker=dict(opacity=0.6, line=dict(width=0.5, color='DarkSlateGrey')),
-        hovertemplate="<b>Term:</b> %{customdata[0]}<br><b>Source:</b> %{customdata[3]}<br><b>-log10(P-value):</b> %{y:.2f}<br><b>P-value:</b> %{customdata[1]:.2e}<br><b>Genes Matched:</b> %{customdata[2]}<br><b>Gold Standard:</b> %{customdata[4]}<br><extra></extra>"
+        hovertemplate="<b>Term:</b> %{customdata[0]}<br><b>Source:</b> %{customdata[3]}<br><b>-log10(P-value):</b> %{y:.2f}<br><b>P-value:</b> %{customdata[1]:.2e}<br><b>Genes/Probes Matched:</b> %{customdata[2]}<br><b>Gold Standard:</b> %{customdata[4]}<br><extra></extra>"
     )
 
     fig.update_xaxes(
@@ -263,7 +263,7 @@ def create_gene_term_heatmap(heatmap_matrix):
 
     fig.update_layout(
         title=f"Functional Clustergram (Term vs. Gene Membership) - {clustering_status}",
-        xaxis_title="Genes",
+        xaxis_title="Genes/Probes",
         yaxis_title="Rich Terms",
         xaxis={'tickangle': 90, 'showgrid': False, 'zeroline': False},
         yaxis={'showgrid': False, 'zeroline': False, 'automargin': True},
@@ -480,7 +480,7 @@ def register_enrichment_callbacks(app):
                     # Lógica de recuperación auxiliar (opcional pero recomendada)
                     pass 
                 
-                stats_text_left = f"Genes: {len(genes)}"
+                stats_text_left = f"Genes/Probes: {len(genes)}"
                 stats_text_right = f"Source: {data.get('front_name', 'Front?')}"
                 
             elif item_type == 'solution_set':
@@ -491,11 +491,11 @@ def register_enrichment_callbacks(app):
                      for s in data['solutions']: unique_g.update(s.get('selected_genes', []))
                      n_genes = len(unique_g)
                 
-                stats_text_left = f"Genes: {n_genes}"
+                stats_text_left = f"Genes/Probes: {n_genes}"
                 stats_text_right = f"Solutions: {len(data.get('solutions', []))}"
 
             elif item_type == 'gene_set':
-                stats_text_left = f"Genes: {len(data.get('genes', []))}"
+                stats_text_left = f"Genes/Probes: {len(data.get('genes', []))}"
                 freq = data.get('frequency')
                 stats_text_right = f"Freq: {freq}%" if freq else "Source: Table"
 
@@ -504,7 +504,7 @@ def register_enrichment_callbacks(app):
                 stats_text_right = f"Src: {data.get('source', 'Unknown')}"
 
             elif item_type == 'combined_gene_group':
-                stats_text_left = f"Genes: {data.get('gene_count', 0)}"
+                stats_text_left = f"Genes/Probes: {data.get('gene_count', 0)}"
                 stats_text_right = f"Sources: {len(data.get('source_items', []))}"
 
             # 3. Estado de Selección
@@ -937,7 +937,7 @@ def register_enrichment_callbacks(app):
             'term_name': {'name': 'Term Name', 'type': 'text'},
             'description': {'name': 'Description', 'type': 'text'},
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
-            'intersection_size': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'intersection_size': {'name': 'Genes/Probes\nMatched', 'type': 'numeric'},
             'term_size': {'name': 'Term\nSize', 'type': 'numeric'},
             'precision': {'name': 'Precision', 'type': 'numeric', 'format': {'specifier': '.3f'}},
             'recall': {'name': 'Recall', 'type': 'numeric', 'format': {'specifier': '.3f'}},
@@ -1017,13 +1017,13 @@ def register_enrichment_callbacks(app):
              display_df = display_df[['source', 'term_name', 'description', 'p_value', 'intersection_size', 'term_size', 'precision', 'recall', 'source_order_display']].copy()
         
         input_message = f"**Input:** Total IDs: **{gene_list_original_count}** | Organism: **{organism_selected_name}**"
-        validation_message_md = f"**Validation:** Recognized Genes: **{genes_analyzed_count}**"
+        validation_message_md = f"**Validation:** Recognized Genes/Probes: **{genes_analyzed_count}**"
         
         validation_card = html.Div([
             html.Div([
                 dcc.Markdown(validation_message_md, className="mb-0"),
                 html.Details([
-                    html.Summary(f"View {genes_analyzed_count} Validated Genes", 
+                    html.Summary(f"View {genes_analyzed_count} Validated Genes/Probes", 
                                  style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#0d6efd', 'fontSize': '0.9rem', 'display': 'inline-block'}),
                     html.P(', '.join(sorted(gene_list_validated)), className="mt-2 small")
                 ]) if genes_analyzed_count > 0 else None
@@ -1091,7 +1091,7 @@ def register_enrichment_callbacks(app):
         hidden_cols = ['source_order_display'] 
         column_map = {
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
-            'intersection_size': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'intersection_size': {'name': 'Genes/Probes\nMatched', 'type': 'numeric'},
             'term_size': {'name': 'Term\nSize', 'type': 'numeric'},
             'precision': {'name': 'Precision', 'type': 'numeric', 'format': {'specifier': '.3f'}},
             'recall': {'name': 'Recall', 'type': 'numeric', 'format': {'specifier': '.3f'}},
@@ -1386,7 +1386,7 @@ def register_enrichment_callbacks(app):
         column_map = {
             'fdr_value': {'name': 'FDR\n(Corrected P)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
-            'entities_found': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'entities_found': {'name': 'Genes/Probes\nMatched', 'type': 'numeric'},
             'entities_total': {'name': 'Pathway\nSize', 'type': 'numeric'},
             'term_name': {'name': 'Pathway Name', 'type': 'text'},
             'description': {'name': 'ST_ID', 'type': 'text'},
@@ -1483,13 +1483,13 @@ def register_enrichment_callbacks(app):
         
         # --- Summary Card ---
         input_message = f"**Input:** Total IDs: **{genes_original_count}** | Organism: **{organism_selected}**"
-        validation_message_md = f"**Validation:** Recognized Genes: **{genes_validated_count}**"
+        validation_message_md = f"**Validation:** Recognized Genes/Probes: **{genes_validated_count}**"
         
         validation_card = html.Div([
             html.Div([
                 dcc.Markdown(validation_message_md, className="mb-0"),
                 html.Details([
-                    html.Summary(f"View {genes_validated_count} Validated Genes", 
+                    html.Summary(f"View {genes_validated_count} Validated Genes/Probes", 
                                  style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#0d6efd', 'fontSize': '0.9rem'}),
                     html.P(', '.join(sorted(gene_list_validated)), className="mt-2 small")
                 ]) if genes_validated_count > 0 else None
@@ -1530,7 +1530,7 @@ def register_enrichment_callbacks(app):
         column_map = {
             'fdr_value': {'name': 'FDR\n(Corrected P)', 'type': 'numeric', 'format': {'specifier': '.2e'}},
             'p_value': {'name': 'P-Value', 'type': 'numeric', 'format': {'specifier': '.2e'}},
-            'entities_found': {'name': 'Genes\nMatched', 'type': 'numeric'},
+            'entities_found': {'name': 'Genes/Probes\nMatched', 'type': 'numeric'},
             'entities_total': {'name': 'Pathway\nSize', 'type': 'numeric'},
             'term_name': {'name': 'Pathway Name', 'type': 'text'},
             'description': {'name': 'ST_ID', 'type': 'text'},
@@ -2019,4 +2019,3 @@ def register_enrichment_callbacks(app):
                 return dash.no_update, dash.no_update, dash.no_update, err, True, dash.no_update, new_cache_store
 
         raise PreventUpdate
-

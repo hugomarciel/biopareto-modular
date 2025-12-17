@@ -89,7 +89,7 @@ def register_gene_groups_callbacks(app):
 
             if item_type == 'solution':
                 genes = data.get('selected_genes', [])
-                stats_text_left = f"Genes: {len(genes)}"
+                stats_text_left = f"Genes/Probes: {len(genes)}"
                 stats_text_right = f"Src: {data.get('front_name', '?')}"
             elif item_type == 'solution_set':
                 n_genes = data.get('unique_genes_count', 0)
@@ -97,17 +97,17 @@ def register_gene_groups_callbacks(app):
                      unique_g = set()
                      for s in data['solutions']: unique_g.update(s.get('selected_genes', []))
                      n_genes = len(unique_g)
-                stats_text_left = f"Genes: {n_genes}"
+                stats_text_left = f"Genes/Probes: {n_genes}"
                 stats_text_right = f"Sols: {len(data.get('solutions', []))}"
             elif item_type == 'gene_set':
-                stats_text_left = f"Genes: {len(data.get('genes', []))}"
+                stats_text_left = f"Genes/Probes: {len(data.get('genes', []))}"
                 freq = data.get('frequency')
                 stats_text_right = f"Freq: {freq}%" if freq else "Table"
             elif item_type == 'individual_gene':
                 stats_text_left = f"ID: {data.get('gene')}"
                 stats_text_right = f"Src: {data.get('source')}"
             elif item_type == 'combined_gene_group':
-                stats_text_left = f"Genes: {data.get('gene_count', 0)}"
+                stats_text_left = f"Genes/Probes: {data.get('gene_count', 0)}"
                 stats_text_right = f"Srcs: {len(data.get('source_items', []))}"
 
             is_selected = idx in selected_indices_list
@@ -262,7 +262,7 @@ def register_gene_groups_callbacks(app):
             dbc.Col(dbc.Card(dbc.CardBody([
                 html.Div([
                     html.Div(html.I(className="bi bi-dna fs-3 text-primary"), className="me-3"),
-                    html.Div([html.H3(len(unique_genes), className="mb-0 text-primary fw-bold"), html.Small("Total Unique Genes", className="text-muted fw-bold text-uppercase")])
+                    html.Div([html.H3(len(unique_genes), className="mb-0 text-primary fw-bold"), html.Small("Total Unique Genes/Probes", className="text-muted fw-bold text-uppercase")])
                 ], className="d-flex align-items-center")
             ]), className="h-100 shadow-sm border-start border-primary border-5"), width=12, md=4, className="mb-3"),
             
@@ -288,8 +288,8 @@ def register_gene_groups_callbacks(app):
             dbc.PopoverHeader("Intersection Logic"),
             dbc.PopoverBody([
                 html.Div([html.Span("■", style={'color': '#6f42c1', 'fontSize': '1.2rem'}), " Purple: Core genes shared by ALL sources (Highest Priority)."], className="mb-2 small"),
-                html.Div([html.Span("■", style={'color': '#0dcaf0', 'fontSize': '1.2rem'}), " Cyan: Genes shared by a subset of sources."], className="mb-2 small"),
-                html.Div([html.Span("■", style={'color': 'gray', 'fontSize': '1.2rem'}), " Gray: Genes unique to a single source."], className="mb-2 small"),
+                html.Div([html.Span("■", style={'color': '#0dcaf0', 'fontSize': '1.2rem'}), " Cyan: Genes/Probes shared by a subset of sources."], className="mb-2 small"),
+                html.Div([html.Span("■", style={'color': 'gray', 'fontSize': '1.2rem'}), " Gray: Genes/Probes unique to a single source."], className="mb-2 small"),
                 html.Hr(className="my-2"),
                 html.Div([html.I(className="bi bi-plus-circle me-1"), "Click 'Add' to save any specific intersection subset to your panel."], className="small text-primary fw-bold")
             ])
@@ -646,8 +646,8 @@ def register_gene_groups_callbacks(app):
             sources = genes_store_data.get('sources', [])
             gene_count = len(genes_store_data.get('genes', []))
             genes_store_data['meta_type'] = 'combined_selection'
-            modal_info = html.Div([html.P([html.Strong("Adding Combined Selection: ")]), html.P([html.Strong("Total Unique Genes: "), html.Span(f"{gene_count}")])])
-            return True, modal_info, f"Combined Group - {gene_count} Genes", f"Combined from {len(sources)} sources.", genes_store_data
+            modal_info = html.Div([html.P([html.Strong("Adding Combined Selection: ")]), html.P([html.Strong("Total Unique Genes/Probes: "), html.Span(f"{gene_count}")])])
+            return True, modal_info, f"Combined Group - {gene_count} Genes/Probes", f"Combined from {len(sources)} sources.", genes_store_data
         raise PreventUpdate
 
     # 5. Callback Intersection Modal (Sin Cambios)
