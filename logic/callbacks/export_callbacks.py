@@ -34,11 +34,11 @@ def register_export_callbacks(app):
         selected_indices_list = selected_indices_list or []
 
         type_map = {
-            'solution': ("primary", "bi bi-record-circle-fill text-primary", "Solution"),
-            'solution_set': ("info", "bi bi-stack", "Set"),
-            'gene_set': ("success", "bi bi-diagram-3", "Gene Group"),
-            'individual_gene': ("warning", "bi bi-shield-check", "Gene"),
-            'combined_gene_group': ("success", "bi bi-intersect", "Combined")
+            'solution': ("primary", "🔵", "Solution"),
+            'solution_set': ("info", "📦", "Set"),
+            'gene_set': ("success", "🧬", "Gene Group"),
+            'individual_gene': ("warning", "🔬", "Gene"),
+            'combined_gene_group': ("success", "🎯", "Combined")
         }
 
         cards = []
@@ -47,7 +47,7 @@ def register_export_callbacks(app):
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
 
-            badge_color, icon, badge_text = type_map.get(item_type, ("secondary", "bi bi-file-earmark", "Item"))
+            badge_color, icon, badge_text = type_map.get(item_type, ("secondary", "❓", "Item"))
             item_name = item.get('name', 'Unknown')
             item_comment = item.get('comment', '')
             item_origin = item.get('tool_origin', 'Manual Selection')
@@ -100,7 +100,7 @@ def register_export_callbacks(app):
 
                         html.Div([
                             html.Div([
-                                html.I(className=icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
+                                html.Span(icon, style={'fontSize': '1.2rem', 'marginRight': '8px'}),
                                 dbc.Badge(badge_text, color=badge_color, style={'fontSize': '0.75rem'}),
                             ], className="d-flex align-items-center mb-2"),
                             

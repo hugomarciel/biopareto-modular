@@ -178,7 +178,7 @@ def register_data_management_callbacks(app):
     )
     def download_test_file(n_clicks):
         if not n_clicks: return None
-        filename = "json V2.1.rar" 
+        filename = "test files.rar" 
         root_dir = pathlib.Path(__file__).parent.parent.parent
         file_path = root_dir / "assets" / filename
         try:
