@@ -22,4 +22,4 @@ EXPOSE 8080
 #Despliqgue con SSL
 #CMD ["gunicorn", "--bind", "0.0.0.0:8050", "--workers", "4", "app:server"] 
 #CMD ["gunicorn", "--bind", "0.0.0.0:8050", "--workers", "2", "--threads", "2", "--timeout", "600", "app:server"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8050", "--workers", "5", "--threads", "4", "--worker-class", "gthread", "--timeout", "600", "--backlog", "2048", "app:server"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8050", "--workers", "5", "--threads", "4", "--worker-class", "gthread", "--timeout", "600", "--preload", "--backlog", "2048", "app:server"]

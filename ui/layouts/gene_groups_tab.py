@@ -67,6 +67,7 @@ def create_gene_groups_tab():
     )
 
     return dbc.Container([
+        dcc.Store(id='gene-groups-items-lite-store'),
         
         # --- SECCIÓN 1: SELECTOR ---
         dbc.Row([

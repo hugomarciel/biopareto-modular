@@ -184,6 +184,7 @@ def create_gprofiler_layout(organism_options):
     ], className="bg-light border-0 shadow-sm mb-4")
 
     return html.Div([
+        dcc.Store(id='enrichment-items-lite-store'),
         control_panel,
 
         # Results Table Container (Generated in Callback) + Attach button (English) near the table

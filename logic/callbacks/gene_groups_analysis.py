@@ -23,6 +23,64 @@ except ImportError:
 
 def register_gene_groups_callbacks(app):
 
+    @app.callback(
+        Output('gene-groups-items-lite-store', 'data'),
+        Input('interest-panel-store', 'data')
+    )
+    def build_gene_groups_items_lite(items):
+        if not items:
+            return []
+
+        lite_items = []
+        for item in items:
+            item_type = item.get('type', '')
+            data = item.get('data', {}) or {}
+            lite_data = {}
+
+            if item_type == 'solution':
+                genes = data.get('selected_genes', [])
+                lite_data = {
+                    'selected_genes_count': len(genes),
+                    'front_name': data.get('front_name', '?')
+                }
+            elif item_type == 'solution_set':
+                n_genes = data.get('unique_genes_count', 0)
+                if n_genes == 0 and 'solutions' in data:
+                    unique_g = set()
+                    for s in data.get('solutions', []):
+                        unique_g.update(s.get('selected_genes', []))
+                    n_genes = len(unique_g)
+                lite_data = {
+                    'unique_genes_count': n_genes,
+                    'solutions_count': len(data.get('solutions', []))
+                }
+            elif item_type == 'gene_set':
+                genes = data.get('genes', [])
+                lite_data = {
+                    'genes_count': len(genes),
+                    'frequency': data.get('frequency')
+                }
+            elif item_type == 'individual_gene':
+                lite_data = {
+                    'gene': data.get('gene'),
+                    'source': data.get('source')
+                }
+            elif item_type == 'combined_gene_group':
+                lite_data = {
+                    'gene_count': data.get('gene_count', len(data.get('genes', []))),
+                    'source_items_count': len(data.get('source_items', []))
+                }
+
+            lite_items.append({
+                'type': item_type,
+                'name': item.get('name', 'Unknown'),
+                'comment': item.get('comment', ''),
+                'tool_origin': item.get('tool_origin', 'Manual Selection'),
+                'data': lite_data
+            })
+
+        return lite_items
+
     # --- SERVER-SIDE CALLBACK (Visual Feedback) ---
     @app.callback(
         [Output({'type': 'gene-group-card-wrapper', 'index': MATCH}, 'style'),
@@ -46,7 +104,7 @@ def register_gene_groups_callbacks(app):
     # 1. Render Visual Selector (Standardized)
     @app.callback(
         Output('gene-groups-visual-selector', 'children'),
-        [Input('interest-panel-store', 'data'),
+        [Input('gene-groups-items-lite-store', 'data'),
          Input('selected-gene-group-indices-store', 'data')], 
         State('data-store', 'data')
     )
@@ -90,19 +148,13 @@ def register_gene_groups_callbacks(app):
             stats_text_right = ""
 
             if item_type == 'solution':
-                genes = data.get('selected_genes', [])
-                stats_text_left = f"Genes/Probes: {len(genes)}"
+                stats_text_left = f"Genes/Probes: {data.get('selected_genes_count', 0)}"
                 stats_text_right = f"Src: {data.get('front_name', '?')}"
             elif item_type == 'solution_set':
-                n_genes = data.get('unique_genes_count', 0)
-                if n_genes == 0 and 'solutions' in data:
-                     unique_g = set()
-                     for s in data['solutions']: unique_g.update(s.get('selected_genes', []))
-                     n_genes = len(unique_g)
-                stats_text_left = f"Genes/Probes: {n_genes}"
-                stats_text_right = f"Sols: {len(data.get('solutions', []))}"
+                stats_text_left = f"Genes/Probes: {data.get('unique_genes_count', 0)}"
+                stats_text_right = f"Sols: {data.get('solutions_count', 0)}"
             elif item_type == 'gene_set':
-                stats_text_left = f"Genes/Probes: {len(data.get('genes', []))}"
+                stats_text_left = f"Genes/Probes: {data.get('genes_count', 0)}"
                 freq = data.get('frequency')
                 stats_text_right = f"Freq: {freq}%" if freq else "Table"
             elif item_type == 'individual_gene':
@@ -110,7 +162,7 @@ def register_gene_groups_callbacks(app):
                 stats_text_right = f"Src: {data.get('source')}"
             elif item_type == 'combined_gene_group':
                 stats_text_left = f"Genes/Probes: {data.get('gene_count', 0)}"
-                stats_text_right = f"Srcs: {len(data.get('source_items', []))}"
+                stats_text_right = f"Srcs: {data.get('source_items_count', 0)}"
 
             is_selected = idx in selected_indices_list
             
