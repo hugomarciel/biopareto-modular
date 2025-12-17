@@ -14,6 +14,7 @@ from collections import defaultdict
 try:
     from matplotlib_venn import venn2, venn3
     from matplotlib_venn.layout.venn3 import DefaultLayoutAlgorithm
+    from matplotlib_venn.layout.venn2 import DefaultLayoutAlgorithm as DefaultLayoutAlgorithm2
     import matplotlib.pyplot as plt
     import base64
 except ImportError:
@@ -311,14 +312,52 @@ def register_gene_groups_callbacks(app):
                 set_colors = VENN_COLORS[:len(sets_list)]
                 
                 if len(sets_list) == 2:
-                    v = venn2(sets_list_for_drawing, set_labels=['', ''], ax=ax, set_colors=set_colors, alpha=0.5)
+                    layout_algorithm2 = DefaultLayoutAlgorithm2(fixed_subset_sizes=(1, 1, 1))
+                    v = venn2(sets_list_for_drawing, set_labels=['', ''], ax=ax, set_colors=set_colors, alpha=0.5, layout_algorithm=layout_algorithm2)
                 elif len(sets_list) == 3:
                     layout_algorithm = DefaultLayoutAlgorithm(fixed_subset_sizes=(1, 1, 1, 1, 1, 1, 1))
                     v = venn3(sets_list_for_drawing, set_labels=['', '', ''], ax=ax, set_colors=set_colors, alpha=0.5, layout_algorithm=layout_algorithm)
+
+                centers = getattr(v, 'centers', None)
+                if getattr(v, 'subset_labels', None):
+                    for t in v.subset_labels:
+                        if t:
+                            t.set_fontsize(14)
+                            t.set_fontweight('bold')
+                if centers and getattr(v, 'set_labels', None):
+                    center_points = []
+                    radii = []
+                    for center in centers:
+                        x = getattr(center, 'x', center[0] if hasattr(center, '__iter__') else 0)
+                        y = getattr(center, 'y', center[1] if hasattr(center, '__iter__') else 0)
+                        center_points.append((x, y))
+                    for circle in getattr(v, 'circles', []) or []:
+                        radii.append(getattr(circle, 'radius', 0))
+                    mean_x = sum(p[0] for p in center_points) / len(center_points)
+                    mean_y = sum(p[1] for p in center_points) / len(center_points)
+
+                    for i, t in enumerate(v.set_labels):
+                        if i >= len(labels_list):
+                            break
+                        label = labels_list[i]
+                        x, y = center_points[i]
+                        vec_x = x - mean_x
+                        vec_y = y - mean_y
+                        norm = (vec_x ** 2 + vec_y ** 2) ** 0.5 or 1.0
+                        radius = radii[i] if i < len(radii) else 0.6
+                        offset = radius * 1.2 + 0.05
+                        out_x = x + (vec_x / norm) * offset
+                        out_y = y + (vec_y / norm) * offset
+                        t.set_text(label)
+                        t.set_position((out_x, out_y))
+                        t.set_ha('left' if vec_x >= 0 else 'right')
+                        t.set_va('center')
+                        t.set_fontsize(14)
+                        t.set_fontweight('bold')
                 
                 plt.title("Gene Overlap", fontsize=12, fontweight='bold')
                 buf = io.BytesIO()
-                plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+                plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', pad_inches=0.3)
                 buf.seek(0)
                 img_base64 = base64.b64encode(buf.read()).decode('utf-8')
                 plt.close(fig)
@@ -388,11 +427,11 @@ def register_gene_groups_callbacks(app):
                             dbc.Col([
                                 html.Div(legend_items, className="d-flex flex-wrap mb-3 justify-content-center"),
                                 html.Div(html.Img(src=f"data:image/png;base64,{img_base64}", style={'maxWidth': '100%', 'height': 'auto'}), className="text-center")
-                            ], width=12, lg=6, className="border-end"),
+                            ], width=12, lg=7, className="border-end"),
                             dbc.Col([
                                 html.H6("Ranked Intersections", className="text-muted small fw-bold text-uppercase mb-3"),
                                 html.Div(int_cards, style={'maxHeight': '400px', 'overflowY': 'auto', 'paddingRight': '5px'})
-                            ], width=12, lg=6)
+                            ], width=12, lg=5)
                         ])
                     ])
                 ], className="shadow-sm border-0 mb-4")
