@@ -13,6 +13,7 @@ from collections import defaultdict
 # Imports for Venn (if available)
 try:
     from matplotlib_venn import venn2, venn3
+    from matplotlib_venn.layout.venn3 import DefaultLayoutAlgorithm
     import matplotlib.pyplot as plt
     import base64
 except ImportError:
@@ -312,7 +313,8 @@ def register_gene_groups_callbacks(app):
                 if len(sets_list) == 2:
                     v = venn2(sets_list_for_drawing, set_labels=['', ''], ax=ax, set_colors=set_colors, alpha=0.5)
                 elif len(sets_list) == 3:
-                    v = venn3(sets_list_for_drawing, set_labels=['', '', ''], ax=ax, set_colors=set_colors, alpha=0.5)
+                    layout_algorithm = DefaultLayoutAlgorithm(fixed_subset_sizes=(1, 1, 1, 1, 1, 1, 1))
+                    v = venn3(sets_list_for_drawing, set_labels=['', '', ''], ax=ax, set_colors=set_colors, alpha=0.5, layout_algorithm=layout_algorithm)
                 
                 plt.title("Gene Overlap", fontsize=12, fontweight='bold')
                 buf = io.BytesIO()
