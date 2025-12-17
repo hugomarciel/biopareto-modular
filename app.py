@@ -808,7 +808,11 @@ def toggle_interest_modal(single_add_clicks, confirm_clicks, cancel_clicks, add_
                         ])
                         
                         # --- MODIFICACIÓN: Comentario por defecto para Solución Individual ---
-                        default_comment = f"Individual solution {full_sol_data['solution_id']} (Front: {sol['front_name']}) with {obj1_name.replace('_', ' ').title()} = {obj1}."
+                        default_comment = (
+                            f"Individual solution {full_sol_data['solution_id']} (Front: {sol['front_name']}) "
+                            f"with {obj1_name.replace('_', ' ').title()} = {obj1}, "
+                            f"{obj2_name.replace('_', ' ').title()} = {obj2}."
+                        )
                         # ---------------------------------------------------------------------
 
                         return True, item_info, default_comment, full_sol_data, None, None
@@ -1611,5 +1615,4 @@ if __name__ == '__main__':
 
     port = int(os.environ.get("PORT", 80))
     app.run(debug=True, host='0.0.0.0', port=port)
-
 

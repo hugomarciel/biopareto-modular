@@ -92,6 +92,14 @@ def register_pareto_plot_callbacks(app):
         colors_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
         selected_unique_ids = {s['unique_id'] for s in (selected_solutions or [])}
 
+        def fmt_val(val):
+            """Format numeric values for display without altering stored data."""
+            try:
+                num = float(val)
+            except (TypeError, ValueError):
+                return val
+            return f"{num:.5f}".rstrip('0').rstrip('.')
+
         # --- FUNCIÓN HELPER: Normalización de Columnas ---
         def standardize_df_columns(df, target_x, target_y):
             found_x = False
@@ -176,8 +184,8 @@ def register_pareto_plot_callbacks(app):
                     is_selected = sol_in_front['unique_id'] in selected_unique_ids
                     
                     hover_text = (f"<b>{sol_in_front['solution_id']}</b> ({sol_in_front['front_name']})<br>"
-                                  f"{x_axis.replace('_', ' ').title()}: {sol_in_front['current_x']}<br>"
-                                  f"{y_axis.replace('_', ' ').title()}: {sol_in_front['current_y']}<br><extra></extra>")
+                                  f"{x_axis.replace('_', ' ').title()}: {fmt_val(sol_in_front['current_x'])}<br>"
+                                  f"{y_axis.replace('_', ' ').title()}: {fmt_val(sol_in_front['current_y'])}<br><extra></extra>")
                     
                     point_data = {
                         'x': sol_in_front['current_x'],
@@ -194,8 +202,8 @@ def register_pareto_plot_callbacks(app):
                     if len(solutions) > 1:
                         highlight_hover = (f"<b>{len(solutions)} Solutions (Multiple)</b><br>"
                                           f"Includes {sol_in_front['solution_id']} from {front_name}<br>"
-                                          f"{x_axis.replace('_', ' ').title()}: {sol_in_front['current_x']}<br>"
-                                          f"{y_axis.replace('_', ' ').title()}: {sol_in_front['current_y']}<br>"
+                                          f"{x_axis.replace('_', ' ').title()}: {fmt_val(sol_in_front['current_x'])}<br>"
+                                          f"{y_axis.replace('_', ' ').title()}: {fmt_val(sol_in_front['current_y'])}<br>"
                                           "<i>Click to inspect</i><extra></extra>")
                         
                         multi_point = point_data.copy()
@@ -347,12 +355,12 @@ def register_pareto_plot_callbacks(app):
                         dbc.Row([
                             dbc.Col([
                                 html.Div(x_axis.replace('_', ' ').upper(), className="text-muted small fw-bold", style={'fontSize': '0.7rem'}),
-                                html.Div(f"{x_val}", className="font-monospace text-dark", style={'fontWeight': '500'})
+                                html.Div(f"{fmt_val(x_val)}", className="font-monospace text-dark", style={'fontWeight': '500'})
                             ], width=6, className="border-end"), 
                             
                             dbc.Col([
                                 html.Div(y_axis.replace('_', ' ').upper(), className="text-muted small fw-bold", style={'fontSize': '0.7rem'}),
-                                html.Div(f"{y_val}", className="font-monospace text-dark", style={'fontWeight': '500'})
+                                html.Div(f"{fmt_val(y_val)}", className="font-monospace text-dark", style={'fontWeight': '500'})
                             ], width=6, className="ps-3"),
                         ], className="g-0")
                     ], className="bg-light rounded p-2 mb-2 border"),
@@ -436,7 +444,7 @@ def register_pareto_plot_callbacks(app):
         x_val = sol_sample.get('current_x')
         y_val = sol_sample.get('current_y')
         
-        header = f"Inspecting {count} Solutions at ({x_axis}: {x_val}, {y_axis}: {y_val})"
+        header = f"Inspecting {count} Solutions at ({x_axis}: {fmt_val(x_val)}, {y_axis}: {fmt_val(y_val)})"
 
         internal_keys = ['front_name', 'color', 'unique_id', 'current_x', 'current_y', 'x_coord', 'y_coord', 'solution_id', 'selected_genes']
         other_objectives = [obj for obj in all_objectives if obj not in [x_axis, y_axis] and obj not in internal_keys and obj in sol_sample]
@@ -452,7 +460,7 @@ def register_pareto_plot_callbacks(app):
                 val = sol.get(obj_key)
                 if val is not None:
                      other_obj_items.append(
-                         html.Li(f"{obj_key.replace('_', ' ').title()}: {val}", className="list-group-item py-1")
+                         html.Li(f"{obj_key.replace('_', ' ').title()}: {fmt_val(val)}", className="list-group-item py-1")
                      )
 
             card_body = [
