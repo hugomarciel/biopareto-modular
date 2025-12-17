@@ -480,13 +480,13 @@ def register_enrichment_callbacks(app):
     # 1.5. Callback de Renderizado Visual (ESTILO REPLICADO DE GGA)
     @app.callback(
         Output('enrichment-visual-selector', 'children'),
-         Input('enrichment-render-trigger-store', 'data'), 
-         [State('enrichment-items-lite-store', 'data'),
-          State('enrichment-selected-indices-store', 'data'),
-          State('main-tabs', 'active_tab'),
-          State('data-store', 'data')]
+        [Input('enrichment-items-lite-store', 'data'),
+         Input('enrichment-render-trigger-store', 'data')],
+        [State('enrichment-selected-indices-store', 'data'),
+         State('main-tabs', 'active_tab'),
+         State('data-store', 'data')]
     )
-    def render_visual_enrichment_selector(trigger_data, items, selected_indices_list, active_tab, data_store):
+    def render_visual_enrichment_selector(items, trigger_data, selected_indices_list, active_tab, data_store):
         """
         Render visual card-based selector matching the Interest Panel standard exactly like Gene Groups Tab.
         """
@@ -1950,7 +1950,7 @@ def register_enrichment_callbacks(app):
                             raise ValueError("Heatmap is empty.")
                         heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
                     try:
-                        img_bytes = pio.to_image(heatmap_fig, format="png")
+                        img_bytes = pio.to_image(heatmap_fig, format="png", width=1600, height=900, scale=2)
                         img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                     except Exception as e:
                         img_error = f"No se pudo generar la imagen del heatmap (verifique que 'kaleido' esté instalado). Detalle: {e}"

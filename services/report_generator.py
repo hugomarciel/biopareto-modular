@@ -670,7 +670,15 @@ def generate_item_pdf(item, include_pareto=False, data_store=None):
                     img_bytes = base64.b64decode(img_b64)
                     img_buf = BytesIO(img_bytes)
                     img = Image(img_buf)
-                    img._restrictSize(9 * inch, 6 * inch)
+                    if att_type == 'heatmap':
+                        max_height = doc.height - 1.0 * inch
+                        img.drawWidth = doc.width
+                        img.drawHeight = doc.width * (img.imageHeight / float(img.imageWidth))
+                        if img.drawHeight > max_height:
+                            img.drawHeight = max_height
+                            img.drawWidth = max_height * (img.imageWidth / float(img.imageHeight))
+                    else:
+                        img._restrictSize(9 * inch, 6 * inch)
                     story.append(img)
                     link_url = payload.get('link_url')
                     if link_url:
