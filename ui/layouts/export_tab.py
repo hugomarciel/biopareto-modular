@@ -23,6 +23,8 @@ def create_export_tab():
                     ], className="bg-white border-bottom position-relative"),
                     dbc.CardBody([
                         dcc.Store(id='export-items-lite-store'),
+                        dcc.Store(id='export-items-detail-store'),
+                        dcc.Store(id='export-attachments-store'),
                         dbc.Popover(
                             [
                                 dbc.PopoverHeader("Export Selection Guide"),

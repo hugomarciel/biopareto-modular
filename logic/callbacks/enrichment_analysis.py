@@ -1911,8 +1911,8 @@ def register_enrichment_callbacks(app):
                             raise ValueError("No Manhattan data to attach.")
                         fig = create_gprofiler_manhattan_plot(df.copy(), threshold_value)
                     try:
-                        img_bytes = pio.to_image(fig, format="png")
-                        img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                        img_bytes = pio.to_image(fig, format="jpeg", scale=1.2)
+                        img_b64 = f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                     except Exception as e:
                         img_error = f"No se pudo generar la imagen del Manhattan (verifique que 'kaleido' esté instalado). Detalle: {e}"
                 att = {
@@ -1950,8 +1950,8 @@ def register_enrichment_callbacks(app):
                             raise ValueError("Heatmap is empty.")
                         heatmap_fig = create_gene_term_heatmap(heatmap_matrix)
                     try:
-                        img_bytes = pio.to_image(heatmap_fig, format="png", width=1600, height=900, scale=2)
-                        img_b64 = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
+                        img_bytes = pio.to_image(heatmap_fig, format="jpeg", width=1400, height=800, scale=1.2)
+                        img_b64 = f"data:image/jpeg;base64,{base64.b64encode(img_bytes).decode('utf-8')}"
                     except Exception as e:
                         img_error = f"No se pudo generar la imagen del heatmap (verifique que 'kaleido' esté instalado). Detalle: {e}"
                 att = {

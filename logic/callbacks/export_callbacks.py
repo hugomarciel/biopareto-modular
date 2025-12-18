@@ -1,4 +1,4 @@
-# logic/callbacks/export_callbacks.py
+﻿# logic/callbacks/export_callbacks.py
 
 import dash
 from dash import Output, Input, State, dcc, html, dash_table, ALL, MATCH
@@ -31,7 +31,7 @@ def register_export_callbacks(app):
             item_type = item.get('type', '')
             data = item.get('data', {}) or {}
             lite_data = {}
-
+    
             if item_type == 'solution':
                 genes = data.get('selected_genes', [])
                 lite_data = {
@@ -76,6 +76,37 @@ def register_export_callbacks(app):
 
         return lite_items
 
+    @app.callback(
+        Output('export-items-detail-store', 'data'),
+        Input('interest-panel-store', 'data')
+    )
+    def build_export_items_detail(items):
+        if not items:
+            return []
+
+        detail_items = []
+        for item in items:
+            detail = dict(item)
+            detail.pop('attachments', None)
+            detail_items.append(detail)
+
+        return detail_items
+
+    @app.callback(
+        Output('export-attachments-store', 'data'),
+        Input('export-selected-indices-store', 'data'),
+        State('interest-panel-store', 'data'),
+        prevent_initial_call=False
+    )
+    def build_export_attachments_store(selected_indices, items):
+        if not selected_indices or not items:
+            return []
+        idx = selected_indices[0]
+        if idx >= len(items):
+            return []
+        item = items[idx]
+        return item.get('attachments', []) or []
+
     # Selector visual (single-select)
     @app.callback(
         Output('export-items-visual-selector', 'children'),
@@ -92,11 +123,11 @@ def register_export_callbacks(app):
         selected_indices_list = selected_indices_list or []
 
         type_map = {
-            'solution': ("primary", "🔵", "Solution"),
-            'solution_set': ("info", "📦", "Set"),
-            'gene_set': ("success", "🧬", "Gene Group"),
-            'individual_gene': ("warning", "🔬", "Gene"),
-            'combined_gene_group': ("success", "🎯", "Combined")
+            'solution': ('primary', '🔵', 'Solution'),
+            'solution_set': ('info', '📦', 'Set'),
+            'gene_set': ('success', '🧬', 'Gene Group'),
+            'individual_gene': ('warning', '🔬', 'Gene'),
+            'combined_gene_group': ('success', '🎯', 'Combined')
         }
 
         cards = []
@@ -105,9 +136,9 @@ def register_export_callbacks(app):
             if item_type not in ['solution', 'solution_set', 'gene_set', 'individual_gene', 'combined_gene_group']:
                 continue
 
-            badge_color, icon, badge_text = type_map.get(item_type, ("secondary", "❓", "Item"))
+            badge_color, icon, badge_text = type_map.get(item_type, ('secondary', '🛈', 'Item'))
             item_name = item.get('name', 'Unknown')
-            item_comment = item.get('comment', '')
+            item_comment = item.get('comment', '') or ""
             item_origin = item.get('tool_origin', 'Manual Selection')
             data = item.get('data', {})
 
@@ -175,10 +206,9 @@ def register_export_callbacks(app):
     # Detalle del item seleccionado
     @app.callback(
         [Output('export-selected-item-details', 'children'),
-         Output('export-attachments-preview', 'children'),
          Output('export-comment-editor', 'value')],
         Input('export-selected-indices-store', 'data'),
-        State('interest-panel-store', 'data'),
+        State('export-items-detail-store', 'data'),
         prevent_initial_call=False
     )
     def render_selected_item_details(selected_indices, items):
@@ -188,7 +218,7 @@ def register_export_callbacks(app):
                 color="light",
                 className="d-flex align-items-center small mb-0"
             )
-            return placeholder, None, ""
+            return placeholder, ""
 
         idx = selected_indices[0]
         if idx >= len(items):
@@ -225,31 +255,22 @@ def register_export_callbacks(app):
             info_rows.append(html.Li(f"Genes/Probes: {data.get('gene_count', 0)}"))
             info_rows.append(html.Li(f"Source items: {len(data.get('source_items', []))}"))
 
-        attachments = item.get('attachments', []) or []
         analysis_meta = data.get('analysis_meta', []) or []
-        attachments = item.get('attachments', []) or []
         validated_sets = data.get('validated_sets', []) or []
-        # Solo mostrar conjuntos realmente validados (g:Convert u otro step de validación)
+
         def _is_validated(vs):
             meta = vs.get('meta') or {}
-            origin = (vs.get('origin') or '').lower()
-            is_allowed_origin = origin in {'gprofiler', 'reactome'}
+            origin_vs = (vs.get('origin') or '').lower()
+            is_allowed_origin = origin_vs in {'gprofiler', 'reactome'}
             is_validated = meta.get('validation') is True or vs.get('validation') is True
             return bool(vs.get('genes')) and is_validated and is_allowed_origin
+
         validated_sets = [vs for vs in validated_sets if _is_validated(vs)]
 
         meta = data.get('meta') or {}
         converted_genes = []
         if meta.get('validation'):
             converted_genes = data.get('validated_genes') or data.get('gene_list_validated') or []
-        if not converted_genes and attachments:
-            # Buscar si alg?n adjunto trae la lista validada (p.ej. g:Profiler)
-            for att in attachments:
-                att_payload = att.get('payload') or {}
-                att_genes = att_payload.get('validated_genes') or att_payload.get('gene_list_validated') or []
-                if att_genes:
-                    converted_genes = att_genes
-                    break
 
         converted_sections = []
         if validated_sets or converted_genes:
@@ -304,7 +325,6 @@ def register_export_callbacks(app):
                     enabled_opts = [label_map.get(k, k) for k, v in opts.items() if v]
                     if enabled_opts:
                         meta_parts.append(f"Options: {', '.join(enabled_opts)}")
-                meta_text = " | ".join(meta_parts)
                 converted_sections.append(
                     dbc.Card(
                         [
@@ -316,45 +336,45 @@ def register_export_callbacks(app):
                                                 dbc.Badge(origin_vs, color=origin_color, className="me-2"),
                                                 html.Small(f"{len(genes_vs)} genes", className="text-muted")
                                             ],
-                        className="d-flex align-items-center me-2",
-                        style={'width': '180px', 'flexShrink': 0}
-                    ),
-                    html.Div(
-                        dbc.Badge(ns_vs, color="secondary"),
-                        className="d-flex align-items-center me-2",
-                        style={'width': '140px', 'flexShrink': 0}
-                    ),
-                    html.Div(" | ".join(sample_genes) + (" ..." if rest_genes else ""), className="small text-muted flex-grow-1", style={'minWidth': 0}),
-                    html.Div(
-                        dbc.Button("Show more", id=toggle_id, color="link", size="sm", className="p-0"),
-                        style={'width': '90px', 'textAlign': 'center'}
-                    ),
-                    html.Div(
-                                dbc.Checklist(
-                                    options=[{"label": "Include in export", "value": "include"}],
-                                    value=["include"] if include_flag else [],
-                                    switch=True,
-                                    className="ms-2",
-                                    id={'type': 'validated-include', 'origin': origin_vs, 'namespace': ns_vs}
+                                            className="d-flex align-items-center me-2",
+                                            style={'width': '180px', 'flexShrink': 0}
+                                        ),
+                                        html.Div(
+                                            dbc.Badge(ns_vs, color="secondary"),
+                                            className="d-flex align-items-center me-2",
+                                            style={'width': '140px', 'flexShrink': 0}
+                                        ),
+                                        html.Div(" | ".join(sample_genes) + (" ..." if rest_genes else ""), className="small text-muted flex-grow-1", style={'minWidth': 0}),
+                                        html.Div(
+                                            dbc.Button("Show more", id=toggle_id, color="link", size="sm", className="p-0"),
+                                            style={'width': '90px', 'textAlign': 'center'}
+                                        ),
+                                        html.Div(
+                                            dbc.Checklist(
+                                                options=[{"label": "Include in export", "value": "include"}],
+                                                value=["include"] if include_flag else [],
+                                                switch=True,
+                                                className="ms-2",
+                                                id={'type': 'validated-include', 'origin': origin_vs, 'namespace': ns_vs}
+                                            ),
+                                            style={'width': '140px', 'textAlign': 'right'}
+                                        )
+                                    ],
+                                    className="d-flex align-items-center flex-wrap gap-2"
                                 ),
-                        style={'width': '140px', 'textAlign': 'right'}
+                                className="py-2 px-2"
+                            ),
+                            dbc.Collapse(
+                                html.Div(
+                                    html.P(', '.join(genes_vs), className="small mb-0"),
+                                    className="px-3 pb-2"
+                                ),
+                                id=collapse_id,
+                                is_open=False
+                            )
+                        ],
+                        className="mb-2 border-0 bg-light"
                     )
-                ],
-                className="d-flex align-items-center flex-wrap gap-2"
-            ),
-            className="py-2 px-2"
-        ),
-        dbc.Collapse(
-            html.Div(
-                html.P(', '.join(genes_vs), className="small mb-0"),
-                className="px-3 pb-2"
-            ),
-            id=collapse_id,
-            is_open=False
-        )
-    ],
-    className="mb-2 border-0 bg-light"
-)
                 )
         elif converted_genes:
             sample_genes = converted_genes[:5]
@@ -387,13 +407,13 @@ def register_export_callbacks(app):
                                         style={'width': '90px', 'textAlign': 'center'}
                                     ),
                                     html.Div(
-                                    dbc.Checklist(
-                                        options=[{"label": "Include in export", "value": "include"}],
-                                        value=["include"] if include_flag else [],
-                                        switch=True,
-                                        className="ms-2",
-                                        id={'type': 'validated-include', 'origin': 'validated', 'namespace': 'default'}
-                                    ),
+                                        dbc.Checklist(
+                                            options=[{"label": "Include in export", "value": "include"}],
+                                            value=["include"] if include_flag else [],
+                                            switch=True,
+                                            className="ms-2",
+                                            id={'type': 'validated-include', 'origin': 'validated', 'namespace': 'default'}
+                                        ),
                                         style={'width': '140px', 'textAlign': 'right'}
                                     )
                                 ],
@@ -428,7 +448,6 @@ def register_export_callbacks(app):
         for section in converted_sections:
             detail_children.append(section)
 
-        # Meta de análisis (gprofiler / reactome) siempre visible
         if analysis_meta:
             meta_rows = []
             for am in analysis_meta:
@@ -470,13 +489,19 @@ def register_export_callbacks(app):
             )
 
         detail = dbc.Card([dbc.CardBody(detail_children)], className="border-0 shadow-sm")
+        return detail, comment
 
-        # Attachments preview
-        attachments = item.get('attachments', []) or []
-        # Ordenar: tablas primero para que se muestren antes que imágenes/otros
+    @app.callback(
+        Output('export-attachments-preview', 'children'),
+        Input('export-attachments-store', 'data'),
+        prevent_initial_call=False
+    )
+    def render_selected_item_attachments(attachments):
+        if not attachments:
+            return None
+
         attachments = sorted(attachments, key=lambda a: 0 if a.get('type') == 'table' else 1)
 
-        # Config de iconos/colores por tipo
         color_map = {
             'table': 'primary',
             'manhattan': 'success',
@@ -544,7 +569,6 @@ def register_export_callbacks(app):
             )
 
             body_children = []
-            # Comentario editable y destacado primero
             body_children.append(
                 dbc.Alert(
                     [
@@ -651,10 +675,9 @@ def register_export_callbacks(app):
             )
 
         attachments_preview = att_cards if att_cards else dbc.Alert("No attachments for this item.", color="light", className="small")
+        return attachments_preview
 
-        return detail, attachments_preview, comment
-
-    # Descargar PDF del item seleccionado (orientación horizontal)
+    # Descargar PDF del item seleccionado (orientacion horizontal)
     @app.callback(
         Output('export-item-pdf-download', 'data'),
         Input('export-download-item-pdf', 'n_clicks'),
@@ -848,7 +871,7 @@ def register_export_callbacks(app):
         updated[idx] = item
         return updated
 
-    # Store para selección única
+    # Store para selecciÃ³n Ãºnica
     @app.callback(
         Output('export-selected-indices-store', 'data'),
         Input({'type': 'export-card-checkbox', 'index': ALL}, 'value'),
@@ -874,7 +897,7 @@ def register_export_callbacks(app):
         if triggered_value is None and 0 <= idx < len(checkbox_values):
             triggered_value = checkbox_values[idx]
 
-        # Si el render inicial llega con None/[] pero ya había selección previa, la preservamos.
+        # Si el render inicial llega con None/[] pero ya habÃ­a selecciÃ³n previa, la preservamos.
         if (triggered_value is None or triggered_value == []) and prev_selected:
             valid_prev = [i for i in prev_selected if isinstance(i, int)]
             if valid_prev:
@@ -988,7 +1011,7 @@ def register_export_callbacks(app):
             return dcc.send_string(txt_data, f"unique_genes_{datetime.now().strftime('%Y%m%d')}.txt")
         raise PreventUpdate
 
-    # Resumen de sesión
+    # Resumen de sesiÃ³n
     @app.callback(
         Output('session-summary', 'children'),
         Input('data-store', 'data'),

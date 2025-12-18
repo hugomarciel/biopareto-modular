@@ -148,7 +148,7 @@ class ReactomeService:
         return url
 
     @staticmethod
-    def get_diagram_image_base64(pathway_st_id, analysis_token, file_format="png", quality=8):
+    def get_diagram_image_base64(pathway_st_id, analysis_token, file_format="jpg", quality=6):
         diagram_url = ReactomeService.get_diagram_url(pathway_st_id, analysis_token, file_format, str(quality))
         try:
             response = requests.get(diagram_url, timeout=20)
